@@ -27,8 +27,8 @@ UI (Qt) ◄── превью ≤30 fps
 
 | Компонент macOS | Где в коде | Замена на Windows | Статус |
 |---|---|---|---|
-| AVFoundation захват | `core/video_capture.py` | Media Foundation через OpenCV (`CAP_MSMF`), запасной DirectShow (`CAP_DSHOW`); отдельный поток чтения, кадр — массив BGRA | ⬜ |
-| AVFoundation список устройств | `core/devices.py` | Перечисление DirectShow-устройств (COM через ctypes: имя + device path как unique id) | ⬜ |
+| AVFoundation захват | `core/video_capture.py` → `platform/win/capture.py` | OpenCV `CAP_DSHOW` (по умолчанию: OBS Virtual Camera — фильтр DirectShow) или `CAP_MSMF`; устройство ищется по сохранённому id/имени при каждом старте; поток чтения, BGRA-буферы из пула, который не перезаписывает кадр, пока его кто-то читает | 🟡 код и тесты готовы; на этом сервере OBS Virtual Camera не открывается ни OpenCV, ни FFmpeg (см. риски), MSMF отсутствует (Server без Media Foundation) — проверить на Windows 10/11 |
+| AVFoundation список устройств | `core/devices.py` → `platform/win/devices.py` | DirectShow (`ICreateDevEnum`, форматы из `IAMStreamConfig`) и Media Foundation (`MFEnumDeviceSources`, типы потока 0), порядок = индексы OpenCV | ✅ (проверено: OBS Virtual Camera найдена через DirectShow) |
 | Разрешение камеры (TCC) | `request_camera_access` | `platform/win/privacy.py`: переключатели `ConsentStore\webcam` (устройство, приложения, классические приложения) и групповая политика; кнопка открывает `ms-settings:privacy-webcam` | ✅ |
 | CoreMediaIO Camera Extension | `native/CameraExtension/*.swift` | **Своя камера**: (1) DirectShow source filter DLL — Windows 10/11; (2) Media Foundation virtual camera (`MFCreateVirtualCamera`) — Windows 11. Общий транспорт — разделяемая память | ⬜ |
 | CMIO sink client | `native/VCSNative/CameraSink.swift`, `camera/output.py` | Писатель разделяемой памяти (Python `mmap` + именованные объекты Win32), протокол `vcam_shm.h` | ⬜ |
@@ -44,8 +44,9 @@ UI (Qt) ◄── превью ≤30 fps
 | Конвертация моделей | `scripts/convert_models.py` | Экспорт Ultralytics `format=onnx` (opset 17, FP16 для GPU / FP32 для CPU) | ⬜ |
 | ImageIO декодирование картинок | `replacement/assets.py` | OpenCV `IMREAD_UNCHANGED` (PNG/JPG/WEBP/BMP/TIFF) + Pillow для GIF/HEIC (опционально `pillow-heif`); премультипликация альфы | ⬜ |
 | AVAssetReader/VideoToolbox | `replacement/video.py` | PyAV (FFmpeg в комплекте; аппаратное декодирование D3D11VA где доступно); существующий FFmpeg-subprocess декодер остаётся запасным | ⬜ |
-| OBS плагин (POSIX shm) | `native/obs-plugin/*` | Порт плагина под Win32 (`CreateFileMapping`, тот же заголовок и seqlock); чтение в Python через `mmap` без нативной DLL | ⬜ |
-| libVCSShm (чтение shm) | `native/shm-reader` | Не нужен: Python `mmap` + NumPy, копия сразу в массив кадра | ⬜ |
+| OBS плагин (POSIX shm) | `native/obs-plugin/*` | Один исходник для macOS и Windows: `Local\vcs-obs-frames` (`CreateFileMapping` + `SEC_RESERVE`, фиксируется только нужный объём), тот же заголовок и seqlock; сборка `scripts/build_obs_plugin_win.ps1` (MSVC, библиотеки импорта из DLL установленного OBS) | ✅ проверено вживую с OBS 33: плагин загружается, 1200×752 @ 30 кадров/с доходят до приложения, переподключение после перезапуска OBS за 1,2 с |
+| libVCSShm (чтение shm) | `native/shm-reader` | Не нужен на Windows: `platform/win/obs_shm.py` (ctypes `OpenFileMapping` + NumPy) | ✅ |
+| Чтение JSON с BOM | `core/jsonio.py` | `utf-8-sig`: настройки, сохранённые Блокнотом/PowerShell 5, больше не считаются повреждёнными (раньше сбрасывались) | ✅ |
 | Carbon глобальные клавиши | `native/Hotkeys.swift`, `native/hotkeys.py` | `platform/win/hotkeys.py`: `RegisterHotKey` в своём потоке с циклом сообщений; действие доставляется в GUI-поток сигналом Qt | ✅ (проверено: регистрация, конфликт, реальное нажатие через `keybd_event`) |
 | `screencapture` (карточка для игры) | `game/cardframe.py` | GDI BitBlt основного монитора (ctypes), с учётом DPI | ⬜ |
 | `fcntl.flock` (один экземпляр) | `core/single_instance.py` | `msvcrt.locking` на байте за концом `app.lock` (снимается ОС при падении; pid читается) | ✅ |
@@ -124,7 +125,7 @@ UI (Qt) ◄── превью ≤30 fps
 | 1 ✅ | Аудит и архитектура | этот документ | — | ознакомиться |
 | 2 ✅ | Структура платформ, окружение | `vcstudio/platform`, пути, один экземпляр, заглушки PyObjC, requirements-windows; приложение импортируется на Windows | ✅ юнит-тесты: 167 прошли (было 124), 48 падений — подсистемы этапов 4–6 | — |
 | 3 ✅ | GUI и конфигурация | окно стартует, все 12 страниц, тексты Windows (EN/RU), глобальные клавиши, статус доступа к камере и компонентов камеры | ✅ 173 теста прошли (8 новых для Windows); скриншоты всех страниц (RU) | внешний вид на вашем мониторе |
-| 4 | Захват и OBS | MSMF/DirectShow источник, список устройств, OBS-плагин Windows + `mmap`-читатель, переподключение | частично (без камеры: тестовый источник, OBS-shm через имитатор писателя) | OBS Virtual Camera и плагин |
+| 4 ✅ | Захват и OBS | MSMF/DirectShow источник, список устройств, OBS-плагин Windows + читатель общей памяти, переподключение | ✅ 181 тест; вживую: OBS 33 → плагин → приложение 30 кадров/с, перезапуск OBS; 🟡 захват из OBS Virtual Camera не проверен (сервер) | OBS Virtual Camera и веб-камера через DirectShow/MSMF |
 | 5 | ИИ и трекинг | ONNX Runtime + YuNet, конвертация моделей, импорт `.onnx`, эталонная проверка на `bus.jpg` и coco16 | ✅ на CPU (точность, совпадение с macOS-результатами) | скорость с DirectML/CUDA |
 | 6 | ROI и замена | картинки, видео (PyAV), маски, сегментация — существующие тесты зелёные на Windows | ✅ | — |
 | 7 | D3D11 компоновщик | `vcs_d3d11.dll`, паритет с CPU-бэкендом | 🟡 WARP (программный D3D11) для паритета | скорость на реальной видеокарте |
@@ -155,4 +156,5 @@ C:\vcs-env\Scripts\python -m vcstudio
 4. **Неподписанные DLL**: Windows их загружает, но SmartScreen предупреждает при установке; отдельные приложения могут игнорировать неподписанные DirectShow-фильтры (известно для некоторых версий Teams — именно поэтому нужен MF-вариант). Подпись Authenticode рекомендуется для распространения.
 5. **1080p60 на CPU-пути**: копия кадра в shm + конвертация в NV12 ≈ 2–4 мс; компоновка нескольких регионов на CPU может не уложиться в 16,7 мс на слабых CPU — для этого этап 7 (D3D11).
 6. **Лицензии**: веса и код Ultralytics YOLO — AGPL-3.0 (как и в macOS-версии). YuNet — MIT. ONNX Runtime — MIT. PyAV — BSD, но поставляемые с ним сборки FFmpeg — LGPL/GPL; лицензию сборки нужно проверить до распространения.
-7. **Две виртуальные камеры одновременно** (DirectShow и MF) могут показаться клиенту как два устройства с одинаковым именем на Windows 11 — на Windows 11 установщик ставит только MF-вариант, на Windows 10 — DirectShow.
+8. **OBS Virtual Camera на этом сервере.** Фильтр OBS 33 (`obs-virtualcam-module64.dll`) здесь не отдаёт `IBaseFilter` через моникер устройства (`E_NOINTERFACE`); первый `CoCreateInstance` в процессе тоже отказывает, последующие работают. OpenCV и FFmpeg открывают камеру через моникер, поэтому захват здесь не стартует (приложение сообщает об этом понятной ошибкой и советует прямую передачу из OBS). На этом Windows Server нет компонента Media Foundation. На обычных Windows 10/11 захват OBS Virtual Camera через OpenCV широко используется, но здесь это не доказано — проверить у вас. Рекомендуемый вход на Windows — прямая передача из OBS (плагин): она проверена вживую и не занимает виртуальную камеру OBS.
+9. **Две виртуальные камеры одновременно** (DirectShow и MF) могут показаться клиенту как два устройства с одинаковым именем на Windows 11 — на Windows 11 установщик ставит только MF-вариант, на Windows 10 — DirectShow.

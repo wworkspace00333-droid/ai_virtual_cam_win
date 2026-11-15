@@ -673,7 +673,10 @@ RU: dict[str, str] = {
     "Track objects": "Отслеживать объекты",
     "Game card {n}": "Карточка {n}",
     # ---- Windows build (vcstudio/platform: text(), DEVICE_METHODS, COMPOSITORS) ----
-    "Camera device (Media Foundation): OBS Virtual Camera": "Камера (Media Foundation): OBS Virtual Camera",
+    "Camera device (Media Foundation): webcams": "Камера (Media Foundation): веб-камеры",
+    "Plugin not built: run scripts/build_obs_plugin_win.ps1": "Плагин не собран: запустите scripts/build_obs_plugin_win.ps1",
+    "OBS is running and has the plugin loaded: close OBS, then install again.":
+        "OBS запущен и держит плагин загруженным: закройте OBS и установите снова.",
     "Camera device (DirectShow): OBS Virtual Camera": "Камера (DirectShow): OBS Virtual Camera",
     "Automatic (Direct3D 11 GPU if available)": "Автоматически (видеокарта Direct3D 11, если доступна)",
     "Direct3D 11 GPU": "Видеокарта Direct3D 11",
@@ -745,8 +748,6 @@ RU: dict[str, str] = {
         "этой сборке их пока нет.",
     "Camera components found but not registered: click Install (administrator rights needed).":
         "Компоненты камеры найдены, но не зарегистрированы: нажмите «Установить» (нужны права администратора).",
-    "Camera-device capture on Windows arrives with porting stage 4; use the test pattern until then.":
-        "Захват с камеры на Windows появится на этапе порта 4; до этого используйте тестовый шаблон.",
     "Direct3D 11 compositor arrives with porting stage 7; using the CPU":
         "Компоновщик Direct3D 11 появится на этапе порта 7; используется CPU",
 }

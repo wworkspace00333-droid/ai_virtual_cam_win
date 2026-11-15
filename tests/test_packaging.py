@@ -28,7 +28,10 @@ def test_frozen_layout(monkeypatch, tmp_path):
     assert resources.models_dir() == fw / "models"
     assert resources.sample("bus.jpg") == fw / "sample_data" / "bus.jpg"
     assert resources.native_lib("libVCSShm.dylib") == fw / "native" / "libVCSShm.dylib"
-    assert resources.obs_plugin_bundle() == fw.parent / "Resources" / "obs-plugin" / "vcstudio-obs.plugin"
+    if sys.platform == "win32":     # PyInstaller onedir: everything under _MEIPASS
+        assert resources.obs_plugin_bundle() == fw / "obs-plugin" / "vcstudio-obs.dll"
+    else:
+        assert resources.obs_plugin_bundle() == fw.parent / "Resources" / "obs-plugin" / "vcstudio-obs.plugin"
 
 
 def test_no_repo_relative_paths_left():

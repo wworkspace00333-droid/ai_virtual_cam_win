@@ -60,7 +60,7 @@ class ModelInfo:
     @classmethod
     def from_package(cls, pkg: Path) -> "ModelInfo":
         meta_path = pkg.with_suffix(".json")
-        meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+        meta = json.loads(meta_path.read_text(encoding="utf-8-sig")) if meta_path.exists() else {}
         files = [pkg] if pkg.is_file() else [f for f in pkg.rglob("*") if f.is_file()]
         size = sum(f.stat().st_size for f in files) / 2**20
         classes = list(meta.get("classes", []))

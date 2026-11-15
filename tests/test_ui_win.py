@@ -18,7 +18,7 @@ def test_mac_settings_are_repaired_to_windows_defaults(paths):
     s = Settings(paths)
     problems = s.load()
     assert any("input.method" in p for p in problems) and any("processing.compositor" in p for p in problems)
-    assert s.get("input.method") == "mediafoundation"
+    assert s.get("input.method") == "directshow"
     assert s.get("processing.compositor") == "auto"
     assert s.get("input.preferred_fps") == 30                 # valid values are kept
     for m in ("mediafoundation", "directshow", "obs_ipc", "test_pattern"):
@@ -29,7 +29,7 @@ def test_mac_settings_are_repaired_to_windows_defaults(paths):
 def test_platform_texts_and_choices():
     from vcstudio import platform as p
     from vcstudio.i18n_ru import RU
-    assert p.DEFAULT_DEVICE_METHOD == "mediafoundation" and p.GPU_COMPOSITOR == "d3d11"
+    assert p.DEFAULT_DEVICE_METHOD == "directshow" and p.GPU_COMPOSITOR == "d3d11"
     for key in p._TEXT:
         mac, win = p._TEXT[key]
         assert p.text(key) == win
@@ -94,9 +94,9 @@ def test_camera_privacy_status_is_known():
 def test_camera_device_capture_reports_clearly_until_available():
     from vcstudio.core.video_capture import CaptureError, device_source
     try:
-        src = device_source("mediafoundation", None, "OBS Virtual Camera")
+        src = device_source("directshow", "dshow-clsid:{00000000-0000-0000-0000-000000000001}", "No Such Camera")
     except CaptureError as e:
-        assert "stage 4" in str(e)
+        assert "not found" in str(e)
     else:
         assert src.kind in ("mediafoundation", "directshow")
 

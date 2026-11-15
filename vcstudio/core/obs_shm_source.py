@@ -170,3 +170,10 @@ class ObsShmSource(CaptureSource):
         if self._h:
             shm_lib().vcs_shm_close(self._h)
             self._h = None
+
+
+# Windows: same protocol through a named file mapping, read with ctypes + NumPy (vcstudio/platform/win/obs_shm.py).
+from vcstudio.platform import IS_WINDOWS as _IS_WINDOWS  # noqa: E402
+
+if _IS_WINDOWS:
+    from vcstudio.platform.win.obs_shm import SHM_NAME, ObsShmSource, obs_sharing_status  # noqa: F401,F811,E402

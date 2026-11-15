@@ -34,6 +34,10 @@ def _load():
     with _lock:
         if _lib is not None or _lib_error:
             return _lib
+        import sys
+        if sys.platform != "darwin":       # Metal exists only on macOS; Windows uses vcstudio/platform/win
+            _lib_error = "Metal is macOS-only"
+            return None
         for p in CANDIDATES:
             if p is not None and p.exists():
                 try:

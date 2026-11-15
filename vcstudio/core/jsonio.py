@@ -27,7 +27,9 @@ def atomic_write_json(path: Path, data: Any) -> None:
 
 
 def read_json(path: Path) -> Any:
-    with open(path, encoding="utf-8") as f:
+    # utf-8-sig: accept a UTF-8 byte-order mark. Notepad and Windows PowerShell 5 write one, and a file the
+    # user edited by hand must not be treated as corrupt (that would reset all settings).
+    with open(path, encoding="utf-8-sig") as f:
         return json.load(f)
 
 

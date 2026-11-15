@@ -39,9 +39,11 @@ def native_lib_name(stem: str) -> str:
 # ------------------------------------------------------------------------------ capabilities
 # Capture methods that open a camera device ("input.method"). Labels are English source strings (tr()).
 if IS_WINDOWS:
+    # DirectShow first: OBS Virtual Camera (and most virtual cameras) are DirectShow filters and do not
+    # appear in Media Foundation (checked with OBS 33). Physical webcams appear in both.
     DEVICE_METHODS: tuple[tuple[str, str], ...] = (
-        ("mediafoundation", "Camera device (Media Foundation): OBS Virtual Camera"),
         ("directshow", "Camera device (DirectShow): OBS Virtual Camera"),
+        ("mediafoundation", "Camera device (Media Foundation): webcams"),
     )
 else:
     DEVICE_METHODS = (("avfoundation", "Camera device (AVFoundation): OBS Virtual Camera"),)

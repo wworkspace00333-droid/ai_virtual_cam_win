@@ -42,6 +42,9 @@ def accuracy_data() -> Path:
 
 
 def obs_plugin_bundle() -> Path:
+    if sys.platform == "win32":     # vcstudio-obs.dll (scripts/build_obs_plugin_win.ps1)
+        return (bundle_root() / "obs-plugin" / "vcstudio-obs.dll" if frozen()
+                else REPO / "build" / "obs-plugin" / "win" / "vcstudio-obs.dll")
     # packaged: Contents/Resources/obs-plugin/ (sys._MEIPASS is Contents/Frameworks)
     return (bundle_root().parent / "Resources" / "obs-plugin" / "vcstudio-obs.plugin" if frozen()
             else REPO / "build" / "obs-plugin" / "vcstudio-obs.plugin")
