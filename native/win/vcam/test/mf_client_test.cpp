@@ -1,6 +1,7 @@
 // mf_client_test.exe — reads frames from the Media Foundation camera like a client app would.
-//   mf_client_test --inproc <path\vcam_mf.dll> [frames]   activate the media source in this process
-//   mf_client_test --device "AI Virtual Camera" [frames]   open the camera from MFEnumDeviceSources (Frame Server)
+//   mf_client_test --inproc <path\vcam_mf.dll> [frames [native]]   activate the media source in this process
+//   mf_client_test --device "AI Virtual Camera" [frames [native]]   open the camera from MFEnumDeviceSources (Frame Server)
+//     native: index of the camera's own format to use (the list is printed); default = the reader's choice
 //   mf_client_test --list                                 list Media Foundation video capture devices
 // Prints the negotiated format, frame count, rate and the centre pixel of the last frame. Exit 0 = frames read.
 #define WIN32_LEAN_AND_MEAN
@@ -78,17 +79,43 @@ int wmain(int argc, wchar_t **argv) {
 	int want = argc > 3 ? _wtoi(argv[3]) : 90;
 	ComPtr<IMFAttributes> ra;
 	MFCreateAttributes(&ra, 1);
-	ra->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, TRUE);
+	// the advanced processor honours MF_MT_YUV_MATRIX / MF_MT_VIDEO_NOMINAL_RANGE (the basic one assumes BT.709 for HD)
+	ra->SetUINT32(MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, TRUE);
 	ComPtr<IMFSourceReader> reader;
 	hr = MFCreateSourceReaderFromMediaSource(src.Get(), ra.Get(), &reader);
 	if (FAILED(hr)) { printf("reader failed: 0x%08lX\n", (unsigned long)hr); return 1; }
-	// ask for RGB32 so the centre pixel can be compared with what the app sent
 	ComPtr<IMFMediaType> rgb;
 	MFCreateMediaType(&rgb);
-	rgb->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
-	rgb->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
-	hr = reader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, nullptr, rgb.Get());
-	if (FAILED(hr)) printf("note: RGB32 output not set (0x%08lX), reading native type\n", (unsigned long)hr);
+	if (argc > 4) {   // pick one of the camera's own formats (listed), then let the reader convert it to RGB32
+		int pick = _wtoi(argv[4]);
+		for (DWORD i = 0;; ++i) {
+			ComPtr<IMFMediaType> nt;
+			if (FAILED(reader->GetNativeMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, i, &nt))) break;
+			UINT32 nw = 0, nh = 0, nn = 0, nd = 1;
+			GUID ns = GUID_NULL;
+			MFGetAttributeSize(nt.Get(), MF_MT_FRAME_SIZE, &nw, &nh);
+			MFGetAttributeRatio(nt.Get(), MF_MT_FRAME_RATE, &nn, &nd);
+			nt->GetGUID(MF_MT_SUBTYPE, &ns);
+			UINT32 mat = MFGetAttributeUINT32(nt.Get(), MF_MT_YUV_MATRIX, 0);
+			UINT32 rng = MFGetAttributeUINT32(nt.Get(), MF_MT_VIDEO_NOMINAL_RANGE, 0);
+			printf("native %lu: %ux%u @ %.2f fps, subtype %08lX, matrix %u, range %u%s\n", i, nw, nh,
+			       nd ? (double)nn / nd : 0.0, ns.Data1, mat, rng, (int)i == pick ? "  <- selected" : "");
+			if ((int)i == pick) {
+				hr = reader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, nullptr, nt.Get());
+				if (FAILED(hr)) { printf("native type %d not set: 0x%08lX\n", pick, (unsigned long)hr); return 1; }
+				nt->CopyAllItems(rgb.Get());   // same size and rate; only the subtype changes below
+			}
+		}
+	}
+	// ask for RGB32 so the centre pixel can be compared with what the app sent; "raw" keeps the camera's own
+	// NV12 and decodes the centre here with BT.601 limited range (what the type declares)
+	bool raw = argc > 5 && std::wstring(argv[5]) == L"raw";
+	if (!raw) {
+		rgb->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+		rgb->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
+		hr = reader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, nullptr, rgb.Get());
+		if (FAILED(hr)) printf("note: RGB32 output not set (0x%08lX), reading native type\n", (unsigned long)hr);
+	}
 	ComPtr<IMFMediaType> cur;
 	reader->GetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, &cur);
 	UINT32 w = 0, h = 0, num = 0, den = 1;
@@ -114,6 +141,12 @@ int wmain(int argc, wchar_t **argv) {
 			if (SUCCEEDED(b->Lock(&p, nullptr, &len))) {
 				size_t off = ((size_t)(h / 2) * w + w / 2) * 4;
 				if (sub == MFVideoFormat_RGB32 && off + 4 <= len) centre = *(unsigned *)(p + off);
+				size_t yo = (size_t)(h / 2) * w + w / 2, uvo = (size_t)w * h + (size_t)(h / 4) * w + (w / 2 & ~1u);
+				if (sub == MFVideoFormat_NV12 && uvo + 1 < len) {
+					double c = 1.164 * (p[yo] - 16), d = p[uvo] - 128, e = p[uvo + 1] - 128;
+					auto cl = [](double v) { return (unsigned)(v < 0 ? 0 : v > 255 ? 255 : v + 0.5); };
+					centre = cl(c + 2.017 * d) | cl(c - 0.392 * d - 0.813 * e) << 8 | cl(c + 1.596 * e) << 16;
+				}
 				b->Unlock();
 			}
 		}

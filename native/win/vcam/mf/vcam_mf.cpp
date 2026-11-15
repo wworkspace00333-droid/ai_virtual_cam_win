@@ -78,6 +78,12 @@ static HRESULT make_type(const Mode &m, IMFMediaType **out) {
 	t->SetUINT32(MF_MT_DEFAULT_STRIDE, m.nv12 ? m.w : m.w * 4);
 	t->SetUINT32(MF_MT_SAMPLE_SIZE, (UINT32)vcam::frame_bytes(m.nv12 ? vcam::PixFmt::NV12 : vcam::PixFmt::BGRA32, m.w, m.h));
 	t->SetUINT32(MF_MT_FIXED_SIZE_SAMPLES, TRUE);
+	if (m.nv12) {   // vcam_frames.cpp encodes BT.601 limited range; unset, Windows assumes BT.709 for HD sizes
+		t->SetUINT32(MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT601);
+		t->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_16_235);
+		t->SetUINT32(MF_MT_VIDEO_PRIMARIES, MFVideoPrimaries_BT709);
+		t->SetUINT32(MF_MT_TRANSFER_FUNCTION, MFVideoTransFunc_709);
+	}
 	*out = t.Detach();
 	return S_OK;
 }

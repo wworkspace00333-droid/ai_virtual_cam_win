@@ -13,12 +13,21 @@ pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Windows virtual
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _installed() -> bool:
+def _installed_name() -> str | None:
+    """Name DirectShow clients see: the DirectShow camera, or on Windows 11 the Media Foundation camera, which
+    Frame Server also exposes to DirectShow apps as "AI Virtual Camera (Windows Virtual Camera)"."""
+    if sys.platform != "win32":
+        return None
+    from vcstudio.platform.win.devices import backend_devices
     from vcstudio.platform.win.vcam_status import components
-    return any(c.name.startswith("DirectShow") and c.state == "installed" for c in components())
+    if not any(c.state == "installed" for c in components()):
+        return None
+    names = [d.name for d in backend_devices("directshow")]
+    return next((n for n in ("AI Virtual Camera", "AI Virtual Camera (Windows Virtual Camera)") if n in names), None)
 
 
-needs_camera = pytest.mark.skipif(sys.platform != "win32" or not _installed(), reason="AI Virtual Camera not installed")
+CAMERA = _installed_name()
+needs_camera = pytest.mark.skipif(CAMERA is None, reason="AI Virtual Camera not installed")
 
 
 def test_python_writer_matches_the_c_header():
@@ -91,7 +100,7 @@ def test_loopback_through_the_directshow_camera(w, h, fps):
     t = threading.Thread(target=send, daemon=True)
     t.start()
     got = []
-    src = WindowsCameraSource("directshow", None, "AI Virtual Camera", w, h, fps, allow_own_output=True)
+    src = WindowsCameraSource("directshow", None, CAMERA, w, h, fps, allow_own_output=True)
     try:
         src.start(lambda f: got.append((f.width, f.height, _decode(f.array), f.array[h // 2, w // 2, :3].tolist())),
                   lambda k, m: None)
@@ -102,7 +111,11 @@ def test_loopback_through_the_directshow_camera(w, h, fps):
         t.join()
         out.close()
     assert src.nominal[:2] == (w, h)
-    assert len(got) >= 0.8 * 3 * fps, len(got)
+    # The Windows 11 Frame Server bridge (how DirectShow apps see the Media Foundation camera) delivers the first
+    # native mode of the requested size, 30 fps, whatever rate is set (measured on build 26100 with YUY2, NV12 and
+    # no FOURCC). Media Foundation clients get 60: test_media_foundation_camera_through_frame_server.
+    expect = min(fps, 30) if CAMERA.endswith("(Windows Virtual Camera)") else fps
+    assert len(got) >= 0.8 * 3 * expect, len(got)
     nums = [n for _, _, n, _ in got[10:]]
     assert len(set(nums)) >= 30 and all(b >= a for a, b in zip(nums, nums[1:])), nums[:20]   # fresh, in order
     b, g, r = got[-1][3]
@@ -113,7 +126,7 @@ def test_loopback_through_the_directshow_camera(w, h, fps):
 def test_camera_shows_waiting_card_without_the_app():
     from vcstudio.platform.win.capture import WindowsCameraSource
     got = []
-    src = WindowsCameraSource("directshow", None, "AI Virtual Camera", 1280, 720, 30, allow_own_output=True)
+    src = WindowsCameraSource("directshow", None, CAMERA, 1280, 720, 30, allow_own_output=True)
     try:
         src.start(lambda f: got.append(f.array[10, 10, :3].tolist()), lambda k, m: None)
         time.sleep(2)
@@ -177,6 +190,59 @@ def test_media_foundation_source_in_process():
     finally:
         stop.set(); t.join(); w.close()
     assert n == 45 and px == (0, 40, 200)
+
+
+MF_DEVICE = "AI Virtual Camera (Windows Virtual Camera)"
+
+
+def _mf_installed() -> bool:
+    if sys.platform != "win32" or not MF_CLIENT.exists():
+        return False
+    import subprocess
+    r = subprocess.run([str(MF_CLIENT), "--list"], capture_output=True, text=True, timeout=30)
+    return MF_DEVICE in r.stdout
+
+
+@pytest.mark.skipif(not _mf_installed(), reason="Media Foundation camera not installed (vcam-setup.exe --install, "
+                                                "Windows 11 with camera access allowed)")
+@pytest.mark.parametrize("native,fps", [(1, 60), (3, 60), (4, 30)])   # NV12 1080p60, NV12 720p60, RGB32 1080p30
+def test_media_foundation_camera_through_frame_server(native, fps):
+    """The registered Windows 11 camera opened by name like Zoom / the Camera app: Frame Server (session 0) hosts
+    the media source, which reads the app's frames from this session. NV12 is decoded here as BT.601 limited
+    range, which the media type declares."""
+    import subprocess
+    from vcstudio.platform.win.vcam_writer import VcamWriter
+
+    def read(n):
+        r = subprocess.run([str(MF_CLIENT), "--device", MF_DEVICE, str(n), str(native), "raw"],
+                           capture_output=True, text=True, timeout=60)
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert re.search(r"native %d: .*matrix (2|0), range (2|0)  <- selected" % native, r.stdout), r.stdout
+        m = re.search(r"frames (\d+) in [\d.]+ s \(([\d.]+) fps\), centre BGRA (\w\w) (\w\w) (\w\w)", r.stdout)
+        assert m, r.stdout
+        return int(m[1]), float(m[2]), [int(x, 16) for x in m.group(3, 4, 5)]
+    n, rate, px = read(fps)
+    assert n == fps and abs(rate - fps) < 0.1 * fps
+    assert all(abs(a - b) <= 4 for a, b in zip(px, (40, 32, 28))), px            # waiting card without the app
+    w = VcamWriter()
+    stop = threading.Event()
+    img = np.zeros((1080, 1920, 4), np.uint8); img[..., 1] = 40; img[..., 2] = 200; img[..., 3] = 255
+
+    def send():
+        k, t0 = 0, time.perf_counter()
+        while not stop.is_set():
+            k += 1
+            w.publish(img)
+            time.sleep(max(0.0, t0 + k / 60 - time.perf_counter()))
+    w.configure(1920, 1080, 60)
+    t = threading.Thread(target=send, daemon=True); t.start()
+    try:
+        time.sleep(0.3)
+        n, rate, px = read(2 * fps)
+    finally:
+        stop.set(); t.join(); w.close()
+    assert n == 2 * fps and abs(rate - fps) < 0.1 * fps
+    assert all(abs(a - b) <= 4 for a, b in zip(px, (0, 40, 200))), px            # the app's frames
 
 
 @needs_camera
