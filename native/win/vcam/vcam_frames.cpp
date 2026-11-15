@@ -1,4 +1,5 @@
 #include "vcam_frames.h"
+#include "vcam_name.h"
 
 #include <winternl.h>
 #include <wtsapi32.h>
@@ -220,7 +221,8 @@ void waiting_card(int w, int h, std::vector<uint8_t> &out) {
 	SelectObject(dc, title);
 	SetTextColor(dc, RGB(230, 237, 243));
 	RECT t = {0, h / 2 - h / 10, w, h / 2};
-	DrawTextW(dc, L"AI Virtual Camera", -1, &t, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+	const std::wstring cam_name = camera_name();                       // the user-chosen camera name
+	DrawTextW(dc, cam_name.c_str(), -1, &t, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
 	SelectObject(dc, body);
 	SetTextColor(dc, RGB(139, 148, 158));
 	RECT b = {0, h / 2 + h / 60, w, h / 2 + h / 10};

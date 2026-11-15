@@ -51,18 +51,19 @@ def _status_windows() -> CameraStatus:
     installed = [c for c in comps if c.state == "installed"]
     broken = [c for c in comps if c.state == "broken_registration"]
     tool = vs.setup_tool()
+    name = vs.camera_name()
     st = CameraStatus(str(tool) if tool else None,
                       "installed" if installed else ("broken_registration" if broken else "not_installed"),
                       bool(installed), bool(installed), visible)
     if installed and visible:
-        st.message = f"{CAMERA_NAME} is installed and visible to other apps."
+        st.message = f"{name} is installed and visible to other apps."
     elif installed:
-        st.message = (f"{CAMERA_NAME} is registered ({', '.join(c.name for c in installed)}) but not listed as a "
+        st.message = (f"{name} is registered ({', '.join(c.name for c in installed)}) but not listed as a "
                       "video device yet. Restart the app that should use it.")
     elif broken:
-        st.message = (f"{CAMERA_NAME} is registered but its file is missing ({broken[0].path}). Reinstall the app.")
+        st.message = (f"{name} is registered but its file is missing ({broken[0].path}). Reinstall the app.")
     elif tool is None:
-        st.message = (f"Not installed. The {CAMERA_NAME} components (native/win) are built and registered by the "
+        st.message = (f"Not installed. The {name} components (native/win) are built and registered by the "
                       "Windows installer; they are not present in this build yet.")
     else:
         st.message = "Camera components found but not registered: click Install (administrator rights needed)."
@@ -151,6 +152,21 @@ def activate() -> tuple[int, str]:
     if IS_WINDOWS:
         return _run_setup_elevated("--install")
     return _run_host("--activate-camera")
+
+
+def rename(name: str) -> tuple[int, str]:
+    """Windows: give the camera devices a new name (re-registers what is installed; administrator rights).
+    Windows 11 shows the Media Foundation camera as "<name> (Windows Virtual Camera)"."""
+    from vcstudio.platform import IS_WINDOWS
+    if not IS_WINDOWS:
+        return 1, "Renaming the camera is available on Windows."
+    from vcstudio.platform.win.vcam_status import valid_camera_name
+    name = name.strip()
+    if not valid_camera_name(name):
+        return 1, "The name must be 1-63 characters without control characters."
+    if '"' in name:
+        return 1, "The name cannot contain quotation marks."
+    return _run_setup_elevated(f'--rename "{name}"')
 
 
 def deactivate() -> tuple[int, str]:

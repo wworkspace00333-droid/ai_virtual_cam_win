@@ -26,8 +26,47 @@ def _installed_name() -> str | None:
     return next((n for n in ("AI Virtual Camera", "AI Virtual Camera (Windows Virtual Camera)") if n in names), None)
 
 
+def _other_writer() -> int | None:
+    """pid of another process sending frames to the camera right now (e.g. the app or a soak run), or None.
+    Live camera tests compare what clients receive with what the test sends, so they cannot share the camera;
+    a client app holding the Media Foundation camera also blocks other clients (one controlling app)."""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+    import os
+    from ctypes import wintypes
+    from vcstudio.platform.win.vcam_writer import NAME, O_HEARTBEAT, O_PID
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.OpenFileMappingW.restype = wintypes.HANDLE
+    k32.OpenFileMappingW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+    k32.MapViewOfFile.restype = ctypes.c_void_p
+    k32.MapViewOfFile.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, ctypes.c_size_t]
+    k32.UnmapViewOfFile.argtypes = [ctypes.c_void_p]
+    k32.CloseHandle.argtypes = [wintypes.HANDLE]
+    h = k32.OpenFileMappingW(0x0004, False, NAME)                     # FILE_MAP_READ
+    if not h:
+        return None
+    try:
+        base = k32.MapViewOfFile(h, 0x0004, 0, 0, 4096)
+        if not base:
+            return None
+        try:
+            hb = ctypes.c_uint64.from_address(base + O_HEARTBEAT).value
+            pid = ctypes.c_int32.from_address(base + O_PID).value
+            fresh = abs(time.perf_counter_ns() - hb) < 2_000_000_000          # QPC heartbeat of the writer
+            return pid if fresh and pid != os.getpid() else None
+        finally:
+            k32.UnmapViewOfFile(base)
+    finally:
+        k32.CloseHandle(h)
+
+
 CAMERA = _installed_name()
-needs_camera = pytest.mark.skipif(CAMERA is None, reason="AI Virtual Camera not installed")
+_BUSY = _other_writer()
+needs_camera = pytest.mark.skipif(CAMERA is None or _BUSY is not None,
+                                  reason="AI Virtual Camera not installed" if CAMERA is None else
+                                  f"the camera is in use: process {_BUSY} is sending frames to it")
+camera_free = pytest.mark.skipif(_BUSY is not None, reason=f"the camera is in use: process {_BUSY} is sending frames")
 
 
 def test_python_writer_matches_the_c_header():
@@ -159,6 +198,7 @@ MF_DLL = ROOT / "build" / "native" / "vcam_mf.dll"
 MF_CLIENT = ROOT / "build" / "native" / "mf_client_test.exe"
 
 
+@camera_free
 @pytest.mark.skipif(not (MF_DLL.exists() and MF_CLIENT.exists()), reason="run scripts/build_native_win.ps1")
 def test_media_foundation_source_in_process():
     """The Media Foundation camera's media source read through IMFSourceReader (as Frame Server would host it):
@@ -203,6 +243,7 @@ def _mf_installed() -> bool:
     return MF_DEVICE in r.stdout
 
 
+@camera_free
 @pytest.mark.skipif(not _mf_installed(), reason="Media Foundation camera not installed (vcam-setup.exe --install, "
                                                 "Windows 11 with camera access allowed)")
 @pytest.mark.parametrize("native,fps", [(1, 60), (3, 60), (4, 30)])   # NV12 1080p60, NV12 720p60, RGB32 1080p30
@@ -250,3 +291,62 @@ def test_status_reports_installed_and_visible():
     from vcstudio.camera import camera_manager as cm
     s = cm.status()
     assert s.extension_state == "installed" and s.device_visible and s.ready
+
+
+# ------------------------------------------------------------------------------------------ camera name
+def test_camera_name_rules_match_the_native_ones():
+    """vcam_status.valid_camera_name mirrors vcam::valid_name (native/win/vcam/vcam_name.h)."""
+    from vcstudio.platform.win.vcam_status import NAME_MAX, valid_camera_name
+    h = (ROOT / "native" / "win" / "vcam" / "vcam_name.h").read_text(encoding="utf-8")
+    assert f"kNameMax = {NAME_MAX}" in h and r"SOFTWARE\\AIVirtualCameraStudio\\Camera" in h
+    assert valid_camera_name("Studio Cam") and valid_camera_name("Камера стрима") and valid_camera_name("x" * 63)
+    assert not any(valid_camera_name(n) for n in ("", "   ", "x" * 64, "bad\nname", "tab\tname"))
+
+
+def test_renamed_camera_is_still_recognised_as_own_output(monkeypatch):
+    """After a rename the app must still refuse to capture its own camera (feedback loop) and still find it."""
+    from vcstudio.core import devices as cd
+    from vcstudio.platform.win import capture, devices as wd, vcam_status
+    monkeypatch.setattr(vcam_status, "camera_name", lambda: "Studio Cam")
+    assert cd.own_camera_name() == "Studio Cam"
+    assert cd.is_own_output("Studio Cam", "") and cd.is_own_output("Studio Cam (Windows Virtual Camera)", "")
+    assert cd.is_own_output("AI Virtual Camera", "") and not cd.is_own_output("Studio Camera Pro", "")
+    monkeypatch.setattr(wd, "backend_devices", lambda m: [wd.BackendDevice(0, "OBS Virtual Camera", "a", m),
+                                                          wd.BackendDevice(1, "Studio Cam (Windows Virtual Camera)", "b", m)])
+    assert capture.resolve_device("directshow", None, "AI Virtual Camera").name.startswith("Studio Cam")
+    assert capture.resolve_device("directshow", None, "OBS Virtual Camera").index == 0
+
+
+def test_output_accepts_the_renamed_camera(monkeypatch):
+    from vcstudio.camera.output import CameraOutputError, VirtualCameraOutput
+    from vcstudio.platform.win import vcam_status
+    monkeypatch.setattr(vcam_status, "camera_name", lambda: "Studio Cam")
+    with pytest.raises(CameraOutputError) as e:
+        VirtualCameraOutput("Some Other Cam").open()
+    assert "Studio Cam" in str(e.value)
+
+
+def test_rename_rejects_bad_names_without_elevation():
+    from vcstudio.camera import camera_manager as cm
+    assert cm.rename("")[0] == 1 and cm.rename('say "hi"')[0] == 1 and cm.rename("x" * 64)[0] == 1
+
+
+@pytest.mark.skipif(sys.platform != "win32" or not __import__("os").environ.get("VCS_LIVE_RENAME"),
+                    reason="set VCS_LIVE_RENAME=1 (re-registers the installed camera; needs an elevated shell)")
+def test_rename_live_and_back():
+    """vcam-setup --rename re-registers the installed camera(s) under the new name; apps list it; then back."""
+    import subprocess
+    from vcstudio.platform.win.devices import list_video_devices
+    from vcstudio.platform.win.vcam_status import camera_name, components, setup_tool
+    tool, old = setup_tool(), camera_name()
+    assert tool and any(c.state == "installed" for c in components())
+    try:
+        r = subprocess.run([str(tool), "--rename", "Test Cam 9"], capture_output=True, text=True, timeout=120)
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert camera_name() == "Test Cam 9"
+        names = [d.name for d in list_video_devices()]
+        assert any(n == "Test Cam 9" or n.startswith("Test Cam 9 (") for n in names), names
+        assert not any(n.startswith(old) for n in names), names
+    finally:
+        r = subprocess.run([str(tool), "--rename", old], capture_output=True, text=True, timeout=120)
+        assert r.returncode == 0 and camera_name() == old, r.stdout + r.stderr

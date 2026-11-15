@@ -16,6 +16,25 @@ from pathlib import Path
 CLSID_DSHOW = "{59E4F394-D9A7-48BF-8D06-8DB7D8CF1ECE}"
 CLSID_MF = "{20C0F518-9F28-4168-9F73-030F243FB3B9}"
 CLSID_VIDEO_INPUT_CATEGORY = "{860BB310-5D01-11D0-BD3B-00A0C911CE86}"   # CLSID_VideoInputDeviceCategory
+NAME_KEY = r"SOFTWARE\AIVirtualCameraStudio\Camera"        # value "Name": native/win/vcam/vcam_name.h
+NAME_MAX = 63
+
+
+def valid_camera_name(name: str) -> bool:
+    """Same rule as vcam::valid_name: 1-63 characters, no control characters, not only spaces."""
+    return 0 < len(name) <= NAME_MAX and name.strip() != "" and all(ord(ch) >= 0x20 and ord(ch) != 0x7F for ch in name)
+
+
+def camera_name() -> str:
+    """The camera name other apps see (chosen with vcam-setup --rename; "AI Virtual Camera" by default).
+    Windows 11 lists the Media Foundation camera as "<name> (Windows Virtual Camera)"."""
+    from vcstudio import CAMERA_NAME
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, NAME_KEY, 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY) as k:
+            name = str(winreg.QueryValueEx(k, "Name")[0])
+            return name if valid_camera_name(name) else CAMERA_NAME
+    except OSError:
+        return CAMERA_NAME
 
 
 def _server_path(clsid: str) -> str | None:

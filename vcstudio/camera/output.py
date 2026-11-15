@@ -184,7 +184,8 @@ if IS_WINDOWS:
         return [d.name for d in list_video_devices()]
 
     def list_streams(device: str) -> list[str]:     # noqa: F811 - no sink streams on Windows
-        return [SINK_NAME] if device == CAMERA_NAME else []
+        from vcstudio.core.devices import own_camera_name
+        return [SINK_NAME] if device in (CAMERA_NAME, own_camera_name()) else []
 
     class VirtualCameraOutput:                      # noqa: F811
         """Windows implementation of the camera output (same interface as the CMIO sink client)."""
@@ -203,8 +204,9 @@ if IS_WINDOWS:
         def open(self) -> None:
             if self._w is not None:
                 return
-            if self.device != CAMERA_NAME:
-                raise CameraOutputError(-1, f"{self.device}: only “{CAMERA_NAME}” can receive frames on Windows")
+            from vcstudio.core.devices import own_camera_name
+            if self.device not in (CAMERA_NAME, own_camera_name()):
+                raise CameraOutputError(-1, f"{self.device}: only “{own_camera_name()}” can receive frames on Windows")
             from vcstudio.platform.win.vcam_status import components
             if not any(c.state == "installed" for c in components()):
                 raise CameraOutputError(-1, f"{self.device}: {OPEN_ERRORS[-1]}")

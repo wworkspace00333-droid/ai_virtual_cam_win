@@ -232,3 +232,55 @@ def test_live_obs_direct_transfer():
     src.stop()
     fps = (len(frames) - 1) / (frames[-1] - frames[0])
     assert fps >= 0.9 * st["fps"], (fps, st)
+
+
+def _mf_camera_free() -> bool:
+    if sys.platform != "win32":
+        return False
+    from vcstudio.platform.win import mfcap
+    from vcstudio.platform.win.devices import mf_devices
+    if not mfcap.available():
+        return False
+    dev = next((d for d in mf_devices() if d.name.endswith("(Windows Virtual Camera)")), None)
+    if dev is None:
+        return False
+    try:
+        mfcap.MfCapture(dev.unique_id, 1280, 720, 30).close()
+        return True
+    except mfcap.MfCaptureError:        # in use by another app (Windows: one controlling app per camera)
+        return False
+
+
+@pytest.mark.skipif(not _mf_camera_free(), reason="needs vcs_mfcap.dll and the Windows 11 camera, not in use")
+@pytest.mark.parametrize("w,h,fps", [(1920, 1080, 60), (1280, 720, 30)])
+def test_media_foundation_capture_through_the_apps_own_reader(w, h, fps):
+    """The "Media Foundation" capture method (vcs_mfcap.dll, the opencv-python wheels have no MSMF): the Windows 11
+    "AI Virtual Camera" as the device, the app's frames as content."""
+    import threading
+    import time
+    import numpy as np
+    from vcstudio.platform.win.capture import WindowsCameraSource
+    from vcstudio.platform.win.vcam_writer import VcamWriter
+    wr = VcamWriter(); wr.configure(1920, 1080, 60)
+    img = np.zeros((1080, 1920, 4), np.uint8); img[..., 1] = 40; img[..., 2] = 200; img[..., 3] = 255
+    stop = threading.Event()
+
+    def send():
+        k, t0 = 0, time.perf_counter()
+        while not stop.is_set():
+            k += 1; wr.publish(img); time.sleep(max(0.0, t0 + k / 60 - time.perf_counter()))
+    threading.Thread(target=send, daemon=True).start()
+    got = []
+    src = WindowsCameraSource("mediafoundation", None, "AI Virtual Camera", w, h, fps, allow_own_output=True)
+    try:
+        time.sleep(0.3)
+        src.start(lambda f: got.append((time.perf_counter(), f.width, f.height, f.array[h // 2, w // 2, :3].tolist())),
+                  lambda k, m: None)
+        time.sleep(0.5); n0, t0 = len(got), time.perf_counter(); time.sleep(3)
+        rate = (len(got) - n0) / (time.perf_counter() - t0)
+    finally:
+        src.stop(); stop.set(); wr.close()
+    assert src.nominal[:2] == (w, h) and abs(src.nominal[2] - fps) < 0.5
+    assert rate >= 0.85 * fps, rate
+    b, g, r = got[-1][3]
+    assert b < 12 and abs(g - 40) < 12 and abs(r - 200) < 12, got[-1]       # BT.601 declared and honoured

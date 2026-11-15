@@ -1,14 +1,15 @@
 <#
 Build the Windows native components into build\native\ with MSVC (Visual Studio 2022 / Build Tools, C++ x64):
   vcs_d3d11.dll      Direct3D 11 compositor (native\win\d3d11)
-More components (virtual camera DLLs, vcam-setup.exe) are added to this script as they are ported.
+  vcs_mfcap.dll      Media Foundation camera capture (native\win\capture)
+  vcam_dshow.dll, vcam_mf.dll, vcam-setup.exe, mf_client_test.exe   the virtual camera (native\win\vcam)
 
-  scripts\build_native_win.ps1 [-Config Release|Debug]
+  scripts\build_native_win.ps1 [-Config Release|Debug] [-Test] [-Out <folder>]   (-Out: default build\native)
 #>
-param([ValidateSet("Release", "Debug")][string]$Config = "Release", [switch]$Test)
+param([ValidateSet("Release", "Debug")][string]$Config = "Release", [switch]$Test, [string]$Out = "")
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-$out = Join-Path $root "build\native"
+$out = if ($Out) { $Out } else { Join-Path $root "build\native" }
 $obj = Join-Path $root "build\obj"
 New-Item -ItemType Directory -Force $out, $obj | Out-Null
 
@@ -35,6 +36,11 @@ $src = Join-Path $root "native\win\d3d11\vcs_d3d11.cpp"
 Invoke-VS ("cl $common /LD `"$src`" /Fo`"$obj\\`" /link /OUT:`"$out\vcs_d3d11.dll`" " +
            "/IMPLIB:`"$obj\vcs_d3d11.lib`" d3d11.lib dxgi.lib d3dcompiler.lib")
 Write-Host "OK $out\vcs_d3d11.dll"
+
+# vcs_mfcap.dll: Media Foundation capture (the opencv-python wheels have no MSMF backend)
+$src = Join-Path $root "native\win\capture\vcs_mfcap.cpp"
+Invoke-VS ("cl $common /LD `"$src`" /Fo`"$obj\\`" /link /OUT:`"$out\vcs_mfcap.dll`" /IMPLIB:`"$obj\vcs_mfcap.lib`"")
+Write-Host "OK $out\vcs_mfcap.dll"
 
 # DirectShow BaseClasses (Microsoft sample code, MIT) as a static library; old code: lenient flags
 $bc = Join-Path $root "native\win\third_party\baseclasses"

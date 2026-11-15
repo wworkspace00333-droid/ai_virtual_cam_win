@@ -1,9 +1,10 @@
 // vcam-setup.exe — installs / removes the "AI Virtual Camera" devices. Runs elevated (manifest), started by
 // the app's Virtual Camera page (UAC prompt) or by the installer.
 //
-//   vcam-setup --install [--dshow-only | --mf-only]   register the camera(s)
+//   vcam-setup --install [--dshow-only | --mf-only | --both]   register the camera(s)
 //   vcam-setup --uninstall                            remove both
-//   vcam-setup --status                               print what is registered
+//   vcam-setup --rename "<name>"                      rename the camera(s): re-registers what is installed
+//   vcam-setup --status                               print what is registered and the camera name
 //
 // DirectShow camera (vcam_dshow.dll): Windows 10 and 11, loaded by DirectShow apps in-process.
 // Media Foundation camera (vcam_mf.dll): Windows 11 virtual camera (MFCreateVirtualCamera, system-wide,
@@ -21,12 +22,13 @@
 #include <cstdio>
 #include <string>
 
+#include "../vcam_name.h"
+
 #pragma comment(lib, "mfplat.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "advapi32.lib")
 
 using Microsoft::WRL::ComPtr;
-static const wchar_t kName[] = L"AI Virtual Camera";
 static const wchar_t kDShowClsid[] = L"{59E4F394-D9A7-48BF-8D06-8DB7D8CF1ECE}";
 static const wchar_t kMfClsid[] = L"{20C0F518-9F28-4168-9F73-030F243FB3B9}";
 
@@ -74,11 +76,19 @@ static CreateVC create_vc() {
 	return m ? (CreateVC)GetProcAddress(m, "MFCreateVirtualCamera") : nullptr;
 }
 
-static HRESULT open_vc(IMFVirtualCamera **vc) {
+static HRESULT open_vc(const std::wstring &name, IMFVirtualCamera **vc) {
 	CreateVC create = create_vc();
 	if (!create) return HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
 	return create(MFVirtualCameraType_SoftwareCameraSource, MFVirtualCameraLifetime_System,
-	              MFVirtualCameraAccess_AllUsers, kName, kMfClsid, nullptr, 0, vc);
+	              MFVirtualCameraAccess_AllUsers, name.c_str(), kMfClsid, nullptr, 0, vc);
+}
+
+static HRESULT remove_vc(const std::wstring &name) {
+	ComPtr<IMFVirtualCamera> vc;
+	HRESULT hr = open_vc(name, &vc);
+	if (SUCCEEDED(hr)) hr = vc->Remove();
+	if (vc) vc->Shutdown();
+	return hr;
 }
 
 static int install_mf() {
@@ -89,7 +99,7 @@ static int install_mf() {
 	int rc = call_export(L"vcam_mf.dll", "DllRegisterServer");
 	if (rc) return rc;
 	ComPtr<IMFVirtualCamera> vc;
-	HRESULT hr = open_vc(&vc);
+	HRESULT hr = open_vc(vcam::camera_name(), &vc);
 	if (SUCCEEDED(hr)) hr = vc->Start(nullptr);
 	printf("media foundation: MFCreateVirtualCamera + Start: 0x%08lX\n", (unsigned long)hr);
 	if (FAILED(hr)) {
@@ -105,14 +115,44 @@ static int install_mf() {
 
 static int uninstall_mf() {
 	if (!create_vc()) return 0;
-	ComPtr<IMFVirtualCamera> vc;
-	HRESULT hr = open_vc(&vc);
-	if (SUCCEEDED(hr)) hr = vc->Remove();
+	const std::wstring name = vcam::camera_name();
+	HRESULT hr = remove_vc(name);
+	if (FAILED(hr) && name != vcam::kDefaultName) hr = remove_vc(vcam::kDefaultName);   // created before a rename
 	printf("media foundation: Remove: 0x%08lX\n", (unsigned long)hr);
-	if (vc) vc->Shutdown();
 	call_export(L"vcam_mf.dll", "DllUnregisterServer");
 	return 0;
 }
+
+static bool dshow_installed();
+
+// Rename: store the name, then re-register whatever is installed under it. The Media Foundation camera is
+// removed under its old name and created again; the DirectShow filter is registered again (same CLSID).
+static int rename_camera(const std::wstring &name) {
+	if (!vcam::valid_name(name)) {
+		fwprintf(stderr, L"invalid name: 1-%zu characters, no control characters\n", vcam::kNameMax);
+		return 1;
+	}
+	const std::wstring old = vcam::camera_name();
+	const bool mf = registered(kMfClsid), ds = dshow_installed();
+	if (mf && create_vc()) {
+		HRESULT hr = remove_vc(old);
+		printf("media foundation: Remove \"%ls\": 0x%08lX\n", old.c_str(), (unsigned long)hr);
+	}
+	LONG r = vcam::set_camera_name(name);
+	if (r != ERROR_SUCCESS) {
+		fprintf(stderr, "cannot store the name (%ld)\n", r);
+		if (mf) install_mf();                   // put the old camera back
+		return 1;
+	}
+	printf("name: %ls\n", name.c_str());
+	int rc = 0;
+	if (ds) rc |= call_export(L"vcam_dshow.dll", "DllRegisterServer");
+	if (mf) rc |= install_mf();
+	if (!mf && !ds) printf("no camera installed: the name applies to the next --install\n");
+	return rc;
+}
+
+static bool dshow_installed() { return registered(kDShowClsid); }
 
 int wmain(int argc, wchar_t **argv) {
 	std::wstring cmd = argc > 1 ? argv[1] : L"--status";
@@ -129,7 +169,10 @@ int wmain(int argc, wchar_t **argv) {
 		} else if (opt == L"--mf-only") {
 			rc = install_mf();
 		} else if (opt == L"--both") {
-			rc = call_export(L"vcam_dshow.dll", "DllRegisterServer") | install_mf();
+			// both devices: DirectShow ("<name>", any number of apps at once) + Media Foundation
+			// ("<name> (Windows Virtual Camera)"); DirectShow alone when the MF camera cannot start -> 3
+			rc = call_export(L"vcam_dshow.dll", "DllRegisterServer");
+			if (rc == 0 && create_vc() && install_mf() != 0) rc = 3;
 		} else if (create_vc() && install_mf() == 0) {
 			if (registered(kDShowClsid)) call_export(L"vcam_dshow.dll", "DllUnregisterServer");
 			printf("installed: media foundation camera\n");
@@ -141,12 +184,15 @@ int wmain(int argc, wchar_t **argv) {
 	} else if (cmd == L"--uninstall") {
 		uninstall_mf();
 		rc = call_export(L"vcam_dshow.dll", "DllUnregisterServer");
+	} else if (cmd == L"--rename") {
+		rc = rename_camera(opt);
 	} else if (cmd == L"--status") {
+		printf("name: %ls\n", vcam::camera_name().c_str());
 		printf("directshow: %s\n", registered(kDShowClsid) ? "registered" : "not registered");
 		printf("media foundation: %s%s\n", registered(kMfClsid) ? "registered" : "not registered",
 		       create_vc() ? "" : " (MFCreateVirtualCamera unavailable on this Windows)");
 	} else {
-		fwprintf(stderr, L"usage: vcam-setup --install [--dshow-only|--mf-only] | --uninstall | --status\n");
+		fwprintf(stderr, L"usage: vcam-setup --install [--dshow-only|--mf-only|--both] | --uninstall | --rename <name> | --status\n");
 		rc = 1;
 	}
 	MFShutdown();

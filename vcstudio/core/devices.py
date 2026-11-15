@@ -10,6 +10,20 @@ log = logging.getLogger(__name__)
 OUR_EXTENSION_MODEL_HINTS = (CAMERA_NAME,)
 
 
+def own_camera_name() -> str:
+    """The name other apps see for this app's camera: on Windows the user can rename it (vcam-setup --rename)."""
+    from vcstudio.platform import IS_WINDOWS
+    if IS_WINDOWS:
+        from vcstudio.platform.win.vcam_status import camera_name
+        return camera_name()
+    return CAMERA_NAME
+
+
+def _own_hints() -> tuple[str, ...]:
+    own = own_camera_name()
+    return OUR_EXTENSION_MODEL_HINTS + ((own,) if own != CAMERA_NAME else ())
+
+
 @dataclass(frozen=True)
 class VideoDevice:
     unique_id: str
@@ -24,9 +38,10 @@ class VideoDevice:
 
 def is_own_output(name: str, model_id: str) -> bool:
     """Our own camera, under any name the OS gives it: Windows 11 lists the Media Foundation virtual camera
-    as "AI Virtual Camera (Windows Virtual Camera)", so names that start with ours count too."""
+    as "AI Virtual Camera (Windows Virtual Camera)", so names that start with ours count too; on Windows the
+    user-chosen name counts as well."""
     n, m = name.casefold(), model_id.casefold()
-    return any(h.casefold() in (n, m) or n.startswith(h.casefold() + " (") for h in OUR_EXTENSION_MODEL_HINTS)
+    return any(h.casefold() in (n, m) or n.startswith(h.casefold() + " (") for h in _own_hints())
 
 
 def list_video_devices() -> list[VideoDevice]:

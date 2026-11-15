@@ -1,6 +1,6 @@
 # PyInstaller spec: AI Virtual Camera Studio for Windows (built by scripts/build_installer_win.ps1).
 # One-folder build: dist\AI Virtual Camera Studio\vcstudio.exe + _internal\ (sys._MEIPASS):
-#   native\      vcs_d3d11.dll, vcam_dshow.dll, vcam_mf.dll, vcam-setup.exe, mf_client_test.exe
+#   native\      vcs_d3d11.dll, vcs_mfcap.dll, vcam_dshow.dll, vcam_mf.dll, vcam-setup.exe, mf_client_test.exe
 #   models\      *.onnx + *.json (YOLO11 detection / segmentation, YuNet faces)
 #   obs-plugin\  vcstudio-obs.dll
 #   sample_data\ sample photo, logo, clip, coco16 accuracy set
@@ -28,7 +28,7 @@ for py in glob.glob(str(ROOT / "scripts" / "*.py")):
     datas.append((py, "scripts"))
 
 binaries = [(str(NATIVE / n), "native") for n in
-            ("vcs_d3d11.dll", "vcam_dshow.dll", "vcam_mf.dll", "vcam-setup.exe", "mf_client_test.exe")]
+            ("vcs_d3d11.dll", "vcs_mfcap.dll", "vcam_dshow.dll", "vcam_mf.dll", "vcam-setup.exe", "mf_client_test.exe")]
 # data, not a binary: its imports (obs.dll, obs-frontend-api.dll) exist only inside OBS
 datas.append((str(ROOT / "build" / "obs-plugin" / "win" / "vcstudio-obs.dll"), "obs-plugin"))
 missing = [b for b, _ in binaries + datas[-1:] if not Path(b).exists()]

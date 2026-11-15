@@ -1,4 +1,5 @@
-"""Camera capture on Windows (DirectShow or Media Foundation through OpenCV's videoio backends).
+"""Camera capture on Windows: DirectShow through OpenCV's videoio backend, Media Foundation through the app's own
+reader (vcstudio/platform/win/mfcap.py; the opencv-python wheels have no MSMF backend).
 
 OpenCV opens a device by its index in the backend's own enumeration order; vcstudio/platform/win/devices.py
 enumerates in exactly that order, so the saved unique id (device path / filter CLSID) or name is mapped to
@@ -27,7 +28,7 @@ from vcstudio.platform.win import devices as wd
 
 log = logging.getLogger(__name__)
 
-BACKENDS = {"directshow": cv2.CAP_DSHOW, "mediafoundation": cv2.CAP_MSMF}
+BACKENDS = {"directshow": cv2.CAP_DSHOW, "mediafoundation": None}      # None: vcstudio.platform.win.mfcap
 READ_FAILS_BEFORE_DISCONNECT = 15
 
 
@@ -65,9 +66,16 @@ def resolve_device(method: str, unique_id: str | None, name_hint: str | None) ->
             if d.unique_id == unique_id:
                 return d
     if name_hint:
-        exact = [d for d in devs if d.name.casefold() == name_hint.casefold()]
-        part = [d for d in devs if name_hint.casefold() in d.name.casefold()]
-        return (exact or part or [None])[0]
+        from vcstudio import CAMERA_NAME
+        from vcstudio.core.devices import own_camera_name
+        hints = [name_hint]
+        if name_hint == CAMERA_NAME and own_camera_name() != CAMERA_NAME:
+            hints.insert(0, own_camera_name())       # this app's camera after the user renamed it
+        for hint in hints:
+            exact = [d for d in devs if d.name.casefold() == hint.casefold()]
+            part = [d for d in devs if hint.casefold() in d.name.casefold()]
+            if exact or part:
+                return (exact or part)[0]
     return None
 
 
@@ -83,7 +91,7 @@ class WindowsCameraSource(CaptureSource):
         self.name = name_hint or unique_id or "?"
         self.selected_format: DeviceFormat | None = None
         self._nominal = (0, 0, 0.0)
-        self._cap: cv2.VideoCapture | None = None
+        self._cap = None                    # cv2.VideoCapture (DirectShow) or MfCapture (Media Foundation)
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._on_frame = None
@@ -116,6 +124,9 @@ class WindowsCameraSource(CaptureSource):
         if chosen is not None:
             w, h = chosen.width, chosen.height
             fps = min(max(fps, chosen.min_fps), chosen.max_fps)
+        if self.method == "mediafoundation":
+            self._start_mf(dev, w, h, fps, chosen, on_frame, on_event)
+            return
         cap = cv2.VideoCapture(dev.index, BACKENDS[self.method])
         if not cap.isOpened():
             cap.release()
@@ -142,6 +153,51 @@ class WindowsCameraSource(CaptureSource):
         self._thread.start()
         log.info("%s capture started: %s (index %d) %dx%d @ %.2f fps", self.method, dev.name, dev.index, aw, ah, afps)
 
+    def _start_mf(self, dev, w, h, fps, chosen, on_frame, on_event) -> None:
+        from vcstudio.core.devices import camera_authorization_status
+        from vcstudio.platform.win.mfcap import MfCapture, MfCaptureError
+        try:
+            cap = MfCapture(dev.unique_id, w, h, fps)
+        except MfCaptureError as e:
+            if "access denied" in str(e) or camera_authorization_status() != "authorized":
+                raise PermissionDenied(f"{dev.name}: {e}. Turn on camera access in Windows Settings → Privacy & "
+                                       "security → Camera.") from e
+            raise CaptureError(f"Cannot open {dev.name} (Media Foundation): {e}") from e
+        self.selected_format = chosen or DeviceFormat(cap.width, cap.height, cap.subtype, cap.fps, cap.fps)
+        self._nominal = (cap.width, cap.height, cap.fps)
+        self._cap = cap
+        self._on_frame, self._on_event = on_frame, on_event
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run_mf, name="capture-mediafoundation", daemon=True)
+        self._thread.start()
+        log.info("mediafoundation capture started: %s %dx%d @ %.2f fps (%s)", dev.name, cap.width, cap.height,
+                 cap.fps, cap.subtype)
+
+    def _run_mf(self) -> None:
+        cap = self._cap
+        pool = FramePool()
+        seq = 0
+        while not self._stop.is_set() and cap is not None:
+            out = pool.get(cap.height, cap.width)
+            r = cap.read(out, 200)
+            if r == cap.TIMEOUT:
+                continue                       # the supervisor's missing-input timer judges long gaps
+            if r == cap.LOST:
+                cb = self._on_event
+                if cb:
+                    cb("disconnected", f"{self.name} stopped delivering frames (device lost)")
+                return
+            arrival = host_time_s()
+            seq += 1
+            cb = self._on_frame
+            if cb is None:
+                return
+            try:
+                cb(Frame(seq=seq, pts=arrival, arrival=arrival, width=cap.width, height=cap.height,
+                         pixel_format="BGRA", array=out, source=self.name))
+            except Exception:
+                log.exception("frame callback failed")
+
     def stop(self) -> None:
         self._stop.set()
         t = self._thread
@@ -150,7 +206,7 @@ class WindowsCameraSource(CaptureSource):
         self._thread = None
         cap, self._cap = self._cap, None
         if cap is not None:
-            cap.release()
+            cap.close() if self.method == "mediafoundation" else cap.release()
             log.info("%s capture stopped: %s", self.method, self.name)
         self._on_frame = None
 

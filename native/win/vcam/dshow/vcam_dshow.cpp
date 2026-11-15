@@ -14,9 +14,11 @@
 #include <ksmedia.h>
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "../vcam_frames.h"
+#include "../vcam_name.h"
 
 // {59E4F394-D9A7-48BF-8D06-8DB7D8CF1ECE} — keep in sync with vcstudio/platform/win/vcam_status.py
 DEFINE_GUID(CLSID_AIVirtualCameraDShow, 0x59e4f394, 0xd9a7, 0x48bf, 0x8d, 0x06, 0x8d, 0xb7, 0xd8, 0xcf, 0x1e, 0xce);
@@ -290,7 +292,9 @@ static HRESULT register_category(bool reg) {
 		rf.dwMerit = MERIT_DO_NOT_USE;
 		rf.cPins2 = 1;
 		rf.rgPins2 = &pin;
-		hr = fm->RegisterFilter(CLSID_AIVirtualCameraDShow, kName, nullptr, &CLSID_VideoInputDeviceCategory, nullptr, &rf);
+		// the name apps list: the user-chosen one (vcam-setup --rename), "AI Virtual Camera" by default
+		const std::wstring name = vcam::camera_name();
+		hr = fm->RegisterFilter(CLSID_AIVirtualCameraDShow, name.c_str(), nullptr, &CLSID_VideoInputDeviceCategory, nullptr, &rf);
 	} else {
 		hr = fm->UnregisterFilter(&CLSID_VideoInputDeviceCategory, nullptr, CLSID_AIVirtualCameraDShow);
 	}

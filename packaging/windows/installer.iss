@@ -53,6 +53,8 @@ en.ObsPlugin=Install the OBS plugin (direct frame transfer from OBS, no OBS Virt
 ru.ObsPlugin=Установить плагин OBS (прямая передача кадров из OBS, без OBS Virtual Camera)
 en.CameraTask=Register the "AI Virtual Camera" device
 ru.CameraTask=Зарегистрировать камеру «AI Virtual Camera»
+en.DShowToo=Also install the DirectShow camera: any number of apps can use it at the same time, and DirectShow apps (OBS, Discord) get 60 fps
+ru.DShowToo=Также установить DirectShow-камеру: ею могут одновременно пользоваться любые приложения, а DirectShow-приложения (OBS, Discord) получают 60 кадров/с
 en.Registering=Registering the AI Virtual Camera...
 ru.Registering=Регистрация камеры AI Virtual Camera...
 en.CamFallback=The Windows 11 camera could not start (is "Let apps access your camera" on in Settings > Privacy & security > Camera?), so the DirectShow camera was installed instead. It works in most apps; to switch later, allow camera access and click Install on the app's Virtual Camera page.
@@ -62,6 +64,7 @@ ru.CamFailed=Не удалось зарегистрировать камеру A
 
 [Tasks]
 Name: "camera"; Description: "{cm:CameraTask}"
+Name: "camera\dshowtoo"; Description: "{cm:DShowToo}"; Check: IsWindows11
 Name: "obsplugin"; Description: "{cm:ObsPlugin}"; Check: ObsInstalled
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
@@ -88,6 +91,15 @@ function ObsInstalled: Boolean;
 begin
   Result := FileExists(ExpandConstant('{commonpf64}\obs-studio\bin\64bit\obs64.exe'))
     or RegKeyExists(HKLM64, 'SOFTWARE\OBS Studio') or DirExists(ExpandConstant('{commonappdata}\obs-studio'));
+end;
+
+{ Windows 11 (build 22000+): the Media Foundation camera exists; Windows 10 always gets the DirectShow camera }
+function IsWindows11: Boolean;
+var
+  V: TWindowsVersion;
+begin
+  GetWindowsVersionEx(V);
+  Result := (V.Major > 10) or ((V.Major = 10) and (V.Build >= 22000));
 end;
 
 function RunSetupTool(const Dir, Params: String): Integer;
@@ -125,7 +137,10 @@ var
 begin
   if (CurStep = ssPostInstall) and WizardIsTaskSelected('camera') then begin
     WizardForm.StatusLabel.Caption := CustomMessage('Registering');
-    rc := RunSetupTool(ExpandConstant('{#Native}'), '--install');
+    if WizardIsTaskSelected('camera\dshowtoo') then
+      rc := RunSetupTool(ExpandConstant('{#Native}'), '--install --both')
+    else
+      rc := RunSetupTool(ExpandConstant('{#Native}'), '--install');
     if rc = 3 then
       SuppressibleMsgBox(CustomMessage('CamFallback'), mbInformation, MB_OK, IDOK)
     else if rc <> 0 then

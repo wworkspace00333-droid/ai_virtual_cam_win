@@ -784,4 +784,18 @@ RU: dict[str, str] = {
         "этой сборке их пока нет.",
     "Camera components found but not registered: click Install (administrator rights needed).":
         "Компоненты камеры найдены, но не зарегистрированы: нажмите «Установить» (нужны права администратора).",
+    # camera name (Windows)
+    "Camera name": "Имя камеры",
+    "Name other apps show": "Имя, которое видят приложения",
+    "Rename": "Переименовать",
+    "Applies to both cameras (DirectShow and Media Foundation) and needs administrator rights once. Windows 11 adds "
+    "“(Windows Virtual Camera)” to the Media Foundation camera's name. Apps that already have the camera open show "
+    "the new name after they reopen it.":
+        "Применяется к обеим камерам (DirectShow и Media Foundation), один раз нужны права администратора. Windows 11 "
+        "добавляет к имени камеры Media Foundation «(Windows Virtual Camera)». Приложения, в которых камера уже "
+        "открыта, покажут новое имя после повторного открытия.",
+    "The name must be 1-63 characters, without quotation marks or control characters.":
+        "Имя: от 1 до 63 символов, без кавычек и управляющих символов.",
+    "Camera renamed to “{name}”.": "Камера переименована в «{name}».",
+    "Rename failed (exit {rc}).": "Переименовать не удалось (код {rc}).",
 }

@@ -6,7 +6,8 @@ import threading
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
-from PySide6.QtWidgets import (QComboBox, QFormLayout, QGridLayout, QHBoxLayout, QLabel, QMessageBox, QPushButton,
+from PySide6.QtWidgets import (QComboBox, QFormLayout, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+                               QPushButton,
                                QTableWidget, QTableWidgetItem)
 
 from vcstudio import CAMERA_NAME
@@ -60,6 +61,27 @@ class VirtualCameraPage:
         row.addStretch()
         st.layout_.addLayout(row)
         lay.addWidget(st)
+
+        self.name_edit = self.rename_btn = None
+        if IS_WINDOWS:          # the user can give the camera devices their own name
+            from vcstudio.platform.win.vcam_status import NAME_MAX, camera_name
+            nc = Card("Camera name")
+            nrow = QHBoxLayout()
+            self.name_edit = QLineEdit(camera_name()); self.name_edit.setMaxLength(NAME_MAX)
+            self.name_edit.setPlaceholderText(CAMERA_NAME)
+            self.rename_btn = QPushButton(tr("Rename"))
+            nrow.addWidget(QLabel(tr("Name other apps show"))); nrow.addWidget(self.name_edit, 1)
+            nrow.addWidget(self.rename_btn)
+            nc.layout_.addLayout(nrow)
+            nnote = QLabel(tr("Applies to both cameras (DirectShow and Media Foundation) and needs administrator "
+                              "rights once. Windows 11 adds “(Windows Virtual Camera)” to the Media Foundation "
+                              "camera's name. Apps that already have the camera open show the new name after they "
+                              "reopen it."))
+            nnote.setObjectName("muted"); nnote.setWordWrap(True)
+            nc.layout_.addWidget(nnote)
+            lay.addWidget(nc)
+            self.rename_btn.clicked.connect(self._rename)
+            self.name_edit.returnPressed.connect(self._rename)
 
         chain = Card("Check the whole chain")
         chint = QLabel(tr(text("camera_chain_hint")))
@@ -170,7 +192,8 @@ class VirtualCameraPage:
                                     "ok" if s.host_app else "warn")
         state = {"activated_enabled": "ok", "installed": "ok"}.get(s.extension_state, "warn" if s.extension_state != "not_installed" else "idle")
         self.cards[self.k_ext].set(s.extension_state.replace("_", " ").title(), s.team_id and tr("team {id}", id=s.team_id), state)
-        self.cards["Camera device"].set("Visible" if s.device_visible else "Not visible", CAMERA_NAME,
+        from vcstudio.core.devices import own_camera_name
+        self.cards["Camera device"].set("Visible" if s.device_visible else "Not visible", own_camera_name(),
                                         "ok" if s.device_visible else "idle")
         self.msg.setText(tr(s.message))
         self.install_btn.setEnabled(s.host_app is not None)
@@ -202,8 +225,21 @@ class VirtualCameraPage:
             self._sig.done.emit(kind, f"{rc}|{out}")
         threading.Thread(target=work, daemon=True).start()
 
+    def _rename(self):
+        from vcstudio.platform.win.vcam_status import camera_name, valid_camera_name
+        name = self.name_edit.text().strip()
+        if name == camera_name():
+            return
+        if not valid_camera_name(name) or '"' in name:
+            self.msg.setText(tr("The name must be 1-63 characters, without quotation marks or control characters."))
+            return
+        self.rename_btn.setEnabled(False)
+        self._async("rename", lambda: cm.rename(name))
+
     def _uninstall(self):
-        if QMessageBox.question(self.widget, tr("Uninstall"), tr(text("camera_remove_question"), camera=CAMERA_NAME)) == QMessageBox.Yes:
+        from vcstudio.core.devices import own_camera_name
+        if QMessageBox.question(self.widget, tr("Uninstall"),
+                                tr(text("camera_remove_question"), camera=own_camera_name())) == QMessageBox.Yes:
             self._async("uninstall", cm.deactivate)
 
     def _done(self, kind, payload):
@@ -213,6 +249,12 @@ class VirtualCameraPage:
             extra = {"2": text("camera_needs_approval"),
                      "3": text("camera_fallback") if IS_WINDOWS else text("camera_needs_restart")}.get(rc, "")
             self.msg.setText((f"{tr(kind.title())}: " + tr("exit {rc}.", rc=rc) + f" {out} {tr(extra)}").strip())
+        elif kind == "rename":
+            from vcstudio.platform.win.vcam_status import camera_name
+            self.rename_btn.setEnabled(True)
+            self.name_edit.setText(camera_name())
+            self.msg.setText(tr("Camera renamed to “{name}”.", name=camera_name()) if rc == "0"
+                             else (tr("Rename failed (exit {rc}).", rc=rc) + f" {out}").strip())
         elif kind == "loopback":
             self.test_info.setText(out)
             self.loop_btn.setEnabled(True)
