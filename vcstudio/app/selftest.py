@@ -11,11 +11,27 @@ from pathlib import Path
 from vcstudio.core.frame import host_time_s
 
 
+def request_camera_access(timeout: float = 120) -> bool:
+    """macOS: ask for camera permission (TCC). Windows: report the privacy switches (no prompt exists).
+    Software cameras such as OBS Virtual Camera / AI Virtual Camera work regardless of the switches."""
+    from vcstudio.platform import IS_MAC
+    if IS_MAC:
+        from vcstudio.core.video_capture import request_camera_access as mac_request
+        return mac_request(timeout=timeout)
+    return True
+
+
+def AVFoundationSource(unique_id, name_hint, width=1920, height=1080, fps=60.0, allow_own_output=False):  # noqa: N802
+    """Camera capture source of this platform (the name is kept from the macOS-only original)."""
+    from vcstudio.core.video_capture import device_source
+    from vcstudio.platform import DEFAULT_DEVICE_METHOD
+    return device_source(DEFAULT_DEVICE_METHOD, unique_id, name_hint, width, height, fps, allow_own_output)
+
+
 def capture_selftest(out_path: str, seconds: float = 10.0, name_hint: str = "OBS Virtual Camera",
                      ai_mode: str | None = None) -> int:
     from vcstudio.core.capture_supervisor import CaptureSupervisor
     from vcstudio.core.devices import camera_authorization_status, list_video_devices
-    from vcstudio.core.video_capture import AVFoundationSource, request_camera_access
 
     result: dict = {"started": time.time(), "device_hint": name_hint, "ok": False}
     try:
@@ -82,7 +98,8 @@ def capture_selftest(out_path: str, seconds: float = 10.0, name_hint: str = "OBS
 
 def camera_loopback_selftest(out_path: str, seconds: float = 6.0, device: str = "AI Virtual Camera",
                              sink: str = "AI Virtual Camera Input", fps: float = 60.0) -> int:
-    """Send bar-coded frames into a virtual camera's sink and capture them back via AVFoundation.
+    """Send bar-coded frames into a virtual camera's sink and capture them back like a client app
+    (AVFoundation on macOS; DirectShow on Windows).
 
     Measures what a third-party app would receive: delivered frames, frame rate, latency, order.
     """
@@ -91,7 +108,6 @@ def camera_loopback_selftest(out_path: str, seconds: float = 6.0, device: str = 
     from vcstudio.camera.output import VirtualCameraOutput, list_cmio_devices, list_streams
     from vcstudio.core.capture_supervisor import CaptureSupervisor
     from vcstudio.core.pixelbuffer import PixelBufferPool
-    from vcstudio.core.video_capture import AVFoundationSource, request_camera_access
     from vcstudio.core.barcode import BITS
 
     W, H = 1920, 1080
@@ -185,7 +201,7 @@ def pipeline_e2e_selftest(out_path: str, seconds: float = 8.0, out_device: str =
     from vcstudio.app.application import AppContext
     from vcstudio.core.capture_supervisor import CaptureSupervisor
     from vcstudio.core.frame import Frame
-    from vcstudio.core.video_capture import AVFoundationSource, TestPatternSource, request_camera_access
+    from vcstudio.core.video_capture import TestPatternSource
     from vcstudio.replacement.spec import ReplacementSpec
     from vcstudio.roi.model import ROI
     from vcstudio.core.barcode import BITS
@@ -245,12 +261,24 @@ def pipeline_e2e_selftest(out_path: str, seconds: float = 8.0, out_device: str =
                                                 b.__setitem__("rois", b["rois"] + [marker.to_dict()])))
             ctx.settings.set("input.method", "obs_ipc")
         elif in_device:
-            ctx.settings.set("input.method", "avfoundation"); ctx.settings.set("input.device_name_hint", in_device)
+            from vcstudio.platform import DEFAULT_DEVICE_METHOD
+            ctx.settings.set("input.method", DEFAULT_DEVICE_METHOD); ctx.settings.set("input.device_name_hint", in_device)
             ctx.settings.set("input.device_unique_id", None)
         else:
             ctx.settings.set("input.method", "test_pattern")          # synthetic input (not a camera device)
             ctx.capture_factory = lambda: (lambda: BarCodedScene(W, H, 60))
         ctx.start_capture()
+        # Warm-up is not part of the measurement: wait until the AI runs and replacement regions exist. On a slow
+        # machine the automatic model choice first steps down from the largest segmentation model (seconds).
+        t_warm = time.perf_counter()
+        while time.perf_counter() - t_warm < 45:
+            if ctx.ai.stats().state == "running" and ctx.pipeline.stats().regions > 0:
+                m0 = ctx.ai.stats().model
+                time.sleep(1.0)
+                if ctx.ai.stats().model == m0 and ctx.ai.stats().state == "running":
+                    break
+            time.sleep(0.2)
+        result["warmup_s"] = round(time.perf_counter() - t_warm, 1)
         # ---- third-party client: capture the output camera
         client = CaptureSupervisor(missing_timeout_ms=3000)
         client.start(lambda: AVFoundationSource(None, out_device, W, H, 60, allow_own_output=True))

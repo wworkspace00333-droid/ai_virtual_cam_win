@@ -1,0 +1,1 @@
+﻿DirectShow BaseClasses from https://github.com/microsoft/Windows-classic-samples (Samples/Win7Samples/multimedia/directshow/baseclasses), MIT license (see LICENSE). Unmodified; built into vcam_dshow.dll by scripts/build_native_win.ps1.

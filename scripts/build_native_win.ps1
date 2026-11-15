@@ -5,7 +5,7 @@ More components (virtual camera DLLs, vcam-setup.exe) are added to this script a
 
   scripts\build_native_win.ps1 [-Config Release|Debug]
 #>
-param([ValidateSet("Release", "Debug")][string]$Config = "Release")
+param([ValidateSet("Release", "Debug")][string]$Config = "Release", [switch]$Test)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $out = Join-Path $root "build\native"
@@ -35,3 +35,32 @@ $src = Join-Path $root "native\win\d3d11\vcs_d3d11.cpp"
 Invoke-VS ("cl $common /LD `"$src`" /Fo`"$obj\\`" /link /OUT:`"$out\vcs_d3d11.dll`" " +
            "/IMPLIB:`"$obj\vcs_d3d11.lib`" d3d11.lib dxgi.lib d3dcompiler.lib")
 Write-Host "OK $out\vcs_d3d11.dll"
+
+# DirectShow BaseClasses (Microsoft sample code, MIT) as a static library; old code: lenient flags
+$bc = Join-Path $root "native\win\third_party\baseclasses"
+$bcobj = Join-Path $obj "baseclasses"
+New-Item -ItemType Directory -Force $bcobj | Out-Null
+$bcflags = "/nologo /EHsc /W1 /utf-8 $opt /DUNICODE /D_UNICODE /DWIN32 /D_WIN32_WINNT=0x0A00 /I`"$bc`""
+Invoke-VS ("cl $bcflags /c `"$bc\*.cpp`" /Fo`"$bcobj\\`"")
+Invoke-VS ("lib /nologo /OUT:`"$obj\strmbase.lib`" `"$bcobj\*.obj`"")
+
+# vcam_dshow.dll: "AI Virtual Camera" DirectShow source filter
+$vc = Join-Path $root "native\win\vcam"
+$vcflags = "/nologo /std:c++17 /EHsc /W3 /utf-8 $opt /DUNICODE /D_UNICODE /DWIN32 /D_WIN32_WINNT=0x0A00 /I`"$bc`" /I`"$vc`""
+Invoke-VS ("cl $vcflags /LD `"$vc\dshow\vcam_dshow.cpp`" `"$vc\vcam_frames.cpp`" /Fo`"$obj\\`" " +
+           "/link /DEF:`"$vc\dshow\vcam_dshow.def`" /OUT:`"$out\vcam_dshow.dll`" /IMPLIB:`"$obj\vcam_dshow.lib`" " +
+           "`"$obj\strmbase.lib`" strmiids.lib winmm.lib ole32.lib oleaut32.lib advapi32.lib user32.lib gdi32.lib wtsapi32.lib")
+Write-Host "OK $out\vcam_dshow.dll"
+
+# vcam-setup.exe: registers / removes the camera; requires administrator rights (UAC manifest)
+Invoke-VS ("cl /nologo /std:c++17 /EHsc /W4 /utf-8 $opt /DUNICODE /D_UNICODE `"$vc\setup\vcam_setup.cpp`" /Fo`"$obj\\`" " +
+           "/link /OUT:`"$out\vcam-setup.exe`" /MANIFEST:EMBED /MANIFESTUAC:`"level='requireAdministrator' uiAccess='false'`" " +
+           "advapi32.lib")
+Write-Host "OK $out\vcam-setup.exe"
+
+if ($Test) {
+    Invoke-VS ("cl $vcflags `"$vc\test\vcam_frames_test.cpp`" `"$vc\vcam_frames.cpp`" /Fo`"$obj\\`" " +
+               "/link /OUT:`"$obj\vcam_frames_test.exe`" user32.lib gdi32.lib wtsapi32.lib")
+    & "$obj\vcam_frames_test.exe"
+    if ($LASTEXITCODE -ne 0) { throw "vcam_frames_test failed" }
+}

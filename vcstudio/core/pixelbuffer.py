@@ -9,9 +9,14 @@ from vcstudio.platform import IS_MAC
 
 
 class PixelBufferPool:
-    """Small CVPixelBufferPool for a fixed size; avoids per-frame allocations."""
+    """Small CVPixelBufferPool for a fixed size; avoids per-frame allocations.
+    Windows: buffers are plain BGRA arrays; from_array returns a contiguous private copy."""
 
     def __init__(self, width: int, height: int):
+        self.width, self.height = width, height
+        if not IS_MAC:
+            self._pool = None
+            return
         import Quartz as Q  # type: ignore
         self.width, self.height = width, height
         attrs = {
@@ -26,10 +31,12 @@ class PixelBufferPool:
             raise RuntimeError(f"CVPixelBufferPoolCreate failed: {err}")
 
     def from_array(self, arr: np.ndarray):
-        import Quartz as Q  # type: ignore
         h, w = arr.shape[:2]
         if (w, h) != (self.width, self.height) or arr.shape[2] != 4 or arr.dtype != np.uint8:
             raise ValueError("array does not match pool format")
+        if not IS_MAC:
+            return np.array(arr, order="C", copy=True)
+        import Quartz as Q  # type: ignore
         err, pb = Q.CVPixelBufferPoolCreatePixelBuffer(None, self._pool, None)
         if err != 0:
             raise RuntimeError(f"CVPixelBufferPoolCreatePixelBuffer failed: {err}")
