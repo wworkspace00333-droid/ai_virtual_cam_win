@@ -4,7 +4,8 @@
 PySide6>=6.8
 numpy>=1.26
 scipy>=1.11
-opencv-python-headless>=4.10   # capture (Media Foundation / DirectShow), imaging, YuNet face detector, ArUco
+opencv-python-headless>=4.10,<5  # capture (DirectShow / Media Foundation), imaging, YuNet, ArUco.
+                                 # 5.0 wheels lack the MSMF backend; the app is developed and tested on 4.14
 psutil>=5.9
 onnxruntime-directml>=1.20     # AI on any DirectX 12 GPU (NVIDIA / AMD / Intel) + CPU fallback.
                                # For CUDA instead: pip uninstall onnxruntime-directml; pip install onnxruntime-gpu
