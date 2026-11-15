@@ -219,7 +219,18 @@ def frame_to_rect(cal: Calibration, screen_quad) -> tuple[float, float, float, f
 
 def screenshot(path: Path | None = None) -> np.ndarray:
     """Main display screenshot (BGR). Needs Screen Recording permission; without it macOS returns
-    the desktop without other apps' windows, which the calibration then reports as markers not found."""
+    the desktop without other apps' windows, which the calibration then reports as markers not found.
+    Windows: GDI capture of the primary monitor (vcstudio/platform/win/screenshot.py)."""
+    import sys
+    if sys.platform == "win32":
+        from vcstudio.platform.win.screenshot import primary_screen
+        try:
+            img = primary_screen()
+        except (RuntimeError, OSError) as e:
+            raise CalibrationError(f"screenshot failed: {e}") from e
+        if path is not None:
+            cv2.imencode(".png", img)[1].tofile(str(path))     # Unicode-safe write
+        return img
     out = path or Path(tempfile.mkdtemp()) / "screen.png"
     r = subprocess.run(["/usr/sbin/screencapture", "-x", "-t", "png", str(out)], capture_output=True, timeout=15)
     img = cv2.imread(str(out))

@@ -152,6 +152,11 @@ _TEXT = {
         "on the sample photo found {dets} object(s){labels}."),
     "import_slow": ("Slower than 33 ms: detection will run below 30 times a second on this Mac.",
                     "Slower than 33 ms: detection will run below 30 times a second on this PC."),
+    "replacement_note": (
+        "Rendered here at ≤{fps} fps with the active compositor (Metal GPU, or CPU fallback; see Settings). The full "
+        "60 fps output runs from the Preview page.",
+        "Rendered here at ≤{fps} fps with the active compositor (Direct3D 11 GPU, or CPU fallback; see Settings). The "
+        "full 60 fps output runs from the Preview page."),
     "face_regions_need": ("Face regions need Apple Vision face detection (AI Engine page).",
                           "Face regions need YuNet face detection (AI Engine page)."),
 }

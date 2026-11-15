@@ -20,7 +20,9 @@ from vcstudio.roi.resolver import resolve
 
 DATA = Path(__file__).parent / "data"
 MP4, MOV, MKV = DATA / "clip_h264.mp4", DATA / "clip_alpha.mov", DATA / "clip_h264.mkv"
-needs_ffmpeg = pytest.mark.skipif(ffmpeg_path() is None, reason="ffmpeg not installed")
+needs_ffmpeg = pytest.mark.skipif(ffmpeg_path() is None and sys.platform != "win32", reason="ffmpeg not installed")
+MAC = sys.platform == "darwin"
+DECODER = "avfoundation" if MAC else "pyav"           # Windows: PyAV (bundled FFmpeg) reads every container
 
 
 def settle(player, t, expect=None, timeout=2.0):
@@ -38,15 +40,15 @@ def settle(player, t, expect=None, timeout=2.0):
 # ------------------------------------------------------------------ probe / decode
 def test_probe_formats():
     a, b = probe(MP4), probe(MOV)
-    assert (a.codec, a.width, a.height, a.fps, a.duration, a.has_alpha, a.decoder) == ("avc1", 320, 180, 30.0, 2.0, False, "avfoundation")
-    assert a.hardware                                       # VideoToolbox hardware H.264 on Apple Silicon
+    assert (a.codec, a.width, a.height, a.fps, a.duration, a.has_alpha, a.decoder) == ("avc1", 320, 180, 30.0, 2.0, False, DECODER)
+    assert a.hardware == MAC                                # VideoToolbox hardware H.264 on Apple Silicon; software FFmpeg on Windows
     assert b.codec == "ap4h" and b.has_alpha
 
 
 @needs_ffmpeg
 def test_probe_ffmpeg_fallback_for_mkv():
     c = probe(MKV)
-    assert c.decoder == "ffmpeg" and c.width == 320 and abs(c.duration - 2.0) < 0.05 and not c.hardware
+    assert c.decoder == ("ffmpeg" if MAC else "pyav") and c.width == 320 and abs(c.duration - 2.0) < 0.05 and not c.hardware
 
 
 @pytest.mark.parametrize("path", [MP4, pytest.param(MKV, marks=needs_ffmpeg)])
@@ -177,7 +179,7 @@ def lib(tmp_path):
 
 def test_import_video_asset(lib, tmp_path):
     a = lib.import_file(MP4)
-    assert (a.kind, a.width, a.height, a.fps, a.duration, a.decoder, a.hardware) == ("video", 320, 180, 30.0, 2.0, "avfoundation", True)
+    assert (a.kind, a.width, a.height, a.fps, a.duration, a.decoder, a.hardware) == ("video", 320, 180, 30.0, 2.0, DECODER, MAC)
     assert lib.thumbnail(a).shape[2] == 4
     bad = tmp_path / "broken.mp4"; bad.write_bytes(b"\x00" * 1000)
     with pytest.raises(AssetError):

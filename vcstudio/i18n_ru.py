@@ -740,6 +740,10 @@ RU: dict[str, str] = {
         "установкой модель проверяется и замеряется.",
     "Benchmark (this PC)": "Замер скорости (этот компьютер)",
     "ONNX (*.onnx)": "Модели ONNX (*.onnx)",
+    "Rendered here at ≤{fps} fps with the active compositor (Direct3D 11 GPU, or CPU fallback; see Settings). The full "
+    "60 fps output runs from the Preview page.":
+        "Здесь отрисовывается с частотой до {fps} кадр/с активным компоновщиком (видеокарта Direct3D 11 или запасной "
+        "CPU; см. «Настройки»). Полный вывод 60 кадр/с запускается со страницы «Превью».",
     "Auto (largest that keeps up on this PC; smallest in Low Resource mode)":
         "Авто (самая крупная, что успевает на этом компьютере; в экономном режиме самая лёгкая)",
     "Delete {name} from this PC? Built-in models are not affected.":

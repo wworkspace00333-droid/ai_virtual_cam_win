@@ -2,7 +2,8 @@
 
 Imported files are copied into <app data>/assets/<id><ext> so profiles keep working if the
 original file moves. Profiles reference assets by id (profile body "assets" list).
-Images decode through Apple ImageIO (PNG, JPEG, WEBP, HEIC, TIFF...) into premultiplied BGRA.
+Images decode into premultiplied BGRA through Apple ImageIO on macOS (PNG, JPEG, WEBP, HEIC, TIFF...) and
+OpenCV / Pillow on Windows (vcstudio/platform/win/imaging.py).
 """
 from __future__ import annotations
 
@@ -18,6 +19,8 @@ import numpy as np
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".heic", ".tif", ".tiff", ".bmp", ".gif"}
 VIDEO_EXTS = {".mp4", ".mov", ".m4v"}
+if __import__("sys").platform == "win32":
+    VIDEO_EXTS |= {".mkv", ".webm", ".avi"}      # PyAV/FFmpeg reads these natively on Windows
 MAX_IMAGE_SIDE = 4096          # larger images are downscaled on load (memory budget)
 
 
@@ -49,6 +52,13 @@ class Asset:
 
 def decode_image(path: Path) -> np.ndarray:
     """Premultiplied BGRA uint8 (H, W, 4)."""
+    from vcstudio.platform import IS_MAC
+    if not IS_MAC:                    # Windows: OpenCV / Pillow (vcstudio/platform/win/imaging.py)
+        from vcstudio.platform.win.imaging import ImageDecodeError, decode_bgra
+        try:
+            return decode_bgra(path, MAX_IMAGE_SIDE)
+        except ImageDecodeError as e:
+            raise AssetError(str(e)) from e
     import Foundation  # type: ignore
     import Quartz as Q  # type: ignore
     src = Q.CGImageSourceCreateWithURL(Foundation.NSURL.fileURLWithPath_(str(path)), None)

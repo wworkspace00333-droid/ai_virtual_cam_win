@@ -39,7 +39,11 @@ def test_everything_survives_restart(paths, tmp_path):
         ctx.update_active_profile(mut)
         s.set("performance.mode", "performance")
 
-        pkg = tmp_path / "my_model.mlpackage"; shutil.copytree(REPO_MODELS / "yolo11n.mlpackage", pkg)
+        from vcstudio.ai.backend import model_extensions
+        ext = model_extensions()[0]                                 # .mlpackage (macOS) / .onnx (Windows)
+        pkg = tmp_path / f"my_model{ext}"
+        src = REPO_MODELS / f"yolo11n{ext}"
+        shutil.copytree(src, pkg) if src.is_dir() else shutil.copy2(src, pkg)
         mi.install(mi.inspect_model(pkg, runs=3), ctx.models.user_dir, "my_model", {"person": "player"}, 0.4)
         (paths.root / "reports").mkdir(exist_ok=True)
         (paths.root / "reports" / "e2e-obs-test.json").write_text('{"ok": true}')

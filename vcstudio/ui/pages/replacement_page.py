@@ -132,8 +132,8 @@ class ReplacementPage:
         lay.addLayout(top)
 
         pv = Card("Live replacement preview")
-        note = QLabel(tr("Rendered here at ≤{fps} fps with the active compositor (Metal GPU, or CPU fallback; see "
-                         "Settings). The full 60 fps output runs from the Preview page.", fps=PREVIEW_FPS))
+        from vcstudio.platform import text
+        note = QLabel(tr(text("replacement_note"), fps=PREVIEW_FPS))
         note.setObjectName("muted"); note.setWordWrap(True)
         pv.layout_.addWidget(note)
         self.view = VideoView("REPLACEMENT PREVIEW"); self.view.setMinimumHeight(420)
@@ -409,7 +409,8 @@ class ReplacementPage:
         it = self.assets.currentItem()
         a = assets_from_profile(self._body()).get(it.data(Qt.UserRole)) if it else None
         if a is not None and a.kind == "video":
-            dec = "FFmpeg (software)" if a.decoder == "ffmpeg" else ("VideoToolbox hardware" if a.hardware else "AVFoundation")
+            dec = {"ffmpeg": "FFmpeg (software)", "pyav": "FFmpeg / PyAV (software)"}.get(
+                a.decoder, "VideoToolbox hardware" if a.hardware else "AVFoundation")
             self.asset_info.setText(f"{a.name}: " + tr("video {w}×{h}, {fps} fps, {d} s, codec {codec}, decoder {dec}",
                                     w=a.width, h=a.height, fps=f"{a.fps:g}", d=f"{a.duration:.2f}", codec=a.codec, dec=dec))
         else:

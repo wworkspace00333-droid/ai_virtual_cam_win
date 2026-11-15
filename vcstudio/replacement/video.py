@@ -47,7 +47,7 @@ class VideoInfo:
     duration: float
     codec: str
     has_alpha: bool
-    decoder: str          # "avfoundation" | "ffmpeg"
+    decoder: str          # "avfoundation" | "ffmpeg" (subprocess) | "pyav" (Windows)
     hardware: bool        # VideoToolbox reports hardware decode support for the codec
     rotation: int = 0     # degrees from the track's preferred transform
 
@@ -79,6 +79,10 @@ def probe(path: Path) -> VideoInfo:
     path = Path(path)
     if not path.exists():
         raise VideoError(f"File not found: {path.name}")
+    from vcstudio.platform import IS_MAC
+    if not IS_MAC:                    # Windows: PyAV / FFmpeg (vcstudio/platform/win/video_decode.py)
+        from vcstudio.platform.win.video_decode import probe as pyav_probe
+        return pyav_probe(path)
     import CoreMedia as CM  # type: ignore
     asset, track = _av_asset(path)
     if track is not None:
@@ -240,6 +244,9 @@ class FFmpegDecoder:
 
 
 def open_decoder(path: Path, info: VideoInfo, start_s: float, max_side: int | None):
+    if info.decoder == "pyav":
+        from vcstudio.platform.win.video_decode import PyAVDecoder
+        return PyAVDecoder(path, info, start_s, max_side)
     return (AVFDecoder if info.decoder == "avfoundation" else FFmpegDecoder)(path, info, start_s, max_side)
 
 
