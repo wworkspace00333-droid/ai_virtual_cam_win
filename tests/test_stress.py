@@ -1,6 +1,11 @@
-"""Stress tests (Stage 12). Heavy: run with VCS_STRESS=1 (each takes 10-30 s).
+"""Stress tests (Stage 12; Windows: stage 10). Heavy: run with VCS_STRESS=1 (each takes 10-30 s).
 
     VCS_STRESS=1 .venv/bin/python -m pytest -s tests/test_stress.py
+    $env:VCS_STRESS=1; python -m pytest -s tests\test_stress.py          (Windows)
+
+Correctness (render errors, region counts, stable track IDs, players, leaked threads, memory) is asserted
+everywhere. The frame-rate thresholds were set on an M5 Mac; on Windows they are asserted only with a hardware
+GPU (Direct3D 11 + DirectML/CUDA). Without one (e.g. a VM on WARP) the measured values are printed instead.
 """
 import os
 import random
@@ -17,13 +22,30 @@ from vcstudio.ai.model_manager import REPO_MODELS
 from vcstudio.app.application import AppContext
 from vcstudio.core.bench_source import BenchSource, bus_scene
 from vcstudio.core.performance import phys_footprint
-from vcstudio.native import metal
+from vcstudio.platform import IS_WINDOWS
 from vcstudio.replacement.spec import ReplacementSpec
 from vcstudio.roi.model import ROI, new_rect
 
+if IS_WINDOWS:
+    from vcstudio.platform.win import d3d11 as gpu_lib
+    from vcstudio.core.system_info import inspect_environment
+    MODEL = REPO_MODELS / "yolo11n-seg.onnx"
+    FAST_HW = bool(inspect_environment().get("hardware_gpu"))
+else:
+    from vcstudio.native import metal as gpu_lib
+    MODEL = REPO_MODELS / "yolo11n-seg.mlpackage"
+    FAST_HW = True
 pytestmark = [pytest.mark.skipif(os.environ.get("VCS_STRESS") != "1", reason="set VCS_STRESS=1"),
-              pytest.mark.skipif(not metal.available(), reason="Metal library not built"),
-              pytest.mark.skipif(not (REPO_MODELS / "yolo11n-seg.mlpackage").exists(), reason="models missing")]
+              pytest.mark.skipif(not gpu_lib.available(), reason="GPU compositor library not built"),
+              pytest.mark.skipif(not MODEL.exists(), reason="models missing")]
+
+
+def perf(cond: bool, what: str) -> None:
+    """Frame-rate / latency threshold: asserted on hardware the thresholds were set for, reported elsewhere."""
+    if FAST_HW:
+        assert cond, what
+    elif not cond:
+        print(f"[no hardware GPU: below target, not asserted] {what}")
 DATA = Path(__file__).parent / "data"
 
 
@@ -87,7 +109,7 @@ def test_many_rois(ctx):
                                          b.__setitem__("rois", [x.to_dict() for x in rois])))
     r = run_and_measure(ctx, bus_scene())
     assert r["render_errors"] == 0 and r["regions"] == 24
-    assert r["fps_med"] >= 58 and r["fps_min"] >= 50 and r["lat_p95_max"] < 16.7
+    perf(r["fps_med"] >= 58 and r["fps_min"] >= 50 and r["lat_p95_max"] < 16.7, str(r))
 
 
 def test_crowd_segmentation(ctx):
@@ -99,7 +121,8 @@ def test_crowd_segmentation(ctx):
     r = run_and_measure(ctx, crowd_scene())
     a = r["ai"]
     assert a.model.endswith("-seg") and a.tracks_active >= 12, a.tracks_active
-    assert r["render_errors"] == 0 and r["fps_med"] >= 58 and r["fps_min"] >= 50
+    assert r["render_errors"] == 0
+    perf(r["fps_med"] >= 58 and r["fps_min"] >= 50, str(r))
     ids_before = a.track_ids_created
     time.sleep(5)
     assert ctx.ai.stats().track_ids_created - ids_before <= 3        # static crowd: IDs stay stable
@@ -116,7 +139,8 @@ def test_six_video_players(ctx):
     ctx.update_active_profile(lambda b: (b.__setitem__("assets", [clip.to_dict()]), b.__setitem__("rois", [x.to_dict() for x in rois])))
     r = run_and_measure(ctx, bus_scene())
     assert ctx.replacement.compositor.stats.video_players == 6
-    assert r["fps_med"] >= 58 and r["render_errors"] == 0 and r["footprint_mb"] < 1500
+    assert r["render_errors"] == 0 and r["footprint_mb"] < 1500
+    perf(r["fps_med"] >= 58, str(r))
 
 
 def test_configuration_churn_while_running(ctx):
@@ -217,5 +241,6 @@ def test_gui_page_switching_under_load(paths, qtbot):
         i += 1
     s = ctx.pipeline.stats()
     print("page switches", i, "output fps", round(s.output_fps, 1), "render errors", s.render_errors)
-    assert s.render_errors == 0 and s.output_fps >= 50
+    assert s.render_errors == 0
+    perf(s.output_fps >= 50, f"output fps {s.output_fps:.1f}")
     w.close(); ctx.stop_capture(); ctx.shutdown()

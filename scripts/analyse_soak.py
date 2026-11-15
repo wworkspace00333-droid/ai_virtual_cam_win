@@ -1,6 +1,7 @@
 """Summarise a soak run: stability, recovery, memory slope, resource drift.
 
     .venv/bin/python scripts/analyse_soak.py <soak_dir>      (writes <soak_dir>/summary.json)
+    python scripts\analyse_soak.py <soak_dir>                (Windows: "fds" are open handles; GDI/USER objects too)
 """
 import json
 import statistics
@@ -25,9 +26,19 @@ def _quarter_median(rows, q):
     return round(statistics.median(r["footprint_mb"] for r in part), 1)
 
 
+def _min_max(rows, key):
+    v = [r[key] for r in rows if r.get(key) is not None]
+    return [min(v), max(v)] if v else None
+
+
+def _slope_of(rows, key):
+    pts = [(r["t"], r[key]) for r in rows if r.get(key) is not None]
+    return round(slope_per_hour([t for t, _ in pts], [y for _, y in pts]), 2) if pts else None
+
+
 def analyse(d: Path) -> dict:
-    rows = [json.loads(l) for l in (d / "samples.jsonl").read_text().splitlines() if l.strip()]
-    events = [json.loads(l) for l in (d / "events.jsonl").read_text().splitlines() if l.strip()]
+    rows = [json.loads(l) for l in (d / "samples.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+    events = [json.loads(l) for l in (d / "events.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
     warm = [r for r in rows if r["t"] >= 600] or rows            # skip the first 10 min for drift
     faults = [e for e in events if e["event"] == "fault_end"]
     # windows where a fault was deliberately injected (+5 s settling and one 5 s sample period)
@@ -75,6 +86,8 @@ def analyse(d: Path) -> dict:
         "fds_slope_per_h": round(slope_per_hour([r["t"] for r in warm], [r["fds"] for r in warm]), 2),
         "samples_outside_faults": len(running),
         "fds_min_max": [min(r["fds"] for r in warm), max(r["fds"] for r in warm)] if warm else None,
+        "gdi_min_max": _min_max(warm, "gdi_objects"), "user_min_max": _min_max(warm, "user_objects"),
+        "gdi_slope_per_h": _slope_of(warm, "gdi_objects"), "user_slope_per_h": _slope_of(warm, "user_objects"),
         "render_errors": last.get("render_errors"), "ai_errors": last.get("ai_errors"),
         "pipeline_restarts": last.get("pipeline_restarts"), "ai_restarts": last.get("ai_restarts"),
         "capture_reconnects": last.get("reconnects"),
@@ -91,7 +104,9 @@ def analyse(d: Path) -> dict:
         "threads_stable": abs(s["threads_slope_per_h"]) < 5,      # a leak shows as a trend, not a range
         "fds_stable": abs(s["fds_slope_per_h"]) < 5,
     }
-    (d / "summary.json").write_text(json.dumps(s, indent=2))
+    if s["gdi_slope_per_h"] is not None:          # Windows
+        s["verdict"]["gdi_user_stable"] = abs(s["gdi_slope_per_h"]) < 5 and abs(s["user_slope_per_h"] or 0) < 5
+    (d / "summary.json").write_text(json.dumps(s, indent=2), encoding="utf-8")
     return s
 
 

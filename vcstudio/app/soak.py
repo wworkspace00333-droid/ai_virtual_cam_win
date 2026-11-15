@@ -7,9 +7,12 @@ Samples are written every 5 s to <out>/samples.jsonl; events to <out>/events.jso
 
     open -W -n "build/AI Virtual Camera Studio Dev.app" --args --soak <out_dir> --minutes 120 \
         [--device "AI Virtual Camera" --sink "AI Virtual Camera Input"] [--input "OBS Virtual Camera"]
+    python -m vcstudio.app.main --soak <out_dir> --minutes 240 [--input obs | --input "<camera name>"]  (Windows)
 
-Input: the zero-copy benchmark scene (default) or a real camera (--input). Output: the given CMIO
-camera (default AI Virtual Camera; falls back to running without camera output if absent).
+Input: the zero-copy benchmark scene (default), a real camera (--input <name>) or, with --input obs, the direct
+OBS frame transfer. Output: the given camera (default AI Virtual Camera; on Windows 11 Windows lists it as
+"AI Virtual Camera (Windows Virtual Camera)"; falls back to running without camera output if absent).
+On Windows the samples also record open handles and GDI / USER objects (leak detection).
 """
 from __future__ import annotations
 
@@ -52,15 +55,18 @@ def run_soak(out_dir: str, minutes: float, out_device: str | None, out_sink: str
             f.write(f"received signal {sig} at {time.strftime('%H:%M:%S')}\n")
             f.write("".join(_tb.format_stack(frame)))
         os._exit(128 + sig)
-    for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
-        signal.signal(sig, on_term)
+    for name in ("SIGTERM", "SIGHUP", "SIGINT", "SIGBREAK"):       # SIGHUP: POSIX only; SIGBREAK: Windows only
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), on_term)
     os.environ["VCSTUDIO_HOME"] = tempfile.mkdtemp(prefix="vcs-soak-")
     from vcstudio.app.application import AppContext
     from vcstudio.camera.output import list_cmio_devices
     from vcstudio.core.bench_source import BenchSource, bus_scene
     from vcstudio.core.capture_supervisor import CaptureSupervisor
     from vcstudio.core.performance import phys_footprint, read_gpu_stats
-    from vcstudio.core.video_capture import AVFoundationSource, request_camera_access
+    from vcstudio.app.selftest import request_camera_access      # macOS prompt; Windows: no prompt exists
+    from vcstudio.core.video_capture import device_source
+    from vcstudio.platform import DEFAULT_DEVICE_METHOD, IS_WINDOWS
     from vcstudio.replacement.spec import ReplacementSpec
     from vcstudio.roi.model import ROI, new_rect
 
@@ -76,14 +82,17 @@ def run_soak(out_dir: str, minutes: float, out_device: str | None, out_sink: str
     ctx = AppContext(configure_logging=True)
     proc = psutil.Process()
     devices = list_cmio_devices()
-    camera_on = bool(out_device and out_device in devices)
+    # exact name, or Windows 11's "<name> (Windows Virtual Camera)" for the Media Foundation camera
+    camera_on = bool(out_device and any(d == out_device or d.startswith(out_device + " (") for d in devices))
     ctx.settings.set("output.camera_enabled", camera_on)
     if camera_on:
         ctx.settings.set("output.camera_device", out_device)
         ctx.settings.set("output.camera_sink", out_sink)
     source_holder = {}
-    if in_device:
-        ctx.settings.set("input.method", "avfoundation")
+    if in_device == "obs":
+        ctx.settings.set("input.method", "obs_ipc")
+    elif in_device:
+        ctx.settings.set("input.method", DEFAULT_DEVICE_METHOD)
         ctx.settings.set("input.device_name_hint", in_device)
         ctx.settings.set("input.device_unique_id", None)
     else:
@@ -126,7 +135,8 @@ def run_soak(out_dir: str, minutes: float, out_device: str | None, out_sink: str
     client_frames = {"n": 0, "distinct": set(), "window_start": time.monotonic()}
     if camera_on:
         client = CaptureSupervisor(missing_timeout_ms=4000)
-        client.start(lambda: AVFoundationSource(None, out_device, 1920, 1080, 60, allow_own_output=True))
+        client.start(lambda: device_source(DEFAULT_DEVICE_METHOD, None, out_device, 1920, 1080, 60,
+                                           allow_own_output=True))
         stop_client = threading.Event()
 
         def watch():
@@ -212,13 +222,20 @@ def run_soak(out_dir: str, minutes: float, out_device: str | None, out_sink: str
             g, gmem = read_gpu_stats()
             cf = client_frames["n"]
             try:
-                fds = proc.num_fds()
+                fds = proc.num_handles() if IS_WINDOWS else proc.num_fds()
             except Exception:
                 fds = -1
+            gdi = user = None
+            if IS_WINDOWS:          # GDI / USER objects: a leak here ends in a blank window after hours
+                import ctypes
+                h = ctypes.windll.kernel32.GetCurrentProcess()
+                gdi = ctypes.windll.user32.GetGuiResources(h, 0)
+                user = ctypes.windll.user32.GetGuiResources(h, 1)
             row = {
                 "t": round(time.monotonic() - t_start, 1),
                 "footprint_mb": round((phys_footprint() or 0) / 2**20, 1), "rss_mb": round(proc.memory_info().rss / 2**20, 1),
                 "cpu_pct": proc.cpu_percent(None), "threads": proc.num_threads(), "fds": fds,
+                "gdi_objects": gdi, "user_objects": user,
                 "gpu_pct": g, "gpu_mem_mb": round(gmem / 2**20) if gmem else None,
                 "capture_state": c.state, "capture_fps": round(c.measured_fps, 1), "reconnects": c.reconnects,
                 "pipe_state": s.state, "out_fps": round(s.output_fps, 1), "latency_ms": round(s.latency_ms, 2),

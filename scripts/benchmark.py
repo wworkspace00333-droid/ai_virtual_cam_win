@@ -1,8 +1,9 @@
 """Measured performance benchmark per operating mode (headless, real pipeline, zero-copy 1080p60 input).
 
-    VCS_DISABLE_GLOBAL_HOTKEYS=1 .venv/bin/python scripts/benchmark.py [--seconds 20]
+    VCS_DISABLE_GLOBAL_HOTKEYS=1 .venv/bin/python scripts/benchmark.py [--seconds 20]      (macOS)
+    python scripts\benchmark.py [--seconds 20] [--out build\benchmark.json]                (Windows)
 
-Writes build/benchmark.json, appends to the app's SQLite benchmark table, and prints a Markdown table.
+Writes build/benchmark.json (or --out), appends to the app's SQLite benchmark table, and prints a Markdown table.
 """
 import argparse
 import json
@@ -58,7 +59,7 @@ def measure(ctx, seconds):
         "latency_ms_avg": round(statistics.mean(lat), 2), "latency_ms_p95": round(s.latency_ms_p95, 2),
         "process_ms_avg": round(statistics.mean(proc_ms), 2), "gpu_render_ms": round(s.gpu_ms, 2),
         "render_errors": s.render_errors, "inputs_skipped": s.inputs_skipped,
-        "ai_model": a.model, "ai_target_fps": a.target_fps, "ai_fps": round(a.achieved_fps, 1),
+        "ai_model": a.model, "ai_backend": a.backend, "compositor": s.backend, "ai_target_fps": a.target_fps, "ai_fps": round(a.achieved_fps, 1),
         "ai_ms_avg": round(a.inference_ms_avg, 2), "ai_ms_p95": round(a.inference_ms_p95, 2),
         "ai_quality_note": a.quality_note, "tracks": a.tracks_active,
         "app_cpu_pct": round(proc.cpu_percent(None), 0),
@@ -71,6 +72,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seconds", type=float, default=20)
     ap.add_argument("--modes", default="performance,balanced,low_resource,max_quality")
+    ap.add_argument("--out", type=Path, default=ROOT / "build" / "benchmark.json")
     args = ap.parse_args()
     from PySide6.QtCore import QCoreApplication
     app = QCoreApplication(sys.argv)      # noqa: F841  (Qt objects need an app; no GUI here)
@@ -84,7 +86,15 @@ def main():
     logo = ctx.assets.import_file(ROOT / "tests/data/logo_alpha.png")
     clip = ctx.assets.import_file(ROOT / "tests/data/clip_h264.mp4")
     env = inspect_environment()
-    hw = {k: env[k] for k in ("cpu", "memory_gb", "macos")}
+    if env.get("os") == "windows":
+        gpus = sorted({a["name"] for a in env.get("display_adapters", []) if not a.get("software")})
+        hw = {k: env.get(k) for k in ("cpu", "cpu_cores", "cpu_threads", "memory_gb", "windows", "windows_build",
+                                      "hardware_gpu", "onnx_providers")}
+        hw["gpus"] = gpus
+        input_desc = "1920x1080 BGRA 60 fps (synthetic bus scene, NumPy frames)"
+    else:
+        hw = {k: env[k] for k in ("cpu", "memory_gb", "macos")}
+        input_desc = "1920x1080 BGRA 60 fps, zero-copy IOSurface"
     results = []
     for scen, rois in scenario_profiles(ctx, logo, clip).items():
         for mode in args.modes.split(","):
@@ -99,10 +109,11 @@ def main():
             results.append(r)
             print(json.dumps(r), flush=True)
             ctx.db.add_benchmark(f"pipeline/{scen}/{mode}", hw, r)
-    out = ROOT / "build" / "benchmark.json"
-    out.write_text(json.dumps({"hardware": hw, "input": "1920x1080 BGRA 60 fps, zero-copy IOSurface",
+    out = args.out
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps({"hardware": hw, "input": input_desc,
                                "seconds_per_run": args.seconds, "results": results}, indent=2))
-    cols = ["mode", "output_fps_avg", "output_fps_min_1s", "latency_ms_avg", "latency_ms_p95", "process_ms_avg",
+    cols = ["mode", "compositor", "ai_backend", "output_fps_avg", "output_fps_min_1s", "latency_ms_avg", "latency_ms_p95", "process_ms_avg",
             "ai_model", "ai_fps", "ai_ms_p95", "app_cpu_pct", "gpu_util_pct_avg", "footprint_mb"]
     for scen in dict.fromkeys(r["scenario"] for r in results):
         print(f"\n**{scen}**\n\n| " + " | ".join(cols) + " |\n|" + "---|" * len(cols))
