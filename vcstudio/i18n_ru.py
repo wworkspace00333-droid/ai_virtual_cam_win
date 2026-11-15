@@ -779,6 +779,4 @@ RU: dict[str, str] = {
         "этой сборке их пока нет.",
     "Camera components found but not registered: click Install (administrator rights needed).":
         "Компоненты камеры найдены, но не зарегистрированы: нажмите «Установить» (нужны права администратора).",
-    "Direct3D 11 compositor arrives with porting stage 7; using the CPU":
-        "Компоновщик Direct3D 11 появится на этапе порта 7; используется CPU",
 }

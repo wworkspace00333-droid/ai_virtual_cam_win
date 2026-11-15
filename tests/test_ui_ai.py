@@ -176,5 +176,12 @@ def test_effect_mode_and_backend_setting(win, qtbot):
     ctx.settings.set("processing.compositor", "cpu")
     assert ctx.replacement.compositor.active.name == "cpu"
     ctx.settings.set("processing.compositor", "auto")
-    from vcstudio.native import metal
-    assert ctx.replacement.compositor.active.name == ("metal" if metal.available() else "cpu")
+    import sys
+    if sys.platform == "win32":
+        from vcstudio.platform.win import d3d11
+        gpu_ok, gpu_name = d3d11.available(), "d3d11"
+    else:
+        from vcstudio.native import metal
+        gpu_ok, gpu_name = metal.available(), "metal"
+    name = ctx.replacement.compositor.active.name
+    assert name.startswith(gpu_name) if gpu_ok else name == "cpu"

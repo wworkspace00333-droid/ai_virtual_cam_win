@@ -1,4 +1,5 @@
-"""Metal (GPU) compositor: parity with the CPU backend, effects, zero-copy path, performance, fallback."""
+"""GPU compositor (Metal on macOS, Direct3D 11 on Windows): parity with the CPU backend, effects, zero-copy path,
+performance, fallback."""
 import time
 from pathlib import Path
 
@@ -17,7 +18,13 @@ from vcstudio.replacement.spec import ReplacementSpec
 from vcstudio.roi.model import ROI, new_polygon, new_rect
 from vcstudio.roi.resolver import resolve
 
-pytestmark = pytest.mark.skipif(not metal.available(), reason="libVCSNative not built (scripts/build_native.sh)")
+from vcstudio.platform import GPU_COMPOSITOR, IS_WINDOWS  # noqa: E402
+
+if IS_WINDOWS:
+    from vcstudio.platform.win import d3d11 as _gpu_lib
+    pytestmark = pytest.mark.skipif(not _gpu_lib.available(), reason="vcs_d3d11.dll not built (scripts/build_native_win.ps1)")
+else:
+    pytestmark = pytest.mark.skipif(not metal.available(), reason="libVCSNative not built (scripts/build_native.sh)")
 DATA = Path(__file__).parent / "data"
 
 
@@ -31,8 +38,8 @@ def scene():
 @pytest.fixture
 def comps(tmp_path):
     lib = AssetLibrary(tmp_path / "a")
-    cpu, gpu = Compositor(lib, "cpu"), Compositor(lib, "metal")
-    assert gpu.active.name == "metal", gpu.backend_error
+    cpu, gpu = Compositor(lib, "cpu"), Compositor(lib, GPU_COMPOSITOR)
+    assert gpu.active.name.startswith(GPU_COMPOSITOR), gpu.backend_error
     yield lib, cpu, gpu
     cpu.close(); gpu.close()
 
@@ -101,6 +108,21 @@ def test_effect_parity(comps, scene, effect, params, tol):
     assert np.array_equal(og[:50, :50], scene[:50, :50])                          # outside untouched
 
 
+@pytest.mark.skipif(not IS_WINDOWS, reason="Direct3D 11 shader blur")
+@pytest.mark.parametrize("sigma", [2, 8, 25])
+def test_shader_blur_parity(comps, scene, sigma, monkeypatch):
+    """The compute-shader Gaussian (what hardware GPUs run). On WARP the backend normally hands blur to
+    OpenCV, so force the shader path here to keep it covered on GPU-less machines too."""
+    lib, cpu, gpu = comps
+    monkeypatch.setattr(gpu.metal.ctx, "software", False)
+    roi = new_rect("E", 0.0, 0.0, 0.5, 0.6); roi.rotation = 0            # touches the frame edge: replicate border
+    regs = resolve([roi], [], 1280, 720)
+    spec = {roi.id: ReplacementSpec(enabled=True, mode="effect", effect="blur", blur_sigma=sigma, feather_px=3)}
+    oc, og = cpu.render(scene, regs, spec, {}), gpu.render(scene, regs, spec, {})
+    mx, mean, frac = diff(oc, og)
+    assert frac <= 0.02 and mean < 0.3, (sigma, mx, mean, frac)
+
+
 def test_layer_order_and_multiple_layers(comps, scene):
     lib, cpu, gpu = comps
     a = lib.import_file(DATA / "logo_alpha.png")
@@ -117,6 +139,7 @@ def test_layer_order_and_multiple_layers(comps, scene):
     assert mean < 0.3 and frac < 0.005, (mx, mean, frac)
 
 
+@pytest.mark.skipif(IS_WINDOWS, reason="IOSurface pixel buffers (macOS); Windows: test_array_path_windows")
 def test_zero_copy_pixel_buffer_path(comps, scene):
     lib, cpu, gpu = comps
     a = lib.import_file(DATA / "logo_alpha.png")
@@ -132,6 +155,20 @@ def test_zero_copy_pixel_buffer_path(comps, scene):
         assert diff(np.array(o), ref)[1] < 0.3
     with src.bgra() as s:
         assert np.array_equal(s, scene)                                         # source untouched
+
+
+@pytest.mark.skipif(not IS_WINDOWS, reason="Windows array path")
+def test_array_path_windows(comps, scene):
+    lib, cpu, gpu = comps
+    a = lib.import_file(DATA / "logo_alpha.png")
+    roi = new_rect("R", 0.1, 0.1, 0.5, 0.5)
+    regs = resolve([roi], [], 1280, 720)
+    spec = {roi.id: ReplacementSpec(enabled=True, asset_id=a.id)}
+    before = scene.copy()
+    out = gpu.render_pb(Frame(1, 0, 0, 1280, 720, array=scene), regs, spec, {a.id: a})
+    assert isinstance(out, np.ndarray) and out.shape == scene.shape and out.flags.c_contiguous
+    assert diff(out, cpu.render(scene, regs, spec, {a.id: a}))[1] < 0.3
+    assert np.array_equal(scene, before)                                        # source untouched
 
 
 def test_video_frames_on_gpu(comps):
@@ -185,9 +222,12 @@ def test_metal_performance_1080p(comps):
         arr = np.array(arr)
     for _ in range(5):
         t = time.perf_counter(); cpu.render(arr, regs, specs, assets, time.monotonic()); cpu_t.append((time.perf_counter() - t) * 1000)
-    print(f"\n1080p, 5 layers (2 images, 1 video, blur, pixelate): Metal wall median {np.median(wall):.2f} ms "
+    print(f"\n1080p, 5 layers (2 images, 1 video, blur, pixelate): {gpu.active.name} wall median {np.median(wall):.2f} ms "
           f"(p95 {np.percentile(wall, 95):.2f}), GPU {np.median(gpu_ms):.2f} ms; CPU backend {np.median(cpu_t):.1f} ms")
-    assert np.median(wall) < 16.7          # fits a 60 fps frame budget
+    if gpu.active.name.endswith("-warp"):  # software Direct3D (no GPU in this machine): must still beat the CPU path
+        assert np.median(wall) < np.median(cpu_t)
+    else:
+        assert np.median(wall) < 16.7      # fits a 60 fps frame budget
 
 
 def test_fallback_to_cpu_when_metal_fails(comps, scene, monkeypatch):
@@ -224,4 +264,4 @@ def test_concurrent_renders_are_serialised(comps, scene):
     ts = [threading.Thread(target=worker) for _ in range(3)]
     [t.start() for t in ts]; [t.join() for t in ts]
     assert not errors and len(outs) == 60 and all(np.array_equal(o, ref) for o in outs)
-    assert gpu.active.name == "metal"
+    assert gpu.active.name.startswith(GPU_COMPOSITOR)

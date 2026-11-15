@@ -224,12 +224,12 @@ class MetalBackend:
             pool = self._pools[(w, h)] = PixelBufferPool(w, h)
         return pool
 
-    def execute_pb(self, src_pb, w: int, h: int, ops: list[DrawOp]):
-        import Quartz as Q  # type: ignore
-        pool = self.dst_pool(w, h)
-        err, dst = Q.CVPixelBufferPoolCreatePixelBuffer(None, pool._pool, None)
-        if err != 0:
-            raise RuntimeError(f"output pixel buffer allocation failed ({err})")
+    # Metal presents BGRA textures as RGBA, so the fill colour goes in RGBA order; D3D11 keeps BGRA.
+    BG_RGBA = True
+
+    def build_layers(self, ops: list[DrawOp]) -> tuple[np.ndarray, np.ndarray, list[int]]:
+        """28-float layer records + (asset, mask) texture slots per op; uploads textures as needed.
+        Returns (layers, slots, transient slots to free after the render)."""
         layers = np.zeros((len(ops), 28), np.float32)
         slots = np.full((len(ops), 2), -1, np.int32)
         transient: list[int] = []
@@ -254,7 +254,7 @@ class MetalBackend:
                 L[4:8] = (inv[0, 0], inv[0, 1], inv[1, 0], inv[1, 1])
                 L[8:12] = (inv[0, 2], inv[1, 2], op.src.shape[1], op.src.shape[0])
                 b, g, r, a = op.bg
-                L[12:16] = (r, g, b, a)                      # texture channels are presented as RGBA
+                L[12:16] = (r, g, b, a) if self.BG_RGBA else (b, g, r, a)
             else:
                 L[16:20] = op.params
             if op.mask is not None:
@@ -266,6 +266,15 @@ class MetalBackend:
                 L[20:24] = op.mask_rect if op.mask_rect is not None else (x0, y0, x1, y1)
             effect = {"blur": 1, "pixelate": 2, "color": 3}.get(op.effect, 0)
             L[24:28] = (op.opacity, 0 if op.kind == "composite" else 1, effect, 1 if op.mask is not None else 0)
+        return layers, slots, transient
+
+    def execute_pb(self, src_pb, w: int, h: int, ops: list[DrawOp]):
+        import Quartz as Q  # type: ignore
+        pool = self.dst_pool(w, h)
+        err, dst = Q.CVPixelBufferPoolCreatePixelBuffer(None, pool._pool, None)
+        if err != 0:
+            raise RuntimeError(f"output pixel buffer allocation failed ({err})")
+        layers, slots, transient = self.build_layers(ops)
         try:
             self.ctx.render(src_pb, dst, layers, slots)
         finally:
@@ -326,10 +335,7 @@ class Compositor:
     def _make_gpu_backend():
         from vcstudio.platform import IS_WINDOWS
         if IS_WINDOWS:
-            try:
-                from vcstudio.platform.win.d3d11 import D3D11Backend
-            except ImportError:
-                raise RuntimeError("Direct3D 11 compositor arrives with porting stage 7; using the CPU") from None
+            from vcstudio.platform.win.d3d11 import D3D11Backend
             return D3D11Backend()
         return MetalBackend()
 
