@@ -55,9 +55,9 @@ bool FrameReader::open(bool fromService) {
 				WTSFreeMemory(info);
 			}
 		}
-	} else {
-		h = OpenFileMappingW(FILE_MAP_READ, FALSE, (std::wstring(L"Local\\") + VCAM_SHM_NAME).c_str());
 	}
+	if (!h)       // own session (DirectShow filter in a client app, or the MF source activated in-process)
+		h = OpenFileMappingW(FILE_MAP_READ, FALSE, (std::wstring(L"Local\\") + VCAM_SHM_NAME).c_str());
 	if (!h) return false;
 	void *base = MapViewOfFile(h, FILE_MAP_READ, 0, 0, 0);
 	if (!base) { CloseHandle(h); return false; }

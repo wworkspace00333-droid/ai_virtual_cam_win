@@ -426,14 +426,19 @@ def backend_devices(method: str) -> list[BackendDevice]:
 
 def list_video_devices() -> list[VideoDevice]:
     """All cameras (union of both backends). model_id says which APIs can open the device."""
+    import re
     ds, mf = backend_devices("directshow"), backend_devices("mediafoundation")
     out: dict[str, VideoDevice] = {}
     apis: dict[str, list[str]] = {}
     for d in ds + mf:
-        key = d.unique_id or f"{d.backend}:{d.name}"
-        apis.setdefault(key, []).append("DirectShow" if d.backend == "directshow" else "Media Foundation")
+        # one device can appear under several interface classes (\\?\...#{class-guid}\ref): merge them
+        key = re.sub(r"#\{[0-9a-f-]{36}\}", "", d.unique_id.lower()) if d.unique_id else f"{d.backend}:{d.name}"
+        api = "DirectShow" if d.backend == "directshow" else "Media Foundation"
+        if api in apis.get(key, []):
+            continue
+        apis.setdefault(key, []).append(api)
         if key not in out:
-            out[key] = VideoDevice(key, d.name, "", is_own_output(d.name, ""))
+            out[key] = VideoDevice(d.unique_id or key, d.name, "", is_own_output(d.name, ""))
     return [VideoDevice(v.unique_id, v.name, " + ".join(apis[k]), v.is_own_output) for k, v in out.items()]
 
 

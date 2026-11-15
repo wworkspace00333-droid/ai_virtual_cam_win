@@ -44,8 +44,8 @@ def _status_windows() -> CameraStatus:
     from vcstudio.platform.win import vcam_status as vs
     comps = vs.components()
     try:
-        from vcstudio.core.devices import list_video_devices
-        visible = any(d.name == CAMERA_NAME for d in list_video_devices())
+        from vcstudio.core.devices import is_own_output, list_video_devices
+        visible = any(is_own_output(d.name, "") for d in list_video_devices())   # incl. "(Windows Virtual Camera)"
     except Exception:
         visible = False
     installed = [c for c in comps if c.state == "installed"]

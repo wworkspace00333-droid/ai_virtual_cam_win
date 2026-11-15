@@ -127,6 +127,9 @@ _TEXT = {
         "Approve it in System Settings > General > Login Items & Extensions > Camera Extensions.",
         "Allow camera access in Settings > Privacy & security > Camera."),
     "camera_needs_restart": ("Restart the Mac to finish.", "Restart Windows to finish."),
+    "camera_fallback": ("", "The Windows 11 camera could not start (is camera access allowed in Settings > Privacy & "
+                            "security > Camera?), so the DirectShow camera was installed instead. Allow camera access "
+                            "and click Install again to switch."),
     "ai_intro": (
         "On-device object detection with Core ML through Apple Vision (CPU / GPU / Neural Engine). Frames never "
         "leave this Mac.",

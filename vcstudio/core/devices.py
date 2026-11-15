@@ -23,7 +23,10 @@ class VideoDevice:
 
 
 def is_own_output(name: str, model_id: str) -> bool:
-    return any(h.casefold() in (name.casefold(), model_id.casefold()) for h in OUR_EXTENSION_MODEL_HINTS)
+    """Our own camera, under any name the OS gives it: Windows 11 lists the Media Foundation virtual camera
+    as "AI Virtual Camera (Windows Virtual Camera)", so names that start with ours count too."""
+    n, m = name.casefold(), model_id.casefold()
+    return any(h.casefold() in (n, m) or n.startswith(h.casefold() + " (") for h in OUR_EXTENSION_MODEL_HINTS)
 
 
 def list_video_devices() -> list[VideoDevice]:

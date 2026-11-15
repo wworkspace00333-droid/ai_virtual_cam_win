@@ -123,6 +123,62 @@ def test_camera_shows_waiting_card_without_the_app():
     assert all(abs(a - b) <= 3 for a, b in zip(got[-1], [40, 32, 28]))   # the card's background colour
 
 
+def test_windows_11_camera_name_counts_as_own_output():
+    """Windows lists the Media Foundation camera as "AI Virtual Camera (Windows Virtual Camera)"; capturing it
+    as input would feed the output back into itself."""
+    from vcstudio.core.devices import is_own_output
+    assert is_own_output("AI Virtual Camera (Windows Virtual Camera)", "")
+    assert is_own_output("AI Virtual Camera", "")
+    assert not is_own_output("AI Virtual Camera Pro", "") and not is_own_output("OBS Virtual Camera", "")
+
+
+def test_same_device_under_two_interface_classes_is_listed_once(monkeypatch):
+    from vcstudio.platform.win import devices as d
+    base = r"\\?\swd#vcamdevapi#abc#{%s}\{fcebba03-9d13-4c13-9940-cc84fcd132d1}"
+    monkeypatch.setattr(d, "backend_devices", lambda m: (
+        [d.BackendDevice(0, "Cam", base % "65e8773d-8f56-11d0-a3b9-00a0c9223196", "directshow")] if m == "directshow"
+        else [d.BackendDevice(0, "Cam", base % "e5323777-f976-4f5b-9b55-b94699c46e44", "mediafoundation")]))
+    devs = d.list_video_devices()
+    assert len(devs) == 1 and devs[0].model_id == "DirectShow + Media Foundation"
+
+
+MF_DLL = ROOT / "build" / "native" / "vcam_mf.dll"
+MF_CLIENT = ROOT / "build" / "native" / "mf_client_test.exe"
+
+
+@pytest.mark.skipif(not (MF_DLL.exists() and MF_CLIENT.exists()), reason="run scripts/build_native_win.ps1")
+def test_media_foundation_source_in_process():
+    """The Media Foundation camera's media source read through IMFSourceReader (as Frame Server would host it):
+    the waiting card without the app, the app's frames with it."""
+    import subprocess
+    from vcstudio.platform.win.vcam_writer import VcamWriter
+
+    def read():
+        r = subprocess.run([str(MF_CLIENT), "--inproc", str(MF_DLL), "45"], capture_output=True, text=True, timeout=60)
+        assert r.returncode == 0, r.stdout + r.stderr
+        m = re.search(r"frames (\d+) in [\d.]+ s \(([\d.]+) fps\), centre BGRA (\w\w) (\w\w) (\w\w)", r.stdout)
+        assert m, r.stdout
+        return int(m[1]), float(m[2]), tuple(int(x, 16) for x in m.group(3, 4, 5))
+    n, fps, px = read()
+    assert n == 45 and 25 <= fps <= 35 and px == (40, 32, 28)          # 1080p30 NV12/RGB32 card
+    w = VcamWriter()
+    stop = threading.Event()
+    img = np.zeros((1080, 1920, 4), np.uint8); img[..., 1] = 40; img[..., 2] = 200; img[..., 3] = 255
+
+    def send():
+        while not stop.is_set():
+            w.publish(img)
+            time.sleep(1 / 30)
+    w.configure(1920, 1080, 30)
+    t = threading.Thread(target=send, daemon=True); t.start()
+    try:
+        time.sleep(0.2)
+        n, fps, px = read()
+    finally:
+        stop.set(); t.join(); w.close()
+    assert n == 45 and px == (0, 40, 200)
+
+
 @needs_camera
 def test_status_reports_installed_and_visible():
     from vcstudio.camera import camera_manager as cm

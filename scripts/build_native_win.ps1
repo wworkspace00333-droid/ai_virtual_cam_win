@@ -52,11 +52,23 @@ Invoke-VS ("cl $vcflags /LD `"$vc\dshow\vcam_dshow.cpp`" `"$vc\vcam_frames.cpp`"
            "`"$obj\strmbase.lib`" strmiids.lib winmm.lib ole32.lib oleaut32.lib advapi32.lib user32.lib gdi32.lib wtsapi32.lib")
 Write-Host "OK $out\vcam_dshow.dll"
 
+# vcam_mf.dll: "AI Virtual Camera" Media Foundation source (Windows 11 virtual camera)
+Invoke-VS ("cl /nologo /std:c++17 /EHsc /W3 /utf-8 $opt /DUNICODE /D_UNICODE /D_WIN32_WINNT=0x0A00 /I`"$vc`" /LD " +
+           "`"$vc\mf\vcam_mf.cpp`" `"$vc\vcam_frames.cpp`" /Fo`"$obj\\`" /link /DEF:`"$vc\mf\vcam_mf.def`" " +
+           "/OUT:`"$out\vcam_mf.dll`" /IMPLIB:`"$obj\vcam_mf.lib`" mfplat.lib mfuuid.lib mf.lib ole32.lib advapi32.lib " +
+           "user32.lib gdi32.lib wtsapi32.lib")
+Write-Host "OK $out\vcam_mf.dll"
+
 # vcam-setup.exe: registers / removes the camera; requires administrator rights (UAC manifest)
 Invoke-VS ("cl /nologo /std:c++17 /EHsc /W4 /utf-8 $opt /DUNICODE /D_UNICODE `"$vc\setup\vcam_setup.cpp`" /Fo`"$obj\\`" " +
            "/link /OUT:`"$out\vcam-setup.exe`" /MANIFEST:EMBED /MANIFESTUAC:`"level='requireAdministrator' uiAccess='false'`" " +
-           "advapi32.lib")
+           "advapi32.lib mfplat.lib ole32.lib")
 Write-Host "OK $out\vcam-setup.exe"
+
+# mf_client_test.exe: reads the Media Foundation camera like a client (in-process or through Frame Server)
+Invoke-VS ("cl /nologo /std:c++17 /EHsc /W3 /utf-8 $opt /DUNICODE /D_UNICODE `"$vc\test\mf_client_test.cpp`" /Fo`"$obj\\`" " +
+           "/link /OUT:`"$out\mf_client_test.exe`"")
+Write-Host "OK $out\mf_client_test.exe"
 
 if ($Test) {
     Invoke-VS ("cl $vcflags `"$vc\test\vcam_frames_test.cpp`" `"$vc\vcam_frames.cpp`" /Fo`"$obj\\`" " +

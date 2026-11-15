@@ -760,6 +760,11 @@ RU: dict[str, str] = {
     "GPU (CUDA / DirectML)": "Видеокарта (CUDA / DirectML)",
     "GPU: {gpus} · ONNX Runtime {ver}: {provs}": "Видеокарта: {gpus} · ONNX Runtime {ver}: {provs}",
     "no hardware GPU (CPU inference)": "аппаратной видеокарты нет (распознавание на CPU)",
+    "The Windows 11 camera could not start (is camera access allowed in Settings > Privacy & security > Camera?), "
+    "so the DirectShow camera was installed instead. Allow camera access and click Install again to switch.":
+        "Камера Windows 11 не запустилась (разрешён ли доступ к камере в «Параметры > Конфиденциальность и защита > "
+        "Камера»?), поэтому установлена камера DirectShow. Разрешите доступ к камере и нажмите «Установить» ещё раз, "
+        "чтобы переключиться.",
     "Setup tool": "Установщик камеры",
     "Open camera privacy settings": "Открыть параметры доступа к камере",
     "Camera components": "Компоненты камеры",

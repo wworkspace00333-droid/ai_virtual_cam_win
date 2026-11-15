@@ -210,7 +210,8 @@ class VirtualCameraPage:
         rc, _, out = payload.partition("|")
         self.refresh()
         if kind in ("install", "uninstall"):
-            extra = {"2": text("camera_needs_approval"), "3": text("camera_needs_restart")}.get(rc, "")
+            extra = {"2": text("camera_needs_approval"),
+                     "3": text("camera_fallback") if IS_WINDOWS else text("camera_needs_restart")}.get(rc, "")
             self.msg.setText((f"{tr(kind.title())}: " + tr("exit {rc}.", rc=rc) + f" {out} {tr(extra)}").strip())
         elif kind == "loopback":
             self.test_info.setText(out)
