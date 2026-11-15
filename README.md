@@ -1,7 +1,7 @@
 # AI Virtual Camera Studio
 
 > **Windows port (this repository).** A port of AI Virtual Camera Studio to Windows 10/11, with its own Windows virtual camera: a Media Foundation camera on Windows 11 and a DirectShow camera on Windows 10. It also uses ONNX Runtime (CUDA / DirectML / CPU), Direct3D 11 compositing and the OBS plugin for Windows. The macOS code is kept unchanged alongside it. The original macOS repository is [ai-virtual-camera-studio](https://github.com/wworkspace00333-droid/ai-virtual-camera-studio).
-> Status, audit, migration matrix, build steps and known limitations (in Russian): **[docs/WINDOWS_PORT_RU.md](docs/WINDOWS_PORT_RU.md)**. Stages 1–8 are done; integration, performance and the installer (stages 9–11) are in progress.
+> Status, audit, migration matrix, build steps and known limitations (in Russian): **[docs/WINDOWS_PORT_RU.md](docs/WINDOWS_PORT_RU.md)**. Stages 1–9 are done (stage 9: live end-to-end with OBS and the Windows 11 camera). Performance and the installer (stages 10–11) are in progress.
 
 A native macOS (Apple Silicon) studio app. It takes live video from OBS, detects and tracks objects on-device with Core ML / Vision, replaces or overlays regions with images or video using Metal, and publishes the result as a system camera called **AI Virtual Camera** (a CoreMediaIO Camera Extension).
 
