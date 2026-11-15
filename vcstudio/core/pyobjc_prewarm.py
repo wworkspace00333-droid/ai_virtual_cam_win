@@ -115,8 +115,12 @@ _lock = threading.Lock()
 
 
 def prewarm() -> list[str]:
-    """Idempotent. Returns symbols that could not be resolved (missing frameworks are tolerated)."""
+    """Idempotent. Returns symbols that could not be resolved (missing frameworks are tolerated).
+    Only meaningful on macOS; elsewhere there is no PyObjC and nothing to resolve."""
     global _done
+    from vcstudio.platform import IS_MAC
+    if not IS_MAC:
+        return []
     with _lock:
         if _done:
             return []

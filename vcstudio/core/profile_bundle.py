@@ -101,7 +101,7 @@ def import_bundle(ctx, src: Path) -> dict:
             if missing:
                 raise ProfileError(f"Bundle is missing asset files: {', '.join(sorted(missing))}")
             tmp_json = ctx.assets.dir / ".import-profile.json"
-            tmp_json.write_text(json.dumps(doc))
+            tmp_json.write_text(json.dumps(doc), encoding="utf-8")
             try:
                 return ctx.profiles.import_file(tmp_json)
             finally:

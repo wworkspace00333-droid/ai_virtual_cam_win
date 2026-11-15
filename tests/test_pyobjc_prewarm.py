@@ -11,7 +11,7 @@ SRC = Path(__file__).resolve().parents[1] / "vcstudio"
 def test_prewarm_list_covers_source():
     used = set()
     for f in SRC.rglob("*.py"):
-        for alias, name in re.findall(r"\b(AV|CM|Q|CoreML|Vision|Foundation|VT)\.([A-Za-z_][A-Za-z0-9_]*)", f.read_text()):
+        for alias, name in re.findall(r"\b(AV|CM|Q|CoreML|Vision|Foundation|VT)\.([A-Za-z_][A-Za-z0-9_]*)", f.read_text(encoding="utf-8")):
             used.add((ALIASES[alias], name))
     listed = {(m, n) for m, names in SYMBOLS.items() for n in names}
     missing = sorted(used - listed)

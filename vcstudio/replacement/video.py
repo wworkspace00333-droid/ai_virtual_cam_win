@@ -388,8 +388,8 @@ class VideoPlayer:
                             self._buf.popleft()          # drop frames the output has passed
                     continue
                 try:
-                    import objc  # type: ignore
-                    with objc.autorelease_pool():      # sample buffers from AVAssetReader are autoreleased
+                    from vcstudio.platform import autorelease_pool
+                    with autorelease_pool():           # macOS: AVAssetReader sample buffers are autoreleased
                         pts, img = next(it)
                 except StopIteration:
                     dec.close()

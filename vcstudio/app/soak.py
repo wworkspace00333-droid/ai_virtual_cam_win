@@ -44,11 +44,11 @@ def run_soak(out_dir: str, minutes: float, out_device: str | None, out_sink: str
     import faulthandler
     import signal
     import traceback as _tb
-    crash_f = open(out / "fatal.txt", "a")
+    crash_f = open(out / "fatal.txt", "a", encoding="utf-8")
     faulthandler.enable(crash_f, all_threads=True)
 
     def on_term(sig, frame):
-        with open(out / "fatal.txt", "a") as f:
+        with open(out / "fatal.txt", "a", encoding="utf-8") as f:
             f.write(f"received signal {sig} at {time.strftime('%H:%M:%S')}\n")
             f.write("".join(_tb.format_stack(frame)))
         os._exit(128 + sig)
@@ -64,8 +64,8 @@ def run_soak(out_dir: str, minutes: float, out_device: str | None, out_sink: str
     from vcstudio.replacement.spec import ReplacementSpec
     from vcstudio.roi.model import ROI, new_rect
 
-    ev_f = open(out / "events.jsonl", "a")
-    smp_f = open(out / "samples.jsonl", "a")
+    ev_f = open(out / "events.jsonl", "a", encoding="utf-8")
+    smp_f = open(out / "samples.jsonl", "a", encoding="utf-8")
     t_start = time.monotonic()
 
     def event(kind, **kw):

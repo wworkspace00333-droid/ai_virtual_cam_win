@@ -1,0 +1,12 @@
+# Windows 10/11 x64, Python 3.12 (developed on 3.12.10)
+# Install into a venv at a SHORT path (e.g. C:\vcs-env): PySide6 contains paths longer than
+# Windows' 260-character limit when the venv sits deep inside a user profile.
+PySide6>=6.8
+numpy>=1.26
+scipy>=1.11
+opencv-python-headless>=4.10   # capture (Media Foundation / DirectShow), imaging, YuNet face detector, ArUco
+psutil>=5.9
+onnxruntime-directml>=1.20     # AI on any DirectX 12 GPU (NVIDIA / AMD / Intel) + CPU fallback.
+                               # For CUDA instead: pip uninstall onnxruntime-directml; pip install onnxruntime-gpu
+av>=14                         # PyAV: video asset decoding (bundled FFmpeg)
+Pillow>=10                     # GIF / animated and other image formats OpenCV does not read

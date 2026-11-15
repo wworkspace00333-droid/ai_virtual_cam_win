@@ -1,4 +1,5 @@
-"""System resource monitoring: CPU, memory, process RSS, Apple GPU utilisation (IOAccelerator)."""
+"""System resource monitoring: CPU, memory, process RSS / footprint, GPU utilisation
+(macOS: IOAccelerator via ioreg; Windows: PDH "GPU Engine" counters)."""
 from __future__ import annotations
 
 import os
@@ -61,6 +62,16 @@ def phys_footprint(pid: int | None = None) -> int | None:
     """
     global _libproc
     import ctypes
+    from vcstudio.platform import IS_MAC, IS_WINDOWS
+    if IS_WINDOWS:
+        # Private Bytes (commit charge of the process): Windows' equivalent of the physical footprint
+        try:
+            p = psutil.Process(pid or os.getpid())
+            return int(p.memory_info().private)
+        except (psutil.Error, AttributeError):
+            return None
+    if not IS_MAC:
+        return None
     try:
         if _libproc is None:
             _libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
@@ -72,7 +83,17 @@ def phys_footprint(pid: int | None = None) -> int | None:
 
 
 def read_gpu_stats(timeout: float = 1.0) -> tuple[float | None, int | None]:
-    """Return (device utilisation %, GPU in-use memory bytes) from ioreg, or (None, None)."""
+    """Return (device utilisation %, GPU in-use memory bytes), or (None, None).
+    macOS: ioreg IOAccelerator. Windows: PDH GPU counters (vcstudio/platform/win/gpu_monitor.py)."""
+    from vcstudio.platform import IS_MAC, IS_WINDOWS
+    if IS_WINDOWS:
+        from vcstudio.platform.win.gpu_monitor import read_gpu_stats as win_gpu
+        try:
+            return win_gpu()
+        except Exception:
+            return None, None
+    if not IS_MAC:
+        return None, None
     try:
         out = subprocess.run(["/usr/sbin/ioreg", "-r", "-d", "1", "-w", "0", "-c", "IOAccelerator"],
                              capture_output=True, text=True, timeout=timeout).stdout

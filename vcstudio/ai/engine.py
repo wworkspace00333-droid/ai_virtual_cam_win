@@ -253,7 +253,7 @@ class AIEngine:
         import json
         self.mq_store = path
         try:
-            data = json.loads(path.read_text())
+            data = json.loads(path.read_text(encoding="utf-8"))
             for task in ("detect", "segment"):
                 self.mq_rejected[task].update({str(k): float(v) for k, v in data.get(task, {}).items()})
         except (OSError, ValueError, AttributeError, TypeError):
@@ -264,7 +264,7 @@ class AIEngine:
         if self.mq_store is None:
             return
         try:
-            self.mq_store.write_text(json.dumps(self.mq_rejected, indent=1))
+            self.mq_store.write_text(json.dumps(self.mq_rejected, indent=1), encoding="utf-8")
         except OSError as e:
             log.warning("Could not save auto-model measurements: %s", e)
 
@@ -325,13 +325,14 @@ class AIEngine:
             self._face = None
 
     def _run(self) -> None:
-        import objc  # type: ignore
-        # Plain Python threads have no Objective-C autorelease pool. Without draining one per
+        from vcstudio.platform import autorelease_pool
+        # macOS: plain Python threads have no Objective-C autorelease pool. Without draining one per
         # iteration, Core ML / Vision results (MLMultiArray, observations, pixel buffers) live for
         # the lifetime of the thread (measured: footprint +65 MB/s with the segmentation model).
+        # Elsewhere autorelease_pool() is a no-op.
         st = {"last_ver": -1, "next_due": 0.0, "backoff": 0.5}
         while not self._stop.is_set():
-            with objc.autorelease_pool():
+            with autorelease_pool():
                 self._iteration(st)
         self._detector = None
 

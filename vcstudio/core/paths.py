@@ -1,16 +1,27 @@
-"""Filesystem locations. Everything is local; override root with VCSTUDIO_HOME."""
+"""Filesystem locations. Everything is local; override root with VCSTUDIO_HOME.
+
+macOS: ~/Library/Application Support/AIVirtualCameraStudio
+Windows: %LOCALAPPDATA%\\AIVirtualCameraStudio (models and assets are large, so not the roaming profile)
+"""
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from vcstudio.platform import IS_WINDOWS
+
+APP_DIR_NAME = "AIVirtualCameraStudio"
+
 
 def _default_root() -> Path:
     env = os.environ.get("VCSTUDIO_HOME")
     if env:
         return Path(env).expanduser()
-    return Path.home() / "Library" / "Application Support" / "AIVirtualCameraStudio"
+    if IS_WINDOWS:
+        base = os.environ.get("LOCALAPPDATA")
+        return (Path(base) if base else Path.home() / "AppData" / "Local") / APP_DIR_NAME
+    return Path.home() / "Library" / "Application Support" / APP_DIR_NAME
 
 
 @dataclass(frozen=True)

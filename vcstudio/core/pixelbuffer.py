@@ -5,6 +5,8 @@ import threading
 
 import numpy as np
 
+from vcstudio.platform import IS_MAC
+
 
 class PixelBufferPool:
     """Small CVPixelBufferPool for a fixed size; avoids per-frame allocations."""
@@ -47,11 +49,18 @@ _lock = threading.Lock()
 
 
 def pixel_buffer_for(frame):
-    """CVPixelBuffer for a Frame (zero-copy if it already has one; pooled copy for arrays)."""
+    """Native output buffer for a Frame.
+
+    macOS: a CVPixelBuffer (zero-copy if the frame already has one; pooled copy for arrays).
+    Windows: the frame's own contiguous BGRA array (no copy); the virtual camera and the D3D11
+    compositor take arrays directly."""
     if frame.pixel_buffer is not None:
         return frame.pixel_buffer
     if frame.array is None:
         raise ValueError("frame has no pixel data")
+    if not IS_MAC:
+        a = frame.array
+        return a if a.flags.c_contiguous else np.ascontiguousarray(a)
     key = (frame.width, frame.height)
     with _lock:
         pool = _pools.get(key)

@@ -48,11 +48,13 @@ UI (Qt) ◄── превью ≤30 fps
 | libVCSShm (чтение shm) | `native/shm-reader` | Не нужен: Python `mmap` + NumPy, копия сразу в массив кадра | ⬜ |
 | Carbon глобальные клавиши | `native/Hotkeys.swift`, `native/hotkeys.py` | `RegisterHotKey` в отдельном потоке с циклом сообщений (ctypes) | ⬜ |
 | `screencapture` (карточка для игры) | `game/cardframe.py` | GDI BitBlt основного монитора (ctypes), с учётом DPI | ⬜ |
-| `fcntl.flock` (один экземпляр) | `core/single_instance.py` | `msvcrt.locking` на том же `app.lock` (снимается ОС при падении) | ⬜ |
-| `~/Library/Application Support` | `core/paths.py` | `%LOCALAPPDATA%\AIVirtualCameraStudio` (модели и ассеты большие — не Roaming) | ⬜ |
-| sysctl / ioreg / libproc / systemextensionsctl | `core/system_info.py`, `core/performance.py` | psutil, реестр (CPU), DXGI/WMI (видеокарты), PDH-счётчики `GPU Engine` (загрузка GPU), private bytes как «footprint» | ⬜ |
-| PyObjC prewarm / autorelease pools | `core/pyobjc_prewarm.py`, конвейер, ИИ, видео | На Windows — пустые заглушки (`contextlib.nullcontext`) | ⬜ |
-| `defaults read AppleLanguages` | `i18n.py` | `GetUserDefaultUILanguage` | ⬜ |
+| `fcntl.flock` (один экземпляр) | `core/single_instance.py` | `msvcrt.locking` на байте за концом `app.lock` (снимается ОС при падении; pid читается) | ✅ |
+| `~/Library/Application Support` | `core/paths.py` | `%LOCALAPPDATA%\AIVirtualCameraStudio` (модели и ассеты большие — не Roaming) | ✅ |
+| sysctl / ioreg / libproc / systemextensionsctl | `core/system_info.py`, `core/performance.py` → `platform/win/sysinfo.py`, `platform/win/gpu_monitor.py` | psutil, реестр (CPU), DXGI (видеокарты), PDH-счётчики `GPU Engine`/`GPU Adapter Memory`, Private Bytes как «footprint» | ✅ (счётчики GPU 🟡: на сервере без GPU честно отдают «нет данных») |
+| PyObjC prewarm / autorelease pools | `core/pyobjc_prewarm.py`, конвейер, ИИ, видео | `vcstudio.platform.autorelease_pool()` — на Windows `nullcontext` | ✅ |
+| `defaults read AppleLanguages` | `i18n.py` | `GetUserDefaultUILanguage` | ✅ |
+| Часы `CMClockGetHostTimeClock` | `core/frame.py` | `time.perf_counter` (QPC; совпадает с часами OBS `os_gettime_ns`) | ✅ |
+| Кодировка файлов (неявная cp1251/cp1252 на Windows) | 10 мест в `vcstudio/` | явный `encoding="utf-8"` (иначе профили и модели с кириллицей ломаются) | ✅ |
 | PySide6 UI | `ui/*` | Остаётся PySide6; правка mac-специфичных текстов (⌘, Dock, «Системные настройки»), страница камеры под Windows-регистрацию | ⬜ |
 | ByteTrack, ROI, профили, SQLite, конфиг, watchdog, композиционная математика, карточка для игры (алгоритм) | `ai/tracking.py`, `roi/*`, `core/*`, `replacement/compositor.py` (CPU), `game/cardframe.py` | Без изменений | ⬜ (проверить тестами) |
 | PyInstaller `.app` + DMG, подпись Apple | `packaging/*`, `scripts/build_app.sh` | PyInstaller onedir + Inno Setup; установщик регистрирует камеру; подпись Authenticode — по желанию (SmartScreen) | ⬜ |
@@ -118,8 +120,8 @@ UI (Qt) ◄── превью ≤30 fps
 
 | # | Этап | Что считается готовым | Проверяется здесь (Windows Server, без камеры и GPU) | Проверяется у вас |
 |---|---|---|---|---|
-| 1 | Аудит и архитектура | этот документ | — | ознакомиться |
-| 2 | Структура платформ, окружение | `vcstudio/platform`, пути, один экземпляр, заглушки PyObjC, requirements-windows; приложение импортируется на Windows | ✅ юнит-тесты | — |
+| 1 ✅ | Аудит и архитектура | этот документ | — | ознакомиться |
+| 2 ✅ | Структура платформ, окружение | `vcstudio/platform`, пути, один экземпляр, заглушки PyObjC, requirements-windows; приложение импортируется на Windows | ✅ юнит-тесты: 167 прошли (было 124), 48 падений — подсистемы этапов 4–6 | — |
 | 3 | GUI и конфигурация | окно стартует (`--smoke-test`), тестовый шаблон проходит через конвейер | ✅ смоук-тест, скриншоты страниц | внешний вид |
 | 4 | Захват и OBS | MSMF/DirectShow источник, список устройств, OBS-плагин Windows + `mmap`-читатель, переподключение | частично (без камеры: тестовый источник, OBS-shm через имитатор писателя) | OBS Virtual Camera и плагин |
 | 5 | ИИ и трекинг | ONNX Runtime + YuNet, конвертация моделей, импорт `.onnx`, эталонная проверка на `bus.jpg` и coco16 | ✅ на CPU (точность, совпадение с macOS-результатами) | скорость с DirectML/CUDA |
@@ -132,7 +134,19 @@ UI (Qt) ◄── превью ≤30 fps
 
 После каждого этапа — коммит в ветку `windows-port` и запись статуса в эту таблицу. Отправка в GitHub — только по согласию владельца.
 
-## 8. Риски и ограничения
+## 8. Окружение разработки на Windows
+
+```bat
+:: Python 3.12 x64; venv по КОРОТКОМУ пути (в PySide6 есть пути длиннее 260 символов)
+py -3.12 -m venv C:\vcs-env
+C:\vcs-env\Scripts\python -m pip install -r requirements-windows.txt pytest pytest-qt pytest-timeout
+C:\vcs-env\Scripts\python -m pytest -q
+C:\vcs-env\Scripts\python -m vcstudio
+```
+
+Для нативной части (этапы 7–8, 11): Visual Studio 2022 Build Tools (C++ x64, Windows 11 SDK, CMake), Inno Setup 6.
+
+## 9. Риски и ограничения
 
 1. **Среда разработки**: Windows Server 2025 без камеры и видеокарты (Microsoft Basic Display Adapter). Здесь нельзя проверить реальный захват, DirectML/CUDA, скорость D3D11 и работу камеры в Zoom/Teams/Chrome/Discord. Эти пункты будут помечены 🟡 до проверки на настоящем ПК. Цифры производительности с сервера не будут выдаваться за целевые.
 2. **MF-камера из службы**: доступ Frame Server (LocalService, сессия 0) к памяти пользовательской сессии — проверяется первым в этапе 8; запасной вариант — передача через именованный канал, открываемый службой.

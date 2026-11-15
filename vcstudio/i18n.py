@@ -30,7 +30,12 @@ def _table(lang: str) -> dict[str, str]:
 
 
 def system_language() -> str:
-    """First macOS preferred language we support, else "en"."""
+    """First preferred OS language we support (macOS AppleLanguages / Windows display language), else "en"."""
+    from vcstudio.platform import IS_WINDOWS
+    if IS_WINDOWS:
+        from vcstudio.platform.win.sysinfo import ui_language
+        base = ui_language()
+        return base if base in LANGUAGES else "en"
     try:
         out = subprocess.run(["/usr/bin/defaults", "read", "-g", "AppleLanguages"], capture_output=True,
                              text=True, timeout=2).stdout

@@ -77,7 +77,7 @@ def capture_selftest(out_path: str, seconds: float = 10.0, name_hint: str = "OBS
         return 1
     finally:
         result["finished"] = time.time()
-        Path(out_path).write_text(json.dumps(result, indent=2))
+        Path(out_path).write_text(json.dumps(result, indent=2), encoding="utf-8")
 
 
 def camera_loopback_selftest(out_path: str, seconds: float = 6.0, device: str = "AI Virtual Camera",
@@ -163,7 +163,7 @@ def camera_loopback_selftest(out_path: str, seconds: float = 6.0, device: str = 
         result["traceback"] = traceback.format_exc()
         return 1
     finally:
-        Path(out_path).write_text(json.dumps(result, indent=2))
+        Path(out_path).write_text(json.dumps(result, indent=2), encoding="utf-8")
 
 
 def pipeline_e2e_selftest(out_path: str, seconds: float = 8.0, out_device: str = "AI Virtual Camera",
@@ -312,7 +312,7 @@ def pipeline_e2e_selftest(out_path: str, seconds: float = 8.0, out_device: str =
                 ctx.shutdown()
             except Exception:
                 pass
-        Path(out_path).write_text(json.dumps(result, indent=2))
+        Path(out_path).write_text(json.dumps(result, indent=2), encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------------------------- self-check
@@ -429,5 +429,5 @@ def bundle_selfcheck(out: str | None = None) -> int:
           flush=True)
     if out:
         Path(out).parent.mkdir(parents=True, exist_ok=True)
-        Path(out).write_text(json.dumps({"frozen": frozen(), "python": sys.version, "results": results}, indent=2))
+        Path(out).write_text(json.dumps({"frozen": frozen(), "python": sys.version, "results": results}, indent=2), encoding="utf-8")
     return 1 if failed else 0

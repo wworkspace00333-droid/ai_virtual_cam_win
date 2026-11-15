@@ -137,7 +137,7 @@ def load_yolo_labels(path, names: list[str], width: int, height: int) -> list[Bo
     """YOLO txt: `class cx cy w h` normalised -> pixel Boxes with class names."""
     out = []
     try:
-        lines = open(path).read().split("\n")
+        lines = open(path, encoding="utf-8").read().split("\n")
     except FileNotFoundError:
         return out
     for ln in lines:

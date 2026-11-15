@@ -1,5 +1,8 @@
 import logging
+import sys
 import time
+
+import pytest
 
 from vcstudio.core.database import Database
 from vcstudio.core.logging_setup import setup_logging
@@ -50,10 +53,20 @@ def test_fps_counter():
     assert 59 <= c.rate(59 / 60) <= 61
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS build environment")
 def test_environment_is_apple_silicon():
     env = inspect_environment()
     assert env["arch"] == "arm64" and env["apple_silicon"]
     assert env["metal"]["available"] and env["coreml"]["available"]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows build environment")
+def test_environment_windows():
+    env = inspect_environment()
+    assert env["os"] == "windows" and env["windows_build"] >= 17763      # Windows 10 1809 / Server 2019+
+    assert env["arch"] in ("AMD64", "ARM64") and env["memory_gb"] > 1
+    assert "CPUExecutionProvider" in env["onnx_providers"]
+    assert env["display_adapters"], "DXGI lists at least the Basic Render Driver"
 
 
 def test_own_output_guard():

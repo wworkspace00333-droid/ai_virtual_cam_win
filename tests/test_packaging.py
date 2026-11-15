@@ -37,7 +37,7 @@ def test_no_repo_relative_paths_left():
     for p in (ROOT / "vcstudio").rglob("*.py"):
         if p.name == "resources.py":
             continue
-        s = p.read_text()
+        s = p.read_text(encoding="utf-8")
         if "parents[2]" in s or '"tests/data' in s:
             offenders.append(str(p.relative_to(ROOT)))
     assert offenders == []
@@ -70,5 +70,5 @@ def test_built_bundle_selfcheck(tmp_path):
 def test_camera_extension_version_matches_app():
     import re
     import vcstudio
-    yml = (Path(__file__).resolve().parents[1] / "native" / "project.yml").read_text()
+    yml = (Path(__file__).resolve().parents[1] / "native" / "project.yml").read_text(encoding="utf-8")
     assert re.search(r'MARKETING_VERSION: "([^"]+)"', yml).group(1) == vcstudio.__version__

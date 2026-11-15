@@ -240,7 +240,7 @@ class VirtualCameraPage:
             out = Path(tempfile.mkdtemp()) / "loop.json"
             dev, sink = self.output_device()
             camera_loopback_selftest(str(out), 6.0, dev, sink)
-            r = json.loads(out.read_text())
+            r = json.loads(out.read_text(encoding="utf-8"))
             msg = (tr("PASS") if r.get('ok') else tr("FAIL")) + ": " + tr(
                 "{got} of {sent} frames received in order={order}, latency median {med} ms / p95 {p95} ms, client "
                 "resolution {res}", got=r.get('distinct_received'), sent=r.get('sent'), order=r.get('order_ok'),

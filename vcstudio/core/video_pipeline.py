@@ -217,13 +217,13 @@ class VideoPipeline:
 
     # ------------------------------------------------------------- loop
     def _run(self, gen: int) -> None:
-        import objc  # type: ignore
+        from vcstudio.platform import autorelease_pool
         st = {"last_ver": -1}
         with self._lock:
             self._stats.state = "running"
         while not self._stop.is_set() and gen == self._generation:
-            # drain Objective-C autoreleased objects (CMSampleBuffers, Metal objects) every frame
-            with objc.autorelease_pool():
+            # macOS: drain Objective-C autoreleased objects (CMSampleBuffers, Metal objects) every frame
+            with autorelease_pool():
                 self._iteration(st)
         self.heartbeat = time.monotonic()
 

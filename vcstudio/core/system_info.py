@@ -38,7 +38,9 @@ def coreml_info() -> dict[str, Any]:
 
 
 def camera_extensions() -> list[dict[str, str]]:
-    """Parse `systemextensionsctl list` for CMIO camera extensions."""
+    """Parse `systemextensionsctl list` for CMIO camera extensions (macOS only; [] elsewhere)."""
+    if sys.platform != "darwin":
+        return []
     out = _run(["/usr/bin/systemextensionsctl", "list"])
     exts, in_cmio = [], False
     for line in out.splitlines():
@@ -66,6 +68,10 @@ def signing_identities() -> int:
 
 
 def inspect_environment() -> dict[str, Any]:
+    from vcstudio.platform import IS_WINDOWS
+    if IS_WINDOWS:
+        from vcstudio.platform.win.sysinfo import inspect_environment as win_env
+        return win_env()
     dev_dir = _run(["/usr/bin/xcode-select", "-p"])
     return {
         "macos": platform.mac_ver()[0],

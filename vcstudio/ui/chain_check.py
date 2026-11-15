@@ -91,7 +91,7 @@ class ChainCheck(QObject):
         self._timer.stop()
         title, path = self._current
         try:
-            r = json.loads(Path(path).read_text())
+            r = json.loads(Path(path).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             out = bytes(self._proc.readAll()).decode(errors="replace")[-400:] if self._proc else ""
             r = {"ok": False, "error": tr("the check did not write a report") + (f": {out}" if out.strip() else "")}

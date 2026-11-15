@@ -221,7 +221,7 @@ def install(rep: ModelReport, models_dir: Path, name: str | None = None, class_m
                 "description": rep.description, "imported": _dt.datetime.now().isoformat(timespec="seconds"),
                 "benchmark": {"median_ms": rep.median_ms, "p95_ms": rep.p95_ms, "machine": _machine()}}
         tmp.rename(dest)          # atomic within the folder: a half-copied model is never visible
-        dest.with_suffix(".json").write_text(json.dumps(meta, indent=1, ensure_ascii=False))
+        dest.with_suffix(".json").write_text(json.dumps(meta, indent=1, ensure_ascii=False), encoding="utf-8")
     finally:
         shutil.rmtree(tmp.parent, ignore_errors=True)
     return ModelInfo.from_package(dest)
