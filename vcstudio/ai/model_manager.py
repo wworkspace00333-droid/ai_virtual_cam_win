@@ -1,8 +1,11 @@
-"""Core ML model registry: discovery, compilation cache, loading with compute-unit selection.
+"""Model registry: discovery, compilation cache, loading with compute-unit selection.
 
-Models live in <repo>/models (bundled) and <app data>/models (user-added). Each model is a
-`<name>.mlpackage` with a sibling `<name>.json` (see scripts/convert_models.py). Compiled
-`.mlmodelc` bundles are cached under <app data>/models/compiled/ keyed by package mtime.
+Models live in <repo>/models (bundled) and <app data>/models (user-added), each with a sibling
+`<name>.json` (see scripts/convert_models.py).
+  macOS:   `<name>.mlpackage` / `.mlmodel` (Core ML); compiled `.mlmodelc` bundles are cached under
+           <app data>/models/compiled/ keyed by package mtime.
+  Windows: `<name>.onnx` loaded into an ONNX Runtime session (vcstudio/ai/onnx_engine.py). An .onnx
+           file without its .json (e.g. the YuNet face model) is not a detector and is not listed.
 """
 from __future__ import annotations
 
@@ -26,6 +29,19 @@ COMPUTE_UNITS = {
     "cpu_and_gpu": "CPU + GPU",
     "cpu_only": "CPU only",
 }
+from vcstudio.platform import IS_MAC as _IS_MAC  # noqa: E402
+
+if not _IS_MAC:
+    # Same keys (profiles stay portable); meaning on Windows: see vcstudio/ai/onnx_engine.provider_plan.
+    # "cpu_and_ne" (an old macOS profile) keeps working there and means the same as "all".
+    COMPUTE_UNITS = {
+        "all": "Automatic (GPU if available, else CPU)",
+        "cpu_and_gpu": "GPU (CUDA / DirectML)",
+        "cpu_only": "CPU only",
+    }
+    COMPUTE_UNITS_HIDDEN = {"cpu_and_ne": "Automatic (GPU if available, else CPU)"}
+else:
+    COMPUTE_UNITS_HIDDEN = {}
 
 
 def _cu_constant(key: str):
@@ -80,9 +96,10 @@ class ModelInfo:
 @dataclass
 class LoadedModel:
     info: ModelInfo
-    mlmodel: object
+    mlmodel: object             # Core ML MLModel, or onnxruntime.InferenceSession for .onnx models
     compute_units: str
     load_seconds: float
+    backend: str = ""           # what actually runs it, e.g. "DirectML (NVIDIA ...)", "CPU", "Core ML"
 
 
 class ModelManager:
@@ -100,9 +117,14 @@ class ModelManager:
         if cached and now - cached[0] < max_age_s:
             return dict(cached[1])
         out: dict[str, ModelInfo] = {}
+        from vcstudio.ai.backend import model_extensions
+        exts = model_extensions()
         for d in self.dirs:
             if d.is_dir():
-                for pkg in sorted([*d.glob("*.mlpackage"), *d.glob("*.mlmodel")]):
+                pkgs = [p for ext in exts for p in d.glob(f"*{ext}")]
+                for pkg in sorted(pkgs):
+                    if pkg.suffix == ".onnx" and not pkg.with_suffix(".json").exists():
+                        continue                     # not a detector (e.g. the YuNet face model)
                     try:
                         out.setdefault(pkg.stem, ModelInfo.from_package(pkg))
                     except Exception as e:
@@ -113,7 +135,8 @@ class ModelManager:
     def resolve(self, name: str, task: str = "detect", prefer_large: bool = False) -> ModelInfo:
         models = {k: v for k, v in self.available().items() if v.task == task}
         if not models:
-            raise ModelError(f"No {task} models found. Run: .venv-convert/bin/python scripts/convert_models.py")
+            raise ModelError(f"No {task} models found. Run: " + (".venv-convert/bin/python scripts/convert_models.py"
+                             if _IS_MAC else r"C:\vcs-convert\Scripts\python scripts\convert_models.py --format onnx"))
         if name in ("auto", "", None):
             # "auto" picks by size among the built-in COCO models only: an imported model may detect
             # entirely different classes, so it is used only when chosen by name.
@@ -153,9 +176,24 @@ class ModelManager:
         return target
 
     def load(self, info: ModelInfo, compute_units: str = "all") -> LoadedModel:
+        key = f"{info.name}:{compute_units}"
+        from vcstudio.ai.backend import is_onnx
+        if is_onnx(info):
+            with self._lock:
+                if key in self._loaded:
+                    return self._loaded[key]
+                from vcstudio.ai.onnx_engine import create_session
+                t0 = time.perf_counter()
+                try:
+                    sess, backend = create_session(info.package, compute_units)
+                except Exception as e:
+                    raise ModelError(f"ONNX Runtime load failed for {info.name}: {e}") from e
+                lm = LoadedModel(info, sess, compute_units, time.perf_counter() - t0, backend)
+                self._loaded[key] = lm
+                log.info("Loaded %s on %s in %.2f s", info.name, backend, lm.load_seconds)
+                return lm
         import CoreML  # type: ignore
         import Foundation  # type: ignore
-        key = f"{info.name}:{compute_units}"
         with self._lock:
             if key in self._loaded:
                 return self._loaded[key]
@@ -167,7 +205,7 @@ class ModelManager:
                 Foundation.NSURL.fileURLWithPath_(str(path)), cfg, None)
             if model is None:
                 raise ModelError(f"Core ML load failed for {info.name}: {err}")
-            lm = LoadedModel(info, model, compute_units, time.perf_counter() - t0)
+            lm = LoadedModel(info, model, compute_units, time.perf_counter() - t0, f"Core ML ({COMPUTE_UNITS[compute_units]})")
             self._loaded[key] = lm
             log.info("Loaded %s (%s) in %.2f s", info.name, COMPUTE_UNITS[compute_units], lm.load_seconds)
             return lm

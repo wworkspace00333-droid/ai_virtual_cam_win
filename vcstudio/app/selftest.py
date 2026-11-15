@@ -330,9 +330,8 @@ def bundle_selfcheck(out: str | None = None) -> int:
     import tempfile
     import time
 
-    from vcstudio.ai.coreml_engine import CoreMLDetector, VisionFaceDetector
+    from vcstudio.ai.backend import face_detector_name, make_detector, make_face_detector
     from vcstudio.ai.model_manager import ModelManager
-    from vcstudio.ai.segmentation import SegmentationDetector
     from vcstudio.ai.testimages import load_bgra
     from vcstudio.core.frame import Frame
     from vcstudio.core.pyobjc_prewarm import prewarm
@@ -370,14 +369,14 @@ def bundle_selfcheck(out: str | None = None) -> int:
 
     def models_present():
         if not infos:
-            raise FileNotFoundError(f"no Core ML models in {models_dir()}")
+            raise FileNotFoundError(f"no models in {models_dir()}")
         return ", ".join(sorted(infos))
     check("models", models_present)
 
     for name, info in sorted(infos.items()):
         def run(info=info):
             loaded = mm.load(info)
-            det = SegmentationDetector(loaded) if info.task == "segment" else CoreMLDetector(loaded)
+            det = make_detector(loaded)
             det.detect(frame)                          # warm-up (first call compiles / plans)
             dets, ms = det.detect(frame)
             people = sum(d.label == "person" for d in dets)
@@ -388,9 +387,9 @@ def bundle_selfcheck(out: str | None = None) -> int:
         check(f"model {name}", run)
 
     def faces():
-        dets, ms = VisionFaceDetector().detect(frame)
+        dets, ms = make_face_detector().detect(frame)
         return f"{len(dets)} faces, {ms:.1f} ms"
-    check("Vision face detection", faces)
+    check(f"{face_detector_name()} face detection", faces)
 
     def metal():
         from vcstudio.native import metal as m

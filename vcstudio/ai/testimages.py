@@ -7,12 +7,19 @@ import numpy as np
 
 
 def load_bgra(path: str | Path) -> np.ndarray:
-    import Foundation  # type: ignore
-    import Quartz as Q  # type: ignore
     p = Path(path)
     if not p.is_absolute():
         from vcstudio.core.resources import REPO, sample
-        p = sample(p.name) if p.parts[:2] == ("tests", "data") else REPO / p
+        # keep sub-folders (tests/data/coco16/images/x.jpg), not just the file name
+        p = sample(str(Path(*p.parts[2:]))) if p.parts[:2] == ("tests", "data") else REPO / p
+    from vcstudio.platform import IS_MAC
+    if not IS_MAC:                    # Windows: OpenCV / Pillow (vcstudio/platform/win/imaging.py)
+        if not p.exists():
+            raise FileNotFoundError(p)
+        from vcstudio.platform.win.imaging import decode_bgra
+        return decode_bgra(p)
+    import Foundation  # type: ignore
+    import Quartz as Q  # type: ignore
     src = Q.CGImageSourceCreateWithURL(Foundation.NSURL.fileURLWithPath_(str(p)), None)
     if src is None:
         raise FileNotFoundError(p)

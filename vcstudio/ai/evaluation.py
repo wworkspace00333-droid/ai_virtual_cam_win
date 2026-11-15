@@ -152,9 +152,8 @@ def load_yolo_labels(path, names: list[str], width: int, height: int) -> list[Bo
 def evaluate_models(data: Path, models_dir: Path, model_names: list[str] | None = None, conf: float = 0.01,
                     progress=None) -> dict:
     """Run the app's detectors (as the app runs them) over a YOLO-format dataset; see scripts/eval_accuracy.py."""
-    from vcstudio.ai.coreml_engine import CoreMLDetector
+    from vcstudio.ai.backend import make_detector
     from vcstudio.ai.model_manager import ModelManager
-    from vcstudio.ai.segmentation import SegmentationDetector
     from vcstudio.ai.testimages import load_bgra
     from vcstudio.core.frame import Frame
     from vcstudio.core.pyobjc_prewarm import prewarm
@@ -170,7 +169,7 @@ def evaluate_models(data: Path, models_dir: Path, model_names: list[str] | None 
     for name in names:
         info = avail[name]
         lm = mm.load(info, "all")
-        det = SegmentationDetector(lm) if info.task == "segment" else CoreMLDetector(lm)
+        det = make_detector(lm)
         samples, ms = [], []
         for p in imgs:
             img = load_bgra(p)

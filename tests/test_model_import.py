@@ -1,20 +1,26 @@
-"""Importing your own Core ML models: validation, metadata, class mapping, auto choice, safe switching."""
+"""Importing your own models (Core ML on macOS, ONNX on Windows): validation, metadata, class mapping, auto choice,
+safe switching."""
 import shutil
 from pathlib import Path
 
 import pytest
 
 from vcstudio.ai import model_import as mi
+from vcstudio.ai.backend import make_detector, model_extensions
 from vcstudio.ai.model_manager import REPO_MODELS, ModelManager
 
 DATA = Path(__file__).resolve().parent / "data" / "models"
+EXT = model_extensions()[0]                  # .mlpackage (macOS) or .onnx (Windows)
+ONNX = EXT == ".onnx"
+pytestmark = pytest.mark.skipif(not (REPO_MODELS / f"yolo11n{EXT}").exists(), reason="run scripts/convert_models.py first")
 
 
 @pytest.fixture(scope="module")
 def custom_detector(tmp_path_factory):
     """A real YOLO detector under another name, standing in for a user's own export."""
-    d = tmp_path_factory.mktemp("export") / "my_cards.mlpackage"
-    shutil.copytree(REPO_MODELS / "yolo11n.mlpackage", d)
+    d = tmp_path_factory.mktemp("export") / f"my_cards{EXT}"
+    src = REPO_MODELS / f"yolo11n{EXT}"
+    shutil.copytree(src, d) if src.is_dir() else shutil.copy2(src, d)
     return d
 
 
@@ -24,23 +30,32 @@ def report(custom_detector):
 
 
 def test_valid_detector_is_inspected_and_run(report):
-    assert report.task == "detect" and report.format == "coreml-pipeline-nms" and report.imgsz == 640
+    assert report.task == "detect" and report.imgsz == 640
+    assert report.format == ("onnx-raw-detect" if ONNX else "coreml-pipeline-nms")
     assert len(report.classes) == 80 and report.classes[0] == "person"
     assert report.sample_detections >= 4 and "person" in report.sample_labels     # bus photo: 4 people
     assert 0 < report.median_ms <= report.p95_ms
     assert report.suggested_name == "my_cards" and report.suggested_confidence == pytest.approx(0.25)
 
 
-@pytest.mark.parametrize("name,why", [("not_a_detector.mlpackage", "unsupported outputs"),
-                                      ("garbage.mlmodel", "does not compile")])
-def test_unusable_models_are_rejected(name, why):
+UNUSABLE = ([("face_detection_yunet_2023mar.onnx", "class names"), ("garbage.onnx", "cannot load it")] if ONNX
+            else [("not_a_detector.mlpackage", "unsupported outputs"), ("garbage.mlmodel", "does not compile")])
+
+
+@pytest.mark.parametrize("name,why", UNUSABLE)
+def test_unusable_models_are_rejected(name, why, tmp_path):
+    if name == "garbage.onnx":
+        (tmp_path / name).write_bytes(b"0")
+        src = tmp_path / name
+    else:
+        src = (REPO_MODELS if name.startswith("face_detection") else DATA) / name
     with pytest.raises(mi.ModelImportError, match=why):
-        mi.inspect_model(DATA / name, runs=3)
+        mi.inspect_model(src, runs=3)
 
 
 def test_wrong_file_type_is_rejected(tmp_path):
-    p = tmp_path / "x.onnx"; p.write_bytes(b"0")
-    with pytest.raises(mi.ModelImportError, match="mlpackage or .mlmodel"):
+    p = tmp_path / ("x.mlmodel" if ONNX else "x.onnx"); p.write_bytes(b"0")
+    with pytest.raises(mi.ModelImportError, match=("an .onnx file" if ONNX else "mlpackage or .mlmodel")):
         mi.inspect_model(p)
 
 
@@ -69,12 +84,11 @@ def test_install_with_class_map_and_threshold(report, tmp_path):
     assert "my_cards" in [m.name for m in mm.ranked("detect", include_user=True)]
 
     # the mapped name reaches detections
-    from vcstudio.ai.coreml_engine import CoreMLDetector
     from vcstudio.ai.testimages import load_bgra
     from vcstudio.core.frame import Frame
     from vcstudio.core.resources import sample
     img = load_bgra(sample("bus.jpg"))
-    det = CoreMLDetector(mm.load(avail["my_cards"]))
+    det = make_detector(mm.load(avail["my_cards"]))
     labels = {d.label for d in det.detect(Frame(0, 0, 0, img.shape[1], img.shape[0], array=img, source="t"), 0.4)[0]}
     assert "player" in labels and "person" not in labels
 
@@ -91,7 +105,11 @@ def test_failed_model_falls_back_to_auto(tmp_path):
     from vcstudio.ai.detection import DetectionConfig
     from vcstudio.ai.engine import AIEngine
     user = tmp_path / "models"; user.mkdir()
-    shutil.copy(DATA / "garbage.mlmodel", user / "broken.mlmodel")
+    if ONNX:          # a broken file with valid metadata, so discovery lists it like an imported model
+        (user / "broken.onnx").write_bytes(b"0")
+        (user / "broken.json").write_text('{"task": "detect", "classes": ["x"], "origin": "user"}', encoding="utf-8")
+    else:
+        shutil.copy(DATA / "garbage.mlmodel", user / "broken.mlmodel")
     eng = AIEngine(None, ModelManager(user))
     eng._ensure_models(DetectionConfig(detector_model="broken"), "balanced")
     assert eng._detector is not None and eng._detector.name.startswith("yolo11")

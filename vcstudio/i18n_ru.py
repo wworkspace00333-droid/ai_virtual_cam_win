@@ -729,6 +729,33 @@ RU: dict[str, str] = {
     "Allow camera access in Settings > Privacy & security > Camera.":
         "Разрешите доступ к камере в «Параметры > Конфиденциальность и защита > Камера».",
     "Restart Windows to finish.": "Перезагрузите Windows, чтобы завершить.",
+    "On-device object detection with ONNX Runtime (CUDA / DirectML GPU, or CPU). Frames never leave this PC.":
+        "Распознавание объектов на устройстве через ONNX Runtime (видеокарта CUDA / DirectML или CPU). Кадры не "
+        "покидают этот компьютер.",
+    "YuNet face detection (face rectangles only; no identity recognition)":
+        "Обнаружение лиц YuNet (только рамки лиц, без распознавания личности)",
+    "ONNX .onnx: a YOLO detector or YOLO segmentation model exported by Ultralytics (format=onnx). It is checked and "
+    "timed before it is installed.":
+        "ONNX .onnx: детектор YOLO или модель сегментации YOLO, экспортированные Ultralytics (format=onnx). Перед "
+        "установкой модель проверяется и замеряется.",
+    "Benchmark (this PC)": "Замер скорости (этот компьютер)",
+    "ONNX (*.onnx)": "Модели ONNX (*.onnx)",
+    "Auto (largest that keeps up on this PC; smallest in Low Resource mode)":
+        "Авто (самая крупная, что успевает на этом компьютере; в экономном режиме самая лёгкая)",
+    "Delete {name} from this PC? Built-in models are not affected.":
+        "Удалить {name} с этого компьютера? Встроенные модели не затрагиваются.",
+    "{file}: {task}, input {size}×{size}, {n} classes. On this PC: {med} ms per frame (p95 {p95} ms). Test run on the "
+    "sample photo found {dets} object(s){labels}.":
+        "{file}: {task}, вход {size}×{size}, классов: {n}. На этом компьютере: {med} мс на кадр (p95 {p95} мс). "
+        "Пробный прогон на образце нашёл объектов: {dets}{labels}.",
+    "Slower than 33 ms: detection will run below 30 times a second on this PC.":
+        "Медленнее 33 мс: распознавание будет идти реже 30 раз в секунду на этом компьютере.",
+    "Face regions need YuNet face detection (AI Engine page).":
+        "Зонам лиц нужно обнаружение лиц YuNet (страница «ИИ-движок»).",
+    "Automatic (GPU if available, else CPU)": "Автоматически (видеокарта, если есть, иначе CPU)",
+    "GPU (CUDA / DirectML)": "Видеокарта (CUDA / DirectML)",
+    "GPU: {gpus} · ONNX Runtime {ver}: {provs}": "Видеокарта: {gpus} · ONNX Runtime {ver}: {provs}",
+    "no hardware GPU (CPU inference)": "аппаратной видеокарты нет (распознавание на CPU)",
     "Setup tool": "Установщик камеры",
     "Open camera privacy settings": "Открыть параметры доступа к камере",
     "Camera components": "Компоненты камеры",

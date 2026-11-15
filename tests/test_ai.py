@@ -1,4 +1,4 @@
-"""AI detection tests (Core ML via Vision). Skipped if models are not converted yet."""
+"""AI detection tests (Core ML via Vision on macOS, ONNX Runtime on Windows). Skipped if models are not converted yet."""
 import threading
 import time
 from pathlib import Path
@@ -13,7 +13,11 @@ from vcstudio.core.capture_supervisor import CaptureSupervisor
 from vcstudio.core.frame import Frame, host_time_s
 from vcstudio.core.video_capture import TestPatternSource
 
-HAVE_MODEL = (REPO_MODELS / "yolo11n.mlpackage").exists()
+from vcstudio.ai.backend import make_detector, make_face_detector, model_extensions  # noqa: E402
+from vcstudio.ai.model_manager import COMPUTE_UNITS  # noqa: E402
+
+EXT = model_extensions()[0]          # .mlpackage on macOS, .onnx on Windows
+HAVE_MODEL = (REPO_MODELS / f"yolo11n{EXT}").exists()
 needs_model = pytest.mark.skipif(not HAVE_MODEL, reason="run scripts/convert_models.py first")
 
 # Ultralytics PyTorch yolo11n reference on bus.jpg (conf >= 0.35), xyxy pixels
@@ -59,7 +63,7 @@ def test_config_from_profile():
 @needs_model
 def test_model_manager_resolve(mm):
     assert mm.resolve("auto").name == "yolo11n"
-    if (REPO_MODELS / "yolo11s.mlpackage").exists():
+    if (REPO_MODELS / f"yolo11s{EXT}").exists():
         assert mm.resolve("auto", prefer_large=True).name == mm.ranked("detect")[0].name
     with pytest.raises(ModelError):
         mm.resolve("nope")
@@ -68,6 +72,7 @@ def test_model_manager_resolve(mm):
 
 
 @needs_model
+@pytest.mark.skipif(EXT != ".mlpackage", reason="Core ML compilation cache (macOS)")
 def test_compile_cache_reused(mm):
     info = mm.resolve("yolo11n")
     p1 = mm._compiled_path(info)
@@ -77,10 +82,9 @@ def test_compile_cache_reused(mm):
 
 # ------------------------------------------------------------------ inference accuracy
 @needs_model
-@pytest.mark.parametrize("cu", ["all", "cpu_and_ne", "cpu_and_gpu", "cpu_only"])
+@pytest.mark.parametrize("cu", list(COMPUTE_UNITS))
 def test_matches_pytorch_reference(mm, bus, cu):
-    from vcstudio.ai.coreml_engine import CoreMLDetector
-    det = CoreMLDetector(mm.load(mm.resolve("yolo11n"), cu))
+    det = make_detector(mm.load(mm.resolve("yolo11n"), cu))
     dets, ms = det.detect(bus, 0.35, 0.5)
     for label, conf, box in TORCH_REF:
         best = max((d for d in dets if d.label == label), key=lambda d: iou(box, [d.x0, d.y0, d.x1, d.y1]))
@@ -91,16 +95,14 @@ def test_matches_pytorch_reference(mm, bus, cu):
 
 @needs_model
 def test_thresholds_applied_in_model(mm, bus):
-    from vcstudio.ai.coreml_engine import CoreMLDetector
-    det = CoreMLDetector(mm.load(mm.resolve("yolo11n")))
+    det = make_detector(mm.load(mm.resolve("yolo11n")))
     lo, _ = det.detect(bus, 0.10, 0.5)
     hi, _ = det.detect(bus, 0.85, 0.5)
     assert len(hi) < len(lo) and all(d.confidence >= 0.85 for d in hi)
 
 
 def test_face_detection_finds_faces(bus):
-    from vcstudio.ai.coreml_engine import VisionFaceDetector
-    faces, _ = VisionFaceDetector().detect(bus)
+    faces, _ = make_face_detector().detect(bus)
     assert len(faces) >= 1 and all(f.label == "face" for f in faces)
     # faces lie inside a person box region (upper half of image)
     assert all(380 < f.center[1] < 520 for f in faces)
@@ -155,11 +157,30 @@ def test_engine_publishes_detections(pipeline):
     assert (res.width, res.height) == (810, 1080)
 
 
+def _smallest_model_fps() -> float:
+    """Inference rate of the smallest detector on this machine as the engine runs it (hardware gate)."""
+    mm = ModelManager(REPO_MODELS)
+    info = mm.ranked("detect")[-1]
+    det = make_detector(mm.load(info, "all"))
+    f = Frame(0, 0, 0, 1920, 1080, array=np.zeros((1080, 1920, 4), np.uint8))
+    det.detect(f)
+    t = time.perf_counter()
+    for _ in range(5):
+        det.detect(f)
+    return 5 / (time.perf_counter() - t)
+
+
 @needs_model
 def test_rate_limit_and_capture_unaffected(pipeline):
+    fps = _smallest_model_fps()
+    if fps < 12:
+        pytest.skip(f"this machine runs the smallest model at {fps:.1f} fps: a 10 fps target cannot be met")
     cap, eng = pipeline
     cap.start(lambda: TestPatternSource(1920, 1080, 60))
-    eng.configure(DetectionConfig(frequency_mode="fixed", fixed_fps=10), "balanced")
+    # a fixed model: this test is about rate limiting, not about the automatic model choice (whose
+    # step-down from the largest model would fall inside the measuring window on a slow machine)
+    smallest = eng.models.ranked("detect")[-1].name
+    eng.configure(DetectionConfig(detector_model=smallest, frequency_mode="fixed", fixed_fps=10), "balanced")
     eng.start()
     assert wait_for(lambda: eng.stats().inferences > 5)
     time.sleep(2.0)
@@ -172,7 +193,7 @@ def test_rate_limit_and_capture_unaffected(pipeline):
 
 @needs_model
 def test_max_quality_uses_large_model_unthrottled(pipeline):
-    if not (REPO_MODELS / "yolo11s.mlpackage").exists():
+    if not (REPO_MODELS / f"yolo11s{EXT}").exists():
         pytest.skip("yolo11s not converted")
     cap, eng = pipeline
     cap.start(lambda: TestPatternSource(1280, 720, 60))
@@ -180,8 +201,15 @@ def test_max_quality_uses_large_model_unthrottled(pipeline):
     eng.start()
     assert wait_for(lambda: eng.stats().inferences > 20)
     s = eng.stats()
-    largest = eng.models.ranked("detect")[0].name          # adaptive: largest model sustaining the budget
-    assert s.model in (largest, eng.models.ranked("detect")[1].name) and s.target_fps is None
+    ranked = [m.name for m in eng.models.ranked("detect")]  # adaptive: largest model sustaining the budget
+    assert s.target_fps is None
+    rejected = set(eng.mq_rejected["detect"])
+    # every model larger than the one in use was measured as too slow on this machine
+    assert set(ranked[:ranked.index(s.model)]) <= rejected, (s.model, rejected)
+    if s.model == ranked[-1] and len(ranked) > 1:
+        assert set(ranked[:-1]) <= rejected                 # slow machine: smallest only after all others failed
+    else:
+        assert s.model in ranked[:2]
 
 
 @needs_model
@@ -248,7 +276,7 @@ def test_engine_tracks_with_stable_ids(pipeline):
     assert {o.track_id for o in out} == ids
 
 
-HAVE_SEG = (REPO_MODELS / "yolo11n-seg.mlpackage").exists()
+HAVE_SEG = (REPO_MODELS / f"yolo11n-seg{EXT}").exists()
 
 
 @pytest.mark.skipif(not HAVE_SEG, reason="segmentation model not converted")

@@ -62,7 +62,7 @@ def _shape(desc) -> list[int]:
 
 
 def _class_names(md, user_meta: dict) -> list[str]:
-    labels = md.classLabels()
+    labels = md.classLabels() if md is not None else None
     if labels:
         return [str(x) for x in labels]
     names = user_meta.get("names")
@@ -87,18 +87,76 @@ def _compile(src: Path) -> Path:
     return Path(str(url.path()))
 
 
+def _inspect_onnx(src: Path, sample, runs: int) -> ModelReport:
+    """ONNX (Windows): load with ONNX Runtime, check the YOLO layout, read Ultralytics metadata, run it.
+
+    Supported: detection raw (1, 4 + C, N) or end-to-end (1, N, 6) exported with nms=True, and YOLO-seg
+    raw (1, 4 + C + M, N) + (1, M, H, W). Class names come from the 'names' metadata Ultralytics writes."""
+    import onnxruntime as ort
+    try:
+        sess = ort.InferenceSession(str(src), providers=["CPUExecutionProvider"])
+    except Exception as e:  # noqa: BLE001 - anything here means the app cannot load it
+        raise ModelImportError(f"not an ONNX model, or ONNX Runtime cannot load it: {e}") from e
+    ins = sess.get_inputs()
+    if len(ins) != 1 or len(ins[0].shape) != 4 or ins[0].shape[1] not in (3, "3"):
+        raise ModelImportError("the model needs exactly one image input of shape (1, 3, H, W)")
+    h_in = ins[0].shape[2]
+    imgsz = int(h_in) if isinstance(h_in, int) else 640
+    props = dict(sess.get_modelmeta().custom_metadata_map or {})
+    classes = _class_names(None, props)
+    shapes = {o.name: [d if isinstance(d, int) else -1 for d in o.shape] for o in sess.get_outputs()}
+    three = [s for s in shapes.values() if len(s) == 3]
+    four = [s for s in shapes.values() if len(s) == 4]
+    if not classes:
+        raise ModelImportError("model without class names ('names' metadata, as Ultralytics exports it)")
+    if three and four:
+        nm = four[0][1]
+        nc = three[0][1] - 4 - nm
+        if nc <= 0:
+            raise ModelImportError(f"segmentation outputs do not fit YOLO-seg: {three[0]} and {four[0]}")
+        if nc != len(classes):
+            raise ModelImportError(f"outputs have {nc} classes but the model names {len(classes)}")
+        task, fmt = "segment", "onnx-raw-seg"
+    elif len(three) == 1 and three[0][-1] == 6 and three[0][1] != 6:
+        task, fmt = "detect", "onnx-e2e-detect"
+    elif len(three) == 1:
+        nc = three[0][1] - 4
+        if nc != len(classes):
+            raise ModelImportError(f"outputs have {nc} classes but the model names {len(classes)}")
+        task, fmt = "detect", "onnx-raw-detect"
+    else:
+        raise ModelImportError("unsupported outputs " + ", ".join(f"{k}{s}" for k, s in shapes.items()) +
+                               ": export a YOLO detector or YOLO-seg model (Ultralytics format=onnx)")
+    try:
+        conf = float(props.get("Confidence threshold", 0.25) or 0.25)
+    except ValueError:
+        conf = 0.25
+    rep = ModelReport(
+        source=str(src), task=task, format=fmt, imgsz=imgsz, classes=classes,
+        inputs={i.name: i.type for i in ins}, outputs=shapes,
+        author=str(props.get("author", "")), license=str(props.get("license", "")),
+        description=str(props.get("description", "")), suggested_name=_clean_name(src.stem),
+        suggested_confidence=conf)
+    _trial_run(rep, src, sess, sample, runs)
+    return rep
+
+
 def inspect_model(src: Path, sample=None, runs: int = 20) -> ModelReport:
-    """Compile, load and run `src` (.mlpackage directory or .mlmodel file); raise ModelImportError if
-    the app cannot use it."""
+    """Load and run `src` (.mlpackage directory or .mlmodel file on macOS, .onnx file on Windows);
+    raise ModelImportError if the app cannot use it."""
+    from vcstudio.ai.backend import model_extensions
+    src = Path(src).expanduser()
+    if not src.exists():
+        raise ModelImportError(f"{src} does not exist")
+    if src.suffix.lower() == ".onnx" and ".onnx" in model_extensions():
+        return _inspect_onnx(src, sample, runs)
+    if src.suffix not in (".mlpackage", ".mlmodel") or ".mlpackage" not in model_extensions():
+        raise ModelImportError("choose a .mlpackage or .mlmodel file (Core ML)" if ".mlpackage" in model_extensions()
+                               else "choose an .onnx file (YOLO detector or YOLO-seg exported by Ultralytics)")
     import CoreML  # type: ignore
     import Foundation  # type: ignore
     from vcstudio.core.pyobjc_prewarm import prewarm
     prewarm()
-    src = Path(src).expanduser()
-    if not src.exists():
-        raise ModelImportError(f"{src} does not exist")
-    if src.suffix not in (".mlpackage", ".mlmodel"):
-        raise ModelImportError("choose a .mlpackage or .mlmodel file (Core ML)")
     compiled = _compile(src)
     try:
         cfg = CoreML.MLModelConfiguration.alloc().init()
@@ -157,8 +215,7 @@ def inspect_model(src: Path, sample=None, runs: int = 20) -> ModelReport:
 
 def _trial_run(rep: ModelReport, src: Path, model, sample, runs: int) -> None:
     """Run the model exactly as the app does on a sample frame and time it."""
-    from vcstudio.ai.coreml_engine import CoreMLDetector
-    from vcstudio.ai.segmentation import SegmentationDetector
+    from vcstudio.ai.backend import make_detector
     from vcstudio.core.frame import Frame
     if sample is None:
         sample = _sample()
@@ -167,7 +224,7 @@ def _trial_run(rep: ModelReport, src: Path, model, sample, runs: int) -> None:
                      classes=rep.classes)
     lm = LoadedModel(info, model, "all", 0.0)
     try:
-        det = SegmentationDetector(lm) if rep.task == "segment" else CoreMLDetector(lm)
+        det = make_detector(lm)
         frame = Frame(0, 0.0, 0.0, w, h, array=sample, source="import")
         ms = []
         dets = []
@@ -246,6 +303,11 @@ def _sample():
 
 def _machine() -> str:
     import subprocess
+    from vcstudio.platform import IS_WINDOWS
+    if IS_WINDOWS:
+        from vcstudio.platform.win.sysinfo import cpu_name, hardware_gpus
+        gpus = hardware_gpus()
+        return cpu_name() + (f" + {gpus[0]['name']}" if gpus else "")
     try:
         return subprocess.run(["/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True,
                               text=True, timeout=3).stdout.strip()
@@ -255,13 +317,12 @@ def _machine() -> str:
 
 def benchmark(lm: LoadedModel, sample=None, runs: int = 30) -> dict:
     """Median / p95 ms of a loaded model on the sample image (AI page "Benchmark")."""
-    from vcstudio.ai.coreml_engine import CoreMLDetector
-    from vcstudio.ai.segmentation import SegmentationDetector
+    from vcstudio.ai.backend import make_detector
     from vcstudio.core.frame import Frame
     if sample is None:
         sample = _sample()
     h, w = sample.shape[:2]
-    det = SegmentationDetector(lm) if lm.info.task == "segment" else CoreMLDetector(lm)
+    det = make_detector(lm)
     frame = Frame(0, 0.0, 0.0, w, h, array=sample, source="bench")
     ms = []
     t_end = time.perf_counter() + 30

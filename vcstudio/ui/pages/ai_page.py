@@ -15,6 +15,7 @@ from vcstudio.core.frame import Frame
 from vcstudio.core.system_info import coreml_info, metal_info
 from vcstudio.ui.widgets import Card, StatCard, page_scaffold
 from vcstudio.i18n import tr
+from vcstudio.platform import IS_WINDOWS, text
 
 log = logging.getLogger(__name__)
 BENCH_ITERS = 40
@@ -32,7 +33,7 @@ class _AccSignals(QObject):
 
 def run_benchmark(models_dir, frame: Frame, emit_row, iters: int = BENCH_ITERS) -> list[dict]:
     """Median/p95 latency for every model x compute unit on `frame`. Loads one model at a time."""
-    from vcstudio.ai.coreml_engine import CoreMLDetector
+    from vcstudio.ai.backend import make_detector
     mm = ModelManager(models_dir)
     out = []
     for info in mm.available().values():
@@ -40,7 +41,7 @@ def run_benchmark(models_dir, frame: Frame, emit_row, iters: int = BENCH_ITERS) 
             continue
         for cu in COMPUTE_UNITS:
             lm = mm.load(info, cu)
-            det = CoreMLDetector(lm)
+            det = make_detector(lm)
             for _ in range(5):
                 det.detect(frame, 0.35, 0.5)
             ts = []
@@ -49,7 +50,7 @@ def run_benchmark(models_dir, frame: Frame, emit_row, iters: int = BENCH_ITERS) 
                 dets, _ = det.detect(frame, 0.35, 0.5)
                 ts.append((time.perf_counter() - t) * 1000)
             ts.sort()
-            row = {"model": info.name, "compute_units": cu, "median_ms": round(ts[len(ts) // 2], 2),
+            row = {"model": info.name, "compute_units": cu, "backend": lm.backend, "median_ms": round(ts[len(ts) // 2], 2),
                    "p95_ms": round(ts[int(0.95 * (len(ts) - 1))], 2), "max_fps": round(1000 / ts[len(ts) // 2], 1),
                    "load_s": round(lm.load_seconds, 2), "detections": len(dets),
                    "frame": f"{frame.width}x{frame.height}"}
@@ -64,8 +65,7 @@ class AIEnginePage:
 
     def __init__(self, ctx):
         self.ctx = ctx
-        self.widget, lay = page_scaffold("AI Engine", "On-device object detection with Core ML through Apple Vision "
-                                         "(CPU / GPU / Neural Engine). Frames never leave this Mac.")
+        self.widget, lay = page_scaffold("AI Engine", text("ai_intro"))
         stats = Card("Engine status")
         g = QGridLayout(); g.setSpacing(10)
         names = ["State", "Model", "Inference rate", "Inference time", "Capture → result", "Detections",
@@ -85,7 +85,7 @@ class AIEnginePage:
         self.cu = QComboBox()
         for k, v in COMPUTE_UNITS.items():
             self.cu.addItem(tr(v), k)
-        self.face = QCheckBox(tr("Apple Vision face detection (face rectangles only; no identity recognition)"))
+        self.face = QCheckBox(tr(text("ai_face_checkbox")))
         f.addRow(tr(""), self.enabled)
         f.addRow(tr("Detector model"), self.model)
         f.addRow(tr("Compute units"), self.cu)
@@ -106,8 +106,7 @@ class AIEnginePage:
         self.remove_btn = QPushButton(tr("Remove imported model"))
         self.import_btn.clicked.connect(lambda: self.import_model())
         self.remove_btn.clicked.connect(self.remove_model)
-        hint = QLabel(tr("Core ML .mlpackage / .mlmodel: a YOLO detector exported with NMS (Ultralytics format=coreml "
-                         "nms=True) or a YOLO segmentation model. It is checked and timed before it is installed."))
+        hint = QLabel(tr(text("ai_import_hint")))
         hint.setObjectName("muted"); hint.setWordWrap(True)
         self.import_status = QLabel(); self.import_status.setWordWrap(True)
         mrow.addWidget(self.import_btn); mrow.addWidget(self.remove_btn); mrow.addWidget(hint, 1)
@@ -115,7 +114,7 @@ class AIEnginePage:
         models.layout_.addWidget(self.import_status)
         lay.addWidget(models)
 
-        bench = Card("Benchmark (this Mac)")
+        bench = Card(text("ai_bench_title"))
         row = QHBoxLayout()
         self.bench_btn = QPushButton(tr("Run benchmark"))
         self.bench_info = QLabel(tr("Uses the current input frame, or a built-in sample image when not capturing."))
@@ -166,6 +165,12 @@ class AIEnginePage:
         self.timer.start(500)
 
     def _env_text(self) -> str:
+        if IS_WINDOWS:
+            from vcstudio.platform.win.sysinfo import hardware_gpus, onnx_providers
+            import onnxruntime as ort
+            gpus = ", ".join(g["name"] for g in hardware_gpus()) or tr("no hardware GPU (CPU inference)")
+            provs = ", ".join(p.replace("ExecutionProvider", "") for p in onnx_providers())
+            return tr("GPU: {gpus} · ONNX Runtime {ver}: {provs}", gpus=gpus, ver=ort.__version__, provs=provs)
         m, c = metal_info(), coreml_info()
         return tr("Metal: {name} · GPU working set {gb} GB · Core ML: {coreml}", name=m.get('name', tr('unavailable')),
                   gb=m.get('recommended_working_set_gb', '?'),
@@ -179,7 +184,7 @@ class AIEnginePage:
         self.enabled.setChecked(ai.get("enabled", True))
         self.face.setChecked(ai.get("face_detection") == "vision")
         self.model.clear()
-        self.model.addItem(tr("Auto (largest that keeps up on this Mac; smallest in Low Resource mode)"), "auto")
+        self.model.addItem(tr(text("ai_auto_model")), "auto")
         avail = self.ctx.models.available()
         for name, info in avail.items():
             if info.task == "detect":
@@ -187,7 +192,8 @@ class AIEnginePage:
                 self.model.addItem(f"{name} ({info.size_mb}" + tr(" MB") + f"){own}", name)
         idx = self.model.findData(ai.get("detector_model", "auto"))
         self.model.setCurrentIndex(max(0, idx))
-        self.cu.setCurrentIndex(max(0, self.cu.findData(ai.get("compute_units", "all"))))
+        cu = ai.get("compute_units", "all")
+        self.cu.setCurrentIndex(max(0, self.cu.findData(cu if cu in COMPUTE_UNITS else "all")))
         for w in (self.enabled, self.face, self.model, self.cu):
             w.blockSignals(False)
         self.models.setRowCount(len(avail))
@@ -222,7 +228,7 @@ class AIEnginePage:
         from PySide6.QtWidgets import QFileDialog
         if not path:
             path, _ = QFileDialog.getOpenFileName(self.widget, tr("Import model…"), str(Path.home()),
-                                                  "Core ML (*.mlpackage *.mlmodel)")
+                                                  text("ai_import_filter"))
         if not path:
             return
         from vcstudio.ui.model_import_dialog import inspect_in_background
@@ -268,7 +274,7 @@ class AIEnginePage:
             self.import_status.setText(tr("Select an imported model in the table first."))
             return
         if QMessageBox.question(self.widget, tr("Remove imported model"),
-                                tr("Delete {name} from this Mac? Built-in models are not affected.", name=name)) \
+                                tr(text("ai_remove_question"), name=name)) \
                 != QMessageBox.Yes:
             return
         self._remove(info)
@@ -292,7 +298,9 @@ class AIEnginePage:
         level = {"running": "ok", "degraded": "warn", "error": "error", "loading": "warn"}.get(s.state, "idle")
         self.cards["State"].set(s.state.title(), "starts with capture" if s.state == "stopped" else "", level)
         note = (tr(s.quality_note_tpl, **s.quality_note_args) if s.quality_note_tpl
-                else tr(COMPUTE_UNITS.get(s.compute_units, "")))
+                else (s.backend or tr(COMPUTE_UNITS.get(s.compute_units, ""))))
+        if s.quality_note_tpl and s.backend:
+            note = f"{s.backend} · {note}"
         self.cards["Model"].set(s.model or "—", note +
                                 (" · " + tr("loaded in {s} s", s=f"{s.model_load_s:.2f}") if s.model_load_s else ""))
         tgt = tr("max sustainable") if s.target_fps is None else tr("target {fps} fps", fps=f"{s.target_fps:g}")
@@ -303,8 +311,11 @@ class AIEnginePage:
                                          f"p95 {s.inference_ms_p95:.1f} " + tr("ms") if s.inferences else "")
         self.cards["Capture → result"].set(f"{s.frame_age_ms:.1f} " + tr("ms") if s.inferences else "—", "frame arrival to detections")
         self.cards["Detections"].set(str(s.detections) if live else "—", tr("{n} inferences", n=f"{s.inferences:,}"))
-        self.cards["Face detection"].set(f"{s.face_ms_avg:.1f} " + tr("ms") if s.face_ms_avg else ("on" if self.face.isChecked() else "off"),
-                                         "Apple Vision")
+        from vcstudio.ai.backend import face_detector_name
+        face_err = self.ctx.ai.face_error
+        self.cards["Face detection"].set(f"{s.face_ms_avg:.1f} " + tr("ms") if s.face_ms_avg else
+                                         ("error" if face_err and self.face.isChecked() else ("on" if self.face.isChecked() else "off")),
+                                         face_err or face_detector_name(), "error" if face_err and self.face.isChecked() else None)
         self.cards["Tracked objects"].set(str(s.tracks_active) if live and s.tracking else ("off" if not s.tracking else "—"),
                                           tr("{ids} IDs · {rec} recovered · {ms} ms", ids=s.track_ids_created,
                                              rec=s.tracks_recovered, ms=f"{s.tracker_ms:.2f}"))
@@ -381,7 +392,10 @@ class AIEnginePage:
     def _bench_row(self, row):
         r = self.bench.rowCount()
         self.bench.insertRow(r)
-        vals = [row["model"], COMPUTE_UNITS[row["compute_units"]], row["median_ms"], row["p95_ms"], row["max_fps"],
+        cu_label = tr(COMPUTE_UNITS.get(row["compute_units"], row["compute_units"]))
+        if IS_WINDOWS and row.get("backend"):
+            cu_label += f" → {row['backend']}"
+        vals = [row["model"], cu_label, row["median_ms"], row["p95_ms"], row["max_fps"],
                 row["load_s"], row["frame"]]
         for j, v in enumerate(vals):
             self.bench.setItem(r, j, QTableWidgetItem(str(v)))

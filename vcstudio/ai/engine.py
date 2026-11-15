@@ -20,8 +20,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Callable
 
-from vcstudio.ai.coreml_engine import CoreMLDetector, VisionFaceDetector
-from vcstudio.ai.segmentation import SegmentationDetector
+from vcstudio.ai.backend import make_detector, make_face_detector
 from vcstudio.ai.detection import DetectionConfig, DetectionResult, filter_detections
 from vcstudio.ai.model_manager import ModelManager
 from vcstudio.ai.tracking import ByteTracker, TrackedObject, TrackerConfig
@@ -40,6 +39,7 @@ class AIStats:
     state: str = "stopped"          # stopped | loading | running | idle | disabled | degraded | error
     model: str = ""
     compute_units: str = ""
+    backend: str = ""               # what runs the model, e.g. "DirectML (NVIDIA ...)", "CPU", "Core ML (...)"
     target_fps: float | None = None
     achieved_fps: float = 0.0
     inference_ms_avg: float = 0.0
@@ -71,6 +71,8 @@ class AIStats:
 QUALITY_BUDGET_MS = {"performance": 20.0, "balanced": 25.0, "max_quality": 25.0}
 MQ_BUDGET_MS = QUALITY_BUDGET_MS["max_quality"]
 MQ_SAMPLES = 40          # inferences measured before judging a model
+MQ_FAST_SAMPLES = 5      # ...unless the median of the first few is already this many times over budget
+MQ_FAST_FACTOR = 3.0
 
 
 class AIEngine:
@@ -93,7 +95,7 @@ class AIEngine:
         self._lat = collections.deque(maxlen=120)
         self._face_lat = collections.deque(maxlen=120)
         self._fps = FpsCounter(2.0)
-        self._detector: CoreMLDetector | SegmentationDetector | None = None
+        self._detector = None             # Core ML or ONNX detector / segmentation detector (vcstudio/ai/backend.py)
         self.last_inference = 0.0       # monotonic time of the last successful inference (watchdog)
         self.restarts = 0
         # per task, models measured too slow for some mode's budget on this machine (p95 ms)
@@ -102,7 +104,8 @@ class AIEngine:
         self.model_failures: dict[str, str] = {}   # chosen models that failed to load (cleared on reconfigure)
         self.mq_note = ""
         self.mq_note_tpl, self.mq_note_args = "", {}
-        self._face: VisionFaceDetector | None = None
+        self._face = None                 # Apple Vision (macOS) or YuNet (Windows)
+        self.face_error = ""              # why face detection is unavailable (it never stops object detection)
 
     # ------------------------------------------------------------- config
     def configure(self, cfg: DetectionConfig, performance_mode: str, tracking: TrackerConfig | None = None) -> None:
@@ -228,9 +231,19 @@ class AIEngine:
         if budget is None or self._detector is None:
             return
         name = cfg.segmentation_model if cfg.need_masks else cfg.detector_model
-        if name not in ("auto", "", None) or len(self._lat) < MQ_SAMPLES:
+        if name not in ("auto", "", None):
             return
-        lat = sorted(list(self._lat)[-MQ_SAMPLES:])
+        if MQ_FAST_SAMPLES <= len(self._lat) < MQ_SAMPLES:
+            # Clearly too slow (e.g. the largest model on a CPU-only PC: ~400 ms against a 25 ms budget):
+            # step down now instead of spending MQ_SAMPLES slow inferences on it.
+            first = sorted(list(self._lat)[:MQ_FAST_SAMPLES])
+            if first[len(first) // 2] <= MQ_FAST_FACTOR * budget:
+                return
+            lat = first
+        elif len(self._lat) < MQ_SAMPLES:
+            return
+        else:
+            lat = sorted(list(self._lat)[-MQ_SAMPLES:])
         p95 = lat[int(0.95 * (len(lat) - 1))]
         task = "segment" if cfg.need_masks else "detect"
         cur = self._detector.name
@@ -313,14 +326,20 @@ class AIEngine:
             self._detector = None
             self.models.unload()   # keep only one detector resident (16 GB budget)
             lm = self.models.load(want, cfg.compute_units)
-            det = SegmentationDetector(lm) if want.task == "segment" else CoreMLDetector(lm)
+            det = make_detector(lm)
             with self._lock:
                 self._stats.model, self._stats.compute_units = want.name, cfg.compute_units
+                self._stats.backend = lm.backend
                 self._stats.model_load_s = lm.load_seconds
             self._lat.clear()
             self._detector = det
-        if cfg.face_detection and self._face is None:
-            self._face = VisionFaceDetector()
+        if cfg.face_detection and self._face is None and not self.face_error:
+            try:
+                self._face = make_face_detector()
+            except Exception as e:        # e.g. the YuNet model file is missing: objects still work
+                self.face_error = f"{type(e).__name__}: {e}"
+                self._sink("ERROR", "ai", f"Face detection unavailable: {self.face_error}")
+                log.error("Face detection unavailable: %s", self.face_error)
         elif not cfg.face_detection:
             self._face = None
 

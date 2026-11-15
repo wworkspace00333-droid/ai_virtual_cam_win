@@ -127,6 +127,33 @@ _TEXT = {
         "Approve it in System Settings > General > Login Items & Extensions > Camera Extensions.",
         "Allow camera access in Settings > Privacy & security > Camera."),
     "camera_needs_restart": ("Restart the Mac to finish.", "Restart Windows to finish."),
+    "ai_intro": (
+        "On-device object detection with Core ML through Apple Vision (CPU / GPU / Neural Engine). Frames never "
+        "leave this Mac.",
+        "On-device object detection with ONNX Runtime (CUDA / DirectML GPU, or CPU). Frames never leave this PC."),
+    "ai_face_checkbox": (
+        "Apple Vision face detection (face rectangles only; no identity recognition)",
+        "YuNet face detection (face rectangles only; no identity recognition)"),
+    "ai_import_hint": (
+        "Core ML .mlpackage / .mlmodel: a YOLO detector exported with NMS (Ultralytics format=coreml nms=True) or a "
+        "YOLO segmentation model. It is checked and timed before it is installed.",
+        "ONNX .onnx: a YOLO detector or YOLO segmentation model exported by Ultralytics (format=onnx). It is checked "
+        "and timed before it is installed."),
+    "ai_import_filter": ("Core ML (*.mlpackage *.mlmodel)", "ONNX (*.onnx)"),
+    "ai_bench_title": ("Benchmark (this Mac)", "Benchmark (this PC)"),
+    "ai_auto_model": ("Auto (largest that keeps up on this Mac; smallest in Low Resource mode)",
+                      "Auto (largest that keeps up on this PC; smallest in Low Resource mode)"),
+    "ai_remove_question": ("Delete {name} from this Mac? Built-in models are not affected.",
+                           "Delete {name} from this PC? Built-in models are not affected."),
+    "import_timing": (
+        "{file}: {task}, input {size}×{size}, {n} classes. On this Mac: {med} ms per frame (p95 {p95} ms). Test run "
+        "on the sample photo found {dets} object(s){labels}.",
+        "{file}: {task}, input {size}×{size}, {n} classes. On this PC: {med} ms per frame (p95 {p95} ms). Test run "
+        "on the sample photo found {dets} object(s){labels}."),
+    "import_slow": ("Slower than 33 ms: detection will run below 30 times a second on this Mac.",
+                    "Slower than 33 ms: detection will run below 30 times a second on this PC."),
+    "face_regions_need": ("Face regions need Apple Vision face detection (AI Engine page).",
+                          "Face regions need YuNet face detection (AI Engine page)."),
 }
 
 # Monospace font for logs and code-like text

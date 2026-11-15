@@ -1,4 +1,5 @@
-"""Accuracy regression: the app's Core ML detectors on 16 labelled COCO images (tests/data/coco16).
+"""Accuracy regression: the app's detectors (Core ML on macOS, ONNX Runtime on Windows) on 16 labelled COCO images
+(tests/data/coco16).
 
 Measured on an M2 Pro (2026-11-12): yolo11n mAP50 0.549, yolo11s 0.627, yolo11m 0.623,
 yolo11n-seg 0.520, yolo11m-seg 0.623. Floors sit ~0.1 below, so FP16 / compute-unit noise passes
@@ -31,7 +32,8 @@ def test_metrics_on_hand_made_cases():
 
 @pytest.mark.parametrize("name", sorted(FLOORS))
 def test_model_accuracy_floor(name):
-    if not (REPO_MODELS / f"{name}.mlpackage").exists():
+    from vcstudio.ai.backend import model_extensions
+    if not (REPO_MODELS / f"{name}{model_extensions()[0]}").exists():
         pytest.skip(f"{name} not converted")
     from vcstudio.ai.evaluation import evaluate_models
     res = evaluate_models(DATA, REPO_MODELS, [name])["models"][name]

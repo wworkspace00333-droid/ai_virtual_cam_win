@@ -37,11 +37,12 @@ UI (Qt) ◄── превью ≤30 fps
 | IOSurface (передача между процессами без копий) | расширение камеры | Разделяемая память (1 копия на кадр); вариант 2 — shared NT handle текстуры D3D11 для MF-источника | ⬜ |
 | Metal компоновщик | `native/VCSNative/Compositor.swift`, `native/metal.py` | Direct3D 11 compute shader (HLSL), та же раскладка слоёв (28 float на слой); DLL `vcs_d3d11.dll` через ctypes; CPU-фоллбэк без изменений | ⬜ |
 | Metal масштабирование (letterbox, превью) | `Scaler.swift` | `cv2.resize` (CPU), затем в D3D11 | ⬜ |
-| Core ML + Vision (YOLO11 детекция) | `ai/coreml_engine.py`, `ai/model_manager.py` | ONNX Runtime: DirectML → CUDA → CPU (автовыбор); модели `.onnx` + `.json`; NMS в NumPy (уже есть в `segmentation.py`) | ⬜ |
-| Core ML сегментация YOLO11-seg | `ai/segmentation.py` | Тот же постпроцессинг, вход через ONNX Runtime; меняется только вызов модели | ⬜ |
-| Vision лица | `VisionFaceDetector` | YuNet (OpenCV Zoo, MIT) через `cv2.FaceDetectorYN`; только прямоугольники, без распознавания личности | ⬜ |
-| Импорт моделей `.mlpackage` | `ai/model_import.py` | Импорт `.onnx`: проверка входов/выходов, пробный прогон, замер — та же логика отчёта | ⬜ |
-| Конвертация моделей | `scripts/convert_models.py` | Экспорт Ultralytics `format=onnx` (opset 17, FP16 для GPU / FP32 для CPU) | ⬜ |
+| Core ML + Vision (YOLO11 детекция) | `ai/coreml_engine.py`, `ai/model_manager.py` → `ai/onnx_engine.py`, `ai/backend.py` | ONNX Runtime: CUDA → DirectML (лучшая аппаратная видеокарта) → CPU; модели `.onnx` + `.json`; NMS в NumPy; потоки CPU — половина физических ядер (ИИ не мешает захвату) | ✅ совпадение с эталоном PyTorch на bus.jpg; mAP50 на coco16 как у Core ML; 🟡 DirectML/CUDA не проверены (нет GPU) |
+| Core ML сегментация YOLO11-seg | `ai/segmentation.py` | Тот же постпроцессинг (общий код), вход через ONNX Runtime | ✅ маски силуэтов на bus.jpg |
+| Vision лица | `VisionFaceDetector` | YuNet (OpenCV Zoo, MIT, в репозитории) через `cv2.FaceDetectorYN` на уменьшенной копии кадра; сбой модели лиц не останавливает распознавание объектов | ✅ 2 лица на bus.jpg, ~25–34 мс на CPU |
+| Импорт моделей `.mlpackage` | `ai/model_import.py` | Импорт `.onnx`: один вход-изображение, выходы YOLO raw / end-to-end / YOLO-seg, имена классов из метаданных Ultralytics, пробный прогон и замер | ✅ |
+| Конвертация моделей | `scripts/convert_models.py --format onnx` | Ultralytics `format=onnx`, FP32, opset 17, без NMS внутри; загрузка YuNet с проверкой SHA-256 | ✅ 5 моделей |
+| Автовыбор модели | `ai/engine.py` | Быстрый отказ от явно медленной модели (медиана 5 замеров > 3× бюджета) вместо 40 замеров — на CPU переход yolo11m → yolo11s занимает ~3 с вместо ~16 с | ✅ |
 | ImageIO декодирование картинок | `replacement/assets.py` | OpenCV `IMREAD_UNCHANGED` (PNG/JPG/WEBP/BMP/TIFF) + Pillow для GIF/HEIC (опционально `pillow-heif`); премультипликация альфы | ⬜ |
 | AVAssetReader/VideoToolbox | `replacement/video.py` | PyAV (FFmpeg в комплекте; аппаратное декодирование D3D11VA где доступно); существующий FFmpeg-subprocess декодер остаётся запасным | ⬜ |
 | OBS плагин (POSIX shm) | `native/obs-plugin/*` | Один исходник для macOS и Windows: `Local\vcs-obs-frames` (`CreateFileMapping` + `SEC_RESERVE`, фиксируется только нужный объём), тот же заголовок и seqlock; сборка `scripts/build_obs_plugin_win.ps1` (MSVC, библиотеки импорта из DLL установленного OBS) | ✅ проверено вживую с OBS 33: плагин загружается, 1200×752 @ 30 кадров/с доходят до приложения, переподключение после перезапуска OBS за 1,2 с |
@@ -126,7 +127,7 @@ UI (Qt) ◄── превью ≤30 fps
 | 2 ✅ | Структура платформ, окружение | `vcstudio/platform`, пути, один экземпляр, заглушки PyObjC, requirements-windows; приложение импортируется на Windows | ✅ юнит-тесты: 167 прошли (было 124), 48 падений — подсистемы этапов 4–6 | — |
 | 3 ✅ | GUI и конфигурация | окно стартует, все 12 страниц, тексты Windows (EN/RU), глобальные клавиши, статус доступа к камере и компонентов камеры | ✅ 173 теста прошли (8 новых для Windows); скриншоты всех страниц (RU) | внешний вид на вашем мониторе |
 | 4 ✅ | Захват и OBS | MSMF/DirectShow источник, список устройств, OBS-плагин Windows + читатель общей памяти, переподключение | ✅ 181 тест; вживую: OBS 33 → плагин → приложение 30 кадров/с, перезапуск OBS; 🟡 захват из OBS Virtual Camera не проверен (сервер) | OBS Virtual Camera и веб-камера через DirectShow/MSMF |
-| 5 | ИИ и трекинг | ONNX Runtime + YuNet, конвертация моделей, импорт `.onnx`, эталонная проверка на `bus.jpg` и coco16 | ✅ на CPU (точность, совпадение с macOS-результатами) | скорость с DirectML/CUDA |
+| 5 ✅ | ИИ и трекинг | ONNX Runtime + YuNet, конвертация моделей, импорт `.onnx`, эталонная проверка на `bus.jpg` и coco16 | ✅ 209 тестов; точность совпадает с macOS; трекинг со стабильными ID; на этом CPU (2 ядра): yolo11n ~55–75 мс, yolo11m ~490 мс | скорость с DirectML/CUDA |
 | 6 | ROI и замена | картинки, видео (PyAV), маски, сегментация — существующие тесты зелёные на Windows | ✅ | — |
 | 7 | D3D11 компоновщик | `vcs_d3d11.dll`, паритет с CPU-бэкендом | 🟡 WARP (программный D3D11) для паритета | скорость на реальной видеокарте |
 | 8 | Виртуальная камера | DirectShow-фильтр + MF-источник + регистрация + петлевой тест | частично: DirectShow через GraphEdit-подобный тест; MF — если на сервере есть Frame Server | Камера Windows, Zoom, Teams, Chrome, Discord |

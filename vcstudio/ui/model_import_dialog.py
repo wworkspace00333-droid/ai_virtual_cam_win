@@ -1,4 +1,5 @@
-"""Import your own Core ML model: validate in the background, review classes and threshold, install."""
+"""Import your own model (Core ML on macOS, ONNX on Windows): validate in the background, review classes and
+threshold, install."""
 from __future__ import annotations
 
 import threading
@@ -22,8 +23,8 @@ def inspect_in_background(path: Path, on_done) -> threading.Thread:
     sig.done.connect(on_done)
 
     def work():
-        import objc  # type: ignore
-        with objc.autorelease_pool():
+        from vcstudio.platform import autorelease_pool
+        with autorelease_pool():
             try:
                 rep = mi.inspect_model(path)
                 sig.done.emit(rep, None)
@@ -45,15 +46,15 @@ class ModelImportDialog(QDialog):
         self.resize(560, 620)
         lay = QVBoxLayout(self)
         task = tr("object detector") if report.task == "detect" else tr("segmentation (object masks)")
-        info = QLabel(tr("{file}: {task}, input {size}×{size}, {n} classes. On this Mac: {med} ms per frame "
-                         "(p95 {p95} ms). Test run on the sample photo found {dets} object(s){labels}.",
+        from vcstudio.platform import text
+        info = QLabel(tr(text("import_timing"),
                          file=Path(report.source).name, task=task, size=report.imgsz, n=len(report.classes),
                          med=report.median_ms, p95=report.p95_ms, dets=report.sample_detections,
                          labels=(": " + ", ".join(report.sample_labels[:6])) if report.sample_labels else ""))
         info.setWordWrap(True)
         lay.addWidget(info)
         if report.median_ms > 33:
-            slow = QLabel(tr("Slower than 33 ms: detection will run below 30 times a second on this Mac."))
+            slow = QLabel(tr(text("import_slow")))
             slow.setWordWrap(True); slow.setStyleSheet("color: #d29922;")
             lay.addWidget(slow)
         f = QFormLayout()

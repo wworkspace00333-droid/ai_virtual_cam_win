@@ -400,7 +400,8 @@ class ROIPage:
                 elif (inc and c not in inc) or c in exc:
                     msgs.append(tr("'{c}' is filtered out on the Detection page.", c=tr(c)))
                 elif c == "face" and body["ai"].get("face_detection") != "vision":
-                    msgs.append("Face regions need Apple Vision face detection (AI Engine page).")
+                    from vcstudio.platform import text
+                    msgs.append(text("face_regions_need"))
         self.warn.setText(" ".join(msgs))
 
     # ---------------------------------------------------------------- live
