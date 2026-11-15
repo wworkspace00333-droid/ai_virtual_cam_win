@@ -419,21 +419,50 @@ def bundle_selfcheck(out: str | None = None) -> int:
         return f"{len(dets)} faces, {ms:.1f} ms"
     check(f"{face_detector_name()} face detection", faces)
 
-    def metal():
-        from vcstudio.native import metal as m
-        ctx = m.MetalContext()
-        name = ctx.device_name
-        ctx.close()
-        return name
-    check("Metal compositor", metal)
+    from vcstudio.platform import IS_WINDOWS
+    if IS_WINDOWS:
+        def d3d11():
+            from vcstudio.platform.win.d3d11 import D3D11Context
+            ctx = D3D11Context()
+            name = ctx.device_name
+            ctx.close()
+            return name
+        check("Direct3D 11 compositor", d3d11)
 
-    def shm():
-        from vcstudio.core.obs_shm_source import obs_sharing_status, shm_lib
-        if shm_lib() is None:
-            raise RuntimeError("libVCSShm.dylib not loadable")
-        st = obs_sharing_status()
-        return "reader OK; OBS sharing: " + ("live" if st["available"] else f"off ({st['reason'][:40]})")
-    check("OBS shared-memory reader", shm)
+        def onnx():
+            import onnxruntime as ort
+            return f"ONNX Runtime {ort.__version__}: " + ", ".join(ort.get_available_providers())
+        check("ONNX Runtime", onnx)
+
+        def shm():
+            from vcstudio.platform.win.obs_shm import obs_sharing_status
+            st = obs_sharing_status()
+            return "reader OK; OBS sharing: " + ("live" if st["available"] else f"off ({st['reason'][:40]})")
+        check("OBS shared-memory reader", shm)
+
+        def camera():
+            from vcstudio.platform.win.vcam_status import components, setup_tool
+            if setup_tool() is None:
+                raise FileNotFoundError("vcam-setup.exe not bundled")
+            regs = [f"{c.name}: {'registered' if c.registered else 'not registered'}" for c in components()]
+            return "; ".join(regs)
+        check("virtual camera components", camera)
+    else:
+        def metal():
+            from vcstudio.native import metal as m
+            ctx = m.MetalContext()
+            name = ctx.device_name
+            ctx.close()
+            return name
+        check("Metal compositor", metal)
+
+        def shm():
+            from vcstudio.core.obs_shm_source import obs_sharing_status, shm_lib
+            if shm_lib() is None:
+                raise RuntimeError("libVCSShm.dylib not loadable")
+            st = obs_sharing_status()
+            return "reader OK; OBS sharing: " + ("live" if st["available"] else f"off ({st['reason'][:40]})")
+        check("OBS shared-memory reader", shm)
 
     def plugin():
         from vcstudio.core.obs_plugin import built_plugin, installed_plugin
@@ -443,13 +472,20 @@ def bundle_selfcheck(out: str | None = None) -> int:
         return f"bundled; installed in OBS: {'yes' if installed_plugin() else 'no'}"
     check("OBS plugin", plugin, required=False)
 
-    def ffmpeg():
-        p = shutil.which("ffmpeg") or next((c for c in ("/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg")
-                                            if Path(c).exists()), None)
-        if not p:
-            raise FileNotFoundError("ffmpeg not found (only needed for MKV/WebM replacement videos)")
-        return p
-    check("ffmpeg (optional)", ffmpeg, required=False)
+    if IS_WINDOWS:
+        def video():
+            from vcstudio.platform.win.video_decode import probe
+            info = probe(str(sample("clip_h264.mp4")))
+            return f"PyAV: clip_h264.mp4 {info}"
+        check("video decoding (PyAV)", video)
+    else:
+        def ffmpeg():
+            p = shutil.which("ffmpeg") or next((c for c in ("/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg")
+                                                if Path(c).exists()), None)
+            if not p:
+                raise FileNotFoundError("ffmpeg not found (only needed for MKV/WebM replacement videos)")
+            return p
+        check("ffmpeg (optional)", ffmpeg, required=False)
 
     failed = [r for r in results if r["required"] and not r["ok"]]
     print(f"{'OK' if not failed else 'FAILED'}: {sum(r['ok'] for r in results)}/{len(results)} checks passed",
