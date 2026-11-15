@@ -128,7 +128,7 @@ class AppContext:
     # ---------------- capture ----------------
     def capture_factory(self):
         """Build a source factory from current input settings."""
-        from vcstudio.core.video_capture import AVFoundationSource, TestPatternSource
+        from vcstudio.core.video_capture import TestPatternSource, device_source
         i = self.settings.get("input")
         w, h, fps = i["preferred_width"], i["preferred_height"], i["preferred_fps"]
         if i["method"] == "test_pattern":
@@ -136,7 +136,8 @@ class AppContext:
         if i["method"] == "obs_ipc":
             from vcstudio.core.obs_shm_source import ObsShmSource
             return lambda: ObsShmSource()
-        return lambda: AVFoundationSource(i["device_unique_id"], i["device_name_hint"], w, h, fps)
+        method = i["method"]
+        return lambda: device_source(method, i["device_unique_id"], i["device_name_hint"], w, h, fps)
 
     def start_capture(self) -> None:
         risk = self.feedback_loop_risk()
@@ -158,7 +159,8 @@ class AppContext:
     def feedback_loop_risk(self) -> str:
         """Non-empty if the configured input is the device we output to (would feed back into itself)."""
         i, o = self.settings.get("input"), self.settings.get("output")
-        if i["method"] == "avfoundation" and o["camera_enabled"] and \
+        from vcstudio.platform import is_device_method
+        if is_device_method(i["method"]) and o["camera_enabled"] and \
                 (i.get("device_name_hint") or "").casefold() == o["camera_device"].casefold():
             return f"Input '{i['device_name_hint']}' is also the output camera: this would feed back into itself."
         return ""

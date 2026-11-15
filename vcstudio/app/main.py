@@ -76,9 +76,8 @@ def main(argv: list[str] | None = None) -> int:
 
         from vcstudio import i18n
         i18n.set_language(i18n.resolve("auto"))
-        msg = i18n.tr("AI Virtual Camera Studio is already running (process {pid}). Two copies would fight over "
-                      "the output camera, so this one will close. Switch to the open window in the Dock.",
-                      pid=other or "?")
+        from vcstudio.platform import text
+        msg = i18n.tr(text("another_copy_running"), pid=other or "?")
         print(msg, file=sys.stderr)
         if "--snapshot" not in argv and "--smoke-test" not in argv:
             QMessageBox.information(None, APP_NAME, msg)

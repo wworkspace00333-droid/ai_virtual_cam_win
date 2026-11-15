@@ -8,6 +8,7 @@ from vcstudio.core.config import SettingsError
 from vcstudio.ui.actions import ACTION_SPECS
 from vcstudio.ui.widgets import Card, page_scaffold
 from vcstudio.i18n import tr
+from vcstudio.platform import COMPOSITORS, INPUT_METHODS, text
 
 
 class SettingsPage:
@@ -20,8 +21,9 @@ class SettingsPage:
         gen = Card("Input defaults")
         f = QFormLayout()
         self.method = QComboBox()
-        self.method.addItem(tr("OBS Virtual Camera (AVFoundation)"), "avfoundation")
-        self.method.addItem(tr("Direct OBS frame transfer (vcstudio-obs plugin)"), "obs_ipc")
+        for key, label in INPUT_METHODS:
+            if key != "test_pattern":
+                self.method.addItem(tr(label), key)
         self.method.setCurrentIndex(self.method.findData(s.get("input.method")))
         self.reconnect = QCheckBox(tr("Reconnect automatically"))
         self.reconnect.setChecked(s.get("input.auto_reconnect"))
@@ -48,9 +50,8 @@ class SettingsPage:
         self.fps.setCurrentIndex(self.fps.findData(s.get("output.fps")))
         self.pix = QComboBox(); self.pix.addItems(["BGRA", "NV12"]); self.pix.setCurrentText(s.get("output.pixel_format"))
         self.comp = QComboBox()
-        self.comp.addItem(tr("Automatic (Metal GPU if available)"), "auto")
-        self.comp.addItem(tr("Metal GPU"), "metal")
-        self.comp.addItem(tr("CPU (NumPy/OpenCV fallback)"), "cpu")
+        for key, label in COMPOSITORS:
+            self.comp.addItem(tr(label), key)
         self.comp.setCurrentIndex(max(0, self.comp.findData(s.get("processing.compositor"))))
         self.loglevel = QComboBox(); self.loglevel.addItems(["DEBUG", "INFO", "WARNING", "ERROR"])
         self.loglevel.setCurrentText(s.get("logging.level"))
@@ -62,7 +63,7 @@ class SettingsPage:
         from vcstudio.core.performance import auto_memory_warning_mb, total_memory_mb
         auto_warn = auto_memory_warning_mb()
         self.mem_mode = QComboBox()
-        self.mem_mode.addItem(tr("Automatic: {mb} MB for this Mac's {gb} GB", mb=auto_warn, gb=f"{total_memory_mb() / 1024:.0f}"), "auto")
+        self.mem_mode.addItem(tr(text("memory_auto"), mb=auto_warn, gb=f"{total_memory_mb() / 1024:.0f}"), "auto")
         self.mem_mode.addItem(tr("Manual"), "manual")
         self.mem_mode.setCurrentIndex(max(0, self.mem_mode.findData(s.get("performance.memory_limits"))))
         self.mem_warn = QSpinBox(); self.mem_warn.setRange(256, 262144); self.mem_warn.setSingleStep(256)
@@ -73,7 +74,7 @@ class SettingsPage:
                                  "(Low Resource mode, closes video players, clears caches)."))
         from vcstudio.i18n import LANGUAGES
         self.lang = QComboBox()
-        self.lang.addItem(tr("Automatic (macOS language)"), "auto")
+        self.lang.addItem(tr(text("language_auto")), "auto")
         for code, name in LANGUAGES.items():
             self.lang.addItem(name, code)
         self.lang.setCurrentIndex(max(0, self.lang.findData(s.get("ui.language"))))
@@ -87,9 +88,7 @@ class SettingsPage:
         lay.addWidget(save)
 
         hk = Card("Hotkeys")
-        note = QLabel(tr("With “System-wide” on, shortcuts work even when another app is in front (Carbon hotkeys; "
-                      "no Accessibility permission needed). On macOS, “Ctrl” in these fields is the ⌘ key. A shortcut "
-                      "another app already owns is reported and falls back to an in-app shortcut."))
+        note = QLabel(tr(text("hotkeys_note")))
         note.setObjectName("muted"); note.setWordWrap(True)
         hk.layout_.addWidget(note)
         self.global_hk = QCheckBox(tr("System-wide (global) hotkeys"))

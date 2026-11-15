@@ -19,8 +19,11 @@ ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "build" / "AI Virtual Camera Studio Dev.app"
 needs_native = pytest.mark.skipif(not metal.available(), reason="libVCSNative not built")
 live = pytest.mark.skipif(os.environ.get("VCS_LIVE") != "1", reason="set VCS_LIVE=1")
+mac_only = pytest.mark.skipif(__import__("sys").platform != "darwin",
+                              reason="CMIO extension flow (Windows: tests/test_ui_win.py)")
 
 
+@mac_only
 def test_status_is_honest_when_not_installed(monkeypatch):
     monkeypatch.setattr(cm, "camera_extensions", lambda: [])
     monkeypatch.setattr(cm, "host_app", lambda: None)
@@ -29,6 +32,7 @@ def test_status_is_honest_when_not_installed(monkeypatch):
     assert "scripts/build_camera.sh" in s.message
 
 
+@mac_only
 def test_status_waiting_for_approval(monkeypatch):
     monkeypatch.setattr(cm, "camera_extensions", lambda: [{"enabled": False, "active": False, "team_id": "T",
                                                            "bundle_id": cm.EXTENSION_ID, "name": "AI Virtual Camera",
@@ -37,6 +41,7 @@ def test_status_waiting_for_approval(monkeypatch):
     assert not s.ready and "Camera Extensions" in s.message
 
 
+@mac_only
 def test_activate_without_host_app(monkeypatch):
     monkeypatch.setattr(cm, "host_app", lambda: None)
     rc, msg = cm.activate()

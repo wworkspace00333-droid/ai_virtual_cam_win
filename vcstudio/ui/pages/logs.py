@@ -39,7 +39,8 @@ class LogsPage:
         self.view = QPlainTextEdit()
         self.view.setReadOnly(True)
         self.view.setMaximumBlockCount(5000)
-        self.view.setStyleSheet("font-family: Menlo, monospace; font-size: 11px;")
+        from vcstudio.platform import MONO_FONT
+        self.view.setStyleSheet(f"font-family: {MONO_FONT}, monospace; font-size: 11px;")
         self.view.setMinimumHeight(380)
         lay.addWidget(self.view)
         ev = Card("Recorded events (SQLite)")

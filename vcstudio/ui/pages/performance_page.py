@@ -14,8 +14,8 @@ class PerformancePage:
 
     def __init__(self, ctx):
         self.ctx = ctx
-        self.widget, lay = page_scaffold("Performance", "Operating mode and live resource usage. Mode FPS values are targets; "
-                                         "measured results on this Mac are in docs/BENCHMARK.md (scripts/benchmark.py).")
+        from vcstudio.platform import text
+        self.widget, lay = page_scaffold("Performance", text("performance_note"))
         modes = Card("Operating mode")
         self.group = QButtonGroup(self.widget)
         cur = ctx.settings.get("performance.mode")

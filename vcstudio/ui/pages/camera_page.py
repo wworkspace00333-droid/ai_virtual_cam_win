@@ -15,6 +15,7 @@ from vcstudio.camera.output import OUTPUT_TARGETS, target_for
 from vcstudio.core.system_info import camera_extensions
 from vcstudio.ui.widgets import Card, StatCard, page_scaffold
 from vcstudio.i18n import tr
+from vcstudio.platform import IS_WINDOWS, text
 
 
 class _Sig(QObject):
@@ -26,9 +27,7 @@ class VirtualCameraPage:
 
     def __init__(self, ctx):
         self.ctx = ctx
-        self.widget, lay = page_scaffold("Virtual Camera", tr(
-            "Where processed video goes. “{camera}” is this app's own CoreMediaIO camera extension; OBS Virtual "
-            "Camera works without an Apple Developer account.", camera=CAMERA_NAME))
+        self.widget, lay = page_scaffold("Virtual Camera", tr(text("camera_page_intro"), camera=CAMERA_NAME))
         tgt = Card("Output camera")
         tf = QFormLayout()
         self.target = QComboBox()
@@ -44,7 +43,8 @@ class VirtualCameraPage:
 
         st = Card("Status")
         g = QGridLayout(); g.setSpacing(10)
-        self.cards = {n: StatCard(n) for n in ("Host app", "Extension", "Camera device", "Output")}
+        self.k_host, self.k_ext = ("Setup tool", "Camera components") if IS_WINDOWS else ("Host app", "Extension")
+        self.cards = {n: StatCard(n) for n in (self.k_host, self.k_ext, "Camera device", "Output")}
         for i, c in enumerate(self.cards.values()):
             g.addWidget(c, 0, i)
         st.layout_.addLayout(g)
@@ -53,7 +53,7 @@ class VirtualCameraPage:
         row = QHBoxLayout()
         self.install_btn = QPushButton(tr("Install / update")); self.install_btn.setObjectName("primary")
         self.uninstall_btn = QPushButton(tr("Uninstall")); self.uninstall_btn.setObjectName("danger")
-        self.approve_btn = QPushButton(tr("Open approval settings"))
+        self.approve_btn = QPushButton(tr("Open camera privacy settings" if IS_WINDOWS else "Open approval settings"))
         self.refresh_btn = QPushButton(tr("Refresh"))
         for b in (self.install_btn, self.uninstall_btn, self.approve_btn, self.refresh_btn):
             row.addWidget(b)
@@ -62,10 +62,7 @@ class VirtualCameraPage:
         lay.addWidget(st)
 
         chain = Card("Check the whole chain")
-        chint = QLabel(tr("One click: the app pauses its own processing, sends a 1080p60 test scene and then your OBS "
-                          "video through AI and Metal into the selected camera, receives it like QuickTime or Zoom "
-                          "would, and shows frame rate, dropped frames, latency and whether the processing is "
-                          "visible. About 30 seconds."))
+        chint = QLabel(tr(text("camera_chain_hint")))
         chint.setObjectName("muted"); chint.setWordWrap(True)
         chain.layout_.addWidget(chint)
         crow = QHBoxLayout()
@@ -79,9 +76,7 @@ class VirtualCameraPage:
         lay.addWidget(chain)
 
         test = Card("Verify in other apps")
-        hint = QLabel(tr("Send a moving, numbered test pattern to the selected output camera, then select that camera "
-                      "in FaceTime, QuickTime Player (File > New Movie Recording), Photo Booth or Zoom. The loopback "
-                      "test captures the camera like a client app and measures delivered frames and latency."))
+        hint = QLabel(tr(text("camera_verify_hint")))
         self.hint = hint
         hint.setObjectName("muted"); hint.setWordWrap(True)
         test.layout_.addWidget(hint)
@@ -94,9 +89,10 @@ class VirtualCameraPage:
         test.layout_.addWidget(self.test_info)
         lay.addWidget(test)
 
-        ext = Card("Installed camera extensions (systemextensionsctl)")
+        ext = Card("Registered camera components" if IS_WINDOWS else "Installed camera extensions (systemextensionsctl)")
         self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels([tr("Name"), tr("Bundle ID"), tr("Team"), tr("State")])
+        self.table.setHorizontalHeaderLabels([tr("Name"), tr("File") if IS_WINDOWS else tr("Bundle ID"),
+                                              tr("File exists") if IS_WINDOWS else tr("Team"), tr("State")])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setMinimumHeight(110)
         ext.layout_.addWidget(self.table)
@@ -169,9 +165,11 @@ class VirtualCameraPage:
         s = cm.status()
         self.status = s
         self._sync_target()
-        self.cards["Host app"].set("Installed" if s.host_app else "Not found", s.host_app or "/Applications", "ok" if s.host_app else "warn")
-        state = {"activated_enabled": "ok"}.get(s.extension_state, "warn" if s.extension_state != "not_installed" else "idle")
-        self.cards["Extension"].set(s.extension_state.replace("_", " ").title(), s.team_id and tr("team {id}", id=s.team_id), state)
+        self.cards[self.k_host].set("Installed" if s.host_app else "Not found",
+                                    s.host_app or ("vcam-setup.exe" if IS_WINDOWS else "/Applications"),
+                                    "ok" if s.host_app else "warn")
+        state = {"activated_enabled": "ok", "installed": "ok"}.get(s.extension_state, "warn" if s.extension_state != "not_installed" else "idle")
+        self.cards[self.k_ext].set(s.extension_state.replace("_", " ").title(), s.team_id and tr("team {id}", id=s.team_id), state)
         self.cards["Camera device"].set("Visible" if s.device_visible else "Not visible", CAMERA_NAME,
                                         "ok" if s.device_visible else "idle")
         self.msg.setText(tr(s.message))
@@ -183,16 +181,21 @@ class VirtualCameraPage:
             self.cards["Camera device"].set("Visible" if visible else "Not visible", dev, "ok" if visible else "warn")
         for b in (self.pattern_btn, self.loop_btn):
             b.setEnabled(visible)
-        exts = camera_extensions()
-        self.table.setRowCount(len(exts))
-        for i, e in enumerate(exts):
-            for j, v in enumerate((e["name"], e["bundle_id"], e["team_id"], e["state"])):
+        if IS_WINDOWS:
+            from vcstudio.platform.win.vcam_status import components
+            rows = [(c.name, c.path or "—", tr("Yes") if c.file_exists else tr("No"), c.state.replace("_", " "))
+                    for c in components()]
+        else:
+            rows = [(e["name"], e["bundle_id"], e["team_id"], e["state"]) for e in camera_extensions()]
+        self.table.setRowCount(len(rows))
+        for i, e in enumerate(rows):
+            for j, v in enumerate(e):
                 self.table.setItem(i, j, QTableWidgetItem(v))
         self.table.resizeColumnsToContents()
 
     def _async(self, kind, fn):
         self.install_btn.setEnabled(False)
-        self.msg.setText(tr("Working… macOS may ask you to approve the extension."))
+        self.msg.setText(tr(text("camera_working")))
 
         def work():
             rc, out = fn()
@@ -200,15 +203,14 @@ class VirtualCameraPage:
         threading.Thread(target=work, daemon=True).start()
 
     def _uninstall(self):
-        if QMessageBox.question(self.widget, tr("Uninstall"), tr("Remove “{camera}” from this Mac?", camera=CAMERA_NAME)) == QMessageBox.Yes:
+        if QMessageBox.question(self.widget, tr("Uninstall"), tr(text("camera_remove_question"), camera=CAMERA_NAME)) == QMessageBox.Yes:
             self._async("uninstall", cm.deactivate)
 
     def _done(self, kind, payload):
         rc, _, out = payload.partition("|")
         self.refresh()
         if kind in ("install", "uninstall"):
-            extra = {"2": "Approve it in System Settings > General > Login Items & Extensions > Camera Extensions.",
-                     "3": "Restart the Mac to finish."}.get(rc, "")
+            extra = {"2": text("camera_needs_approval"), "3": text("camera_needs_restart")}.get(rc, "")
             self.msg.setText((f"{tr(kind.title())}: " + tr("exit {rc}.", rc=rc) + f" {out} {tr(extra)}").strip())
         elif kind == "loopback":
             self.test_info.setText(out)

@@ -165,6 +165,13 @@ def device_formats(device) -> list[DeviceFormat]:
 
 
 def formats_for_device_id(unique_id: str) -> list[DeviceFormat]:
+    from vcstudio.platform import IS_WINDOWS
+    if IS_WINDOWS:
+        try:
+            from vcstudio.platform.win.devices import formats_for_device_id as win_formats
+        except ImportError:
+            return []
+        return win_formats(unique_id)
     d = find_av_device(unique_id, None)
     return device_formats(d) if d is not None else []
 
@@ -376,6 +383,24 @@ class AVFoundationSource(CaptureSource):
             self._delegate.owner = None
         self._delegate = None
         self._on_event = None
+
+
+# ----------------------------------------------------------------------------------------------
+# Platform dispatch
+# ----------------------------------------------------------------------------------------------
+
+def device_source(method: str, unique_id: str | None, name_hint: str | None, width: int = 1920,
+                  height: int = 1080, fps: float = 60.0, allow_own_output: bool = False) -> CaptureSource:
+    """Camera-device capture source for an "input.method" of this OS (see vcstudio.platform.DEVICE_METHODS)."""
+    from vcstudio.platform import IS_WINDOWS
+    if IS_WINDOWS:
+        try:
+            from vcstudio.platform.win.capture import WindowsCameraSource
+        except ImportError:
+            raise CaptureError("Camera-device capture on Windows arrives with porting stage 4; use the test "
+                               "pattern until then.") from None
+        return WindowsCameraSource(method, unique_id, name_hint, width, height, fps, allow_own_output)
+    return AVFoundationSource(unique_id, name_hint, width, height, fps, allow_own_output)
 
 
 # ----------------------------------------------------------------------------------------------

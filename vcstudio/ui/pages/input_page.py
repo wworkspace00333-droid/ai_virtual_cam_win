@@ -13,15 +13,14 @@ from vcstudio.core.video_capture import formats_for_device_id
 from vcstudio.ui.video_view import VideoView
 from vcstudio.ui.widgets import Card, StatCard, page_scaffold
 from vcstudio.i18n import tr
+from vcstudio.platform import INPUT_METHODS, is_device_method, text
 
 log = logging.getLogger(__name__)
 
-METHODS = [("avfoundation", "Camera device (AVFoundation): OBS Virtual Camera"),
-           ("obs_ipc", "Direct OBS frame transfer (vcstudio-obs plugin)"),
-           ("test_pattern", "Test pattern (diagnostics)")]
+METHODS = list(INPUT_METHODS)
 PERMISSION_HINT = {
-    "not_determined": "macOS will ask for camera permission when capture starts.",
-    "denied": "Denied. Enable it in System Settings → Privacy & Security → Camera, then restart the app.",
+    "not_determined": text("camera_permission_not_determined"),
+    "denied": text("camera_permission_denied"),
     "restricted": "Restricted by a device-management policy.",
     "authorized": "Granted.",
 }
@@ -132,7 +131,7 @@ class InputPage:
 
     def _method_changed(self, *_):
         m = self.method.currentData()
-        is_dev = m == "avfoundation"
+        is_dev = is_device_method(m)
         self.device.setEnabled(is_dev)
         self.format.setEnabled(is_dev)
         self.fps.setEnabled(m != "obs_ipc")          # OBS decides resolution and frame rate
@@ -218,7 +217,7 @@ class InputPage:
         s = self.ctx.settings
         try:
             s.set("input.method", self.method.currentData(), persist=False)
-            if self.method.currentData() == "avfoundation":
+            if is_device_method(self.method.currentData()):
                 s.set("input.device_unique_id", self.device.currentData(), persist=False)
                 name = self.device.currentText().split("  (")[0]
                 s.set("input.device_name_hint", name, persist=False)
@@ -236,7 +235,7 @@ class InputPage:
             return False
 
     def start(self):
-        if self.method.currentData() == "avfoundation" and self.device.currentData() is None:
+        if is_device_method(self.method.currentData()) and self.device.currentData() is None:
             QMessageBox.warning(self.widget, tr("Input"), tr("No usable video device selected."))
             return
         if self.apply_to_settings():

@@ -32,6 +32,7 @@ def test_camera_page_reports_not_installed_honestly(win):
         assert "Not" in page.cards["Camera device"].value.text()
 
 
+@pytest.mark.skipif(__import__("sys").platform != "darwin", reason="OBS camera-extension output target is macOS only")
 def test_camera_page_output_target_switch(win):
     from vcstudio.camera.output import OUTPUT_TARGETS, target_for
     page = win.pages[win.page_keys().index("camera")]

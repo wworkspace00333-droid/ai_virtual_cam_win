@@ -29,10 +29,10 @@ UI (Qt) ◄── превью ≤30 fps
 |---|---|---|---|
 | AVFoundation захват | `core/video_capture.py` | Media Foundation через OpenCV (`CAP_MSMF`), запасной DirectShow (`CAP_DSHOW`); отдельный поток чтения, кадр — массив BGRA | ⬜ |
 | AVFoundation список устройств | `core/devices.py` | Перечисление DirectShow-устройств (COM через ctypes: имя + device path как unique id) | ⬜ |
-| Разрешение камеры (TCC) | `request_camera_access` | Windows: «Параметры → Конфиденциальность → Камера»; проверка ключа реестра `ConsentStore\webcam`, понятное сообщение | ⬜ |
+| Разрешение камеры (TCC) | `request_camera_access` | `platform/win/privacy.py`: переключатели `ConsentStore\webcam` (устройство, приложения, классические приложения) и групповая политика; кнопка открывает `ms-settings:privacy-webcam` | ✅ |
 | CoreMediaIO Camera Extension | `native/CameraExtension/*.swift` | **Своя камера**: (1) DirectShow source filter DLL — Windows 10/11; (2) Media Foundation virtual camera (`MFCreateVirtualCamera`) — Windows 11. Общий транспорт — разделяемая память | ⬜ |
 | CMIO sink client | `native/VCSNative/CameraSink.swift`, `camera/output.py` | Писатель разделяемой памяти (Python `mmap` + именованные объекты Win32), протокол `vcam_shm.h` | ⬜ |
-| Управление расширением | `camera/camera_manager.py` | Регистрация/удаление камеры: `vcam-setup.exe` с повышением прав (UAC), статус по реестру COM и списку устройств | ⬜ |
+| Управление расширением | `camera/camera_manager.py` | Статус по реестру COM (`platform/win/vcam_status.py`, CLSID фильтра DirectShow и MF-источника) и списку устройств; установка/удаление — запуск `vcam-setup.exe` через UAC (`ShellExecuteEx runas`) | 🟡 статус и запуск готовы; сам `vcam-setup.exe` — этап 8 |
 | CoreVideo `CVPixelBuffer` + пул | `core/pixelbuffer.py`, `core/frame.py` | На Windows кадр — непрерывный NumPy BGRA (пул буферов); GPU-путь — текстуры D3D11 | ⬜ |
 | IOSurface (передача между процессами без копий) | расширение камеры | Разделяемая память (1 копия на кадр); вариант 2 — shared NT handle текстуры D3D11 для MF-источника | ⬜ |
 | Metal компоновщик | `native/VCSNative/Compositor.swift`, `native/metal.py` | Direct3D 11 compute shader (HLSL), та же раскладка слоёв (28 float на слой); DLL `vcs_d3d11.dll` через ctypes; CPU-фоллбэк без изменений | ⬜ |
@@ -46,7 +46,7 @@ UI (Qt) ◄── превью ≤30 fps
 | AVAssetReader/VideoToolbox | `replacement/video.py` | PyAV (FFmpeg в комплекте; аппаратное декодирование D3D11VA где доступно); существующий FFmpeg-subprocess декодер остаётся запасным | ⬜ |
 | OBS плагин (POSIX shm) | `native/obs-plugin/*` | Порт плагина под Win32 (`CreateFileMapping`, тот же заголовок и seqlock); чтение в Python через `mmap` без нативной DLL | ⬜ |
 | libVCSShm (чтение shm) | `native/shm-reader` | Не нужен: Python `mmap` + NumPy, копия сразу в массив кадра | ⬜ |
-| Carbon глобальные клавиши | `native/Hotkeys.swift`, `native/hotkeys.py` | `RegisterHotKey` в отдельном потоке с циклом сообщений (ctypes) | ⬜ |
+| Carbon глобальные клавиши | `native/Hotkeys.swift`, `native/hotkeys.py` | `platform/win/hotkeys.py`: `RegisterHotKey` в своём потоке с циклом сообщений; действие доставляется в GUI-поток сигналом Qt | ✅ (проверено: регистрация, конфликт, реальное нажатие через `keybd_event`) |
 | `screencapture` (карточка для игры) | `game/cardframe.py` | GDI BitBlt основного монитора (ctypes), с учётом DPI | ⬜ |
 | `fcntl.flock` (один экземпляр) | `core/single_instance.py` | `msvcrt.locking` на байте за концом `app.lock` (снимается ОС при падении; pid читается) | ✅ |
 | `~/Library/Application Support` | `core/paths.py` | `%LOCALAPPDATA%\AIVirtualCameraStudio` (модели и ассеты большие — не Roaming) | ✅ |
@@ -55,7 +55,8 @@ UI (Qt) ◄── превью ≤30 fps
 | `defaults read AppleLanguages` | `i18n.py` | `GetUserDefaultUILanguage` | ✅ |
 | Часы `CMClockGetHostTimeClock` | `core/frame.py` | `time.perf_counter` (QPC; совпадает с часами OBS `os_gettime_ns`) | ✅ |
 | Кодировка файлов (неявная cp1251/cp1252 на Windows) | 10 мест в `vcstudio/` | явный `encoding="utf-8"` (иначе профили и модели с кириллицей ломаются) | ✅ |
-| PySide6 UI | `ui/*` | Остаётся PySide6; правка mac-специфичных текстов (⌘, Dock, «Системные настройки»), страница камеры под Windows-регистрацию | ⬜ |
+| PySide6 UI | `ui/*` | Остаётся PySide6. Тексты, зависящие от ОС, — `vcstudio.platform.text()` (macOS-строки не изменены); методы ввода и компоновщики — из `platform`; страница камеры показывает компоненты Windows | ✅ 12 страниц открываются; 🟡 тексты страницы «ИИ-движок» и диалога импорта моделей (Core ML) меняются на этапе 5 |
+| Настройки с другой ОС | `core/config.py` | Допустимые значения берутся из `platform`; `avfoundation`/`metal` из macOS-настроек автоматически заменяются на `mediafoundation`/`auto` | ✅ |
 | ByteTrack, ROI, профили, SQLite, конфиг, watchdog, композиционная математика, карточка для игры (алгоритм) | `ai/tracking.py`, `roi/*`, `core/*`, `replacement/compositor.py` (CPU), `game/cardframe.py` | Без изменений | ⬜ (проверить тестами) |
 | PyInstaller `.app` + DMG, подпись Apple | `packaging/*`, `scripts/build_app.sh` | PyInstaller onedir + Inno Setup; установщик регистрирует камеру; подпись Authenticode — по желанию (SmartScreen) | ⬜ |
 
@@ -122,7 +123,7 @@ UI (Qt) ◄── превью ≤30 fps
 |---|---|---|---|---|
 | 1 ✅ | Аудит и архитектура | этот документ | — | ознакомиться |
 | 2 ✅ | Структура платформ, окружение | `vcstudio/platform`, пути, один экземпляр, заглушки PyObjC, requirements-windows; приложение импортируется на Windows | ✅ юнит-тесты: 167 прошли (было 124), 48 падений — подсистемы этапов 4–6 | — |
-| 3 | GUI и конфигурация | окно стартует (`--smoke-test`), тестовый шаблон проходит через конвейер | ✅ смоук-тест, скриншоты страниц | внешний вид |
+| 3 ✅ | GUI и конфигурация | окно стартует, все 12 страниц, тексты Windows (EN/RU), глобальные клавиши, статус доступа к камере и компонентов камеры | ✅ 173 теста прошли (8 новых для Windows); скриншоты всех страниц (RU) | внешний вид на вашем мониторе |
 | 4 | Захват и OBS | MSMF/DirectShow источник, список устройств, OBS-плагин Windows + `mmap`-читатель, переподключение | частично (без камеры: тестовый источник, OBS-shm через имитатор писателя) | OBS Virtual Camera и плагин |
 | 5 | ИИ и трекинг | ONNX Runtime + YuNet, конвертация моделей, импорт `.onnx`, эталонная проверка на `bus.jpg` и coco16 | ✅ на CPU (точность, совпадение с macOS-результатами) | скорость с DirectML/CUDA |
 | 6 | ROI и замена | картинки, видео (PyAV), маски, сегментация — существующие тесты зелёные на Windows | ✅ | — |

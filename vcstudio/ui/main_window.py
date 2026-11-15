@@ -4,7 +4,7 @@ import os
 
 import logging
 
-from PySide6.QtCore import QByteArray, QTimer
+from PySide6.QtCore import QByteArray, Qt, QTimer, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QListWidget, QMainWindow, QStackedWidget, QWidget
 
 from vcstudio import APP_NAME, __version__
@@ -29,6 +29,10 @@ log = logging.getLogger(__name__)
 
 
 class MainWindow(QMainWindow):
+    # Global hotkeys may fire on a non-GUI thread (Windows: the RegisterHotKey thread); a queued signal
+    # runs the action on the GUI thread on every platform.
+    global_hotkey_fired = Signal(str)
+
     def __init__(self, ctx):
         super().__init__()
         self.ctx = ctx
@@ -37,6 +41,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1100, 700)
         self.actions_ = ActionRegistry(self)
         self.actions_.triggered.connect(self.on_action)
+        self.global_hotkey_fired.connect(self.on_action, Qt.QueuedConnection)
         from vcstudio.native.hotkeys import GlobalHotkeys
         self.global_hotkeys = GlobalHotkeys()
         self.apply_hotkeys()
@@ -106,7 +111,7 @@ class MainWindow(QMainWindow):
         in_app = dict(bindings)
         import os
         if self.ctx.settings.get("ui.global_hotkeys") and not os.environ.get("VCS_DISABLE_GLOBAL_HOTKEYS"):
-            errors = self.global_hotkeys.apply(bindings, self.on_action)
+            errors = self.global_hotkeys.apply(bindings, self.global_hotkey_fired.emit)
             for action in bindings:
                 if action not in errors:
                     in_app[action] = ""          # handled globally; avoid double triggering

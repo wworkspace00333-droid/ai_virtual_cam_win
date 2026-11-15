@@ -5,7 +5,7 @@ screenshots and finds where the game shows the camera and where its frames are
 (vcstudio/game/cardframe.py). Manual: the user draws a frame on the screenshot.
 
 Several frames ("slots") per game, one card each; frames are saved per game as named layouts. Cards
-are added with the button, by dropping image files on the window or by pasting (⌘V). Hotkeys
+are added with the button, by dropping image files on the window or by pasting (⌘V / Ctrl+V). Hotkeys
 (Settings > Hotkeys) switch the card in the active frame and show/hide all cards from inside the game.
 """
 from __future__ import annotations
@@ -180,7 +180,8 @@ class GameCardDialog(QDialog):
         # cards
         row = QHBoxLayout()
         row.addWidget(QLabel(tr("Cards")))
-        hint = QLabel(tr("drop photos here or paste with ⌘V")); hint.setObjectName("muted")
+        from vcstudio.platform import text
+        hint = QLabel(tr(text("paste_hint"))); hint.setObjectName("muted")
         row.addWidget(hint)
         row.addStretch()
         add = QPushButton(tr("Add photos…")); add.clicked.connect(lambda: self.add_cards())
@@ -498,9 +499,8 @@ class GameCardDialog(QDialog):
                 self.cal = cf.calibrate(self._shots["markers"], self._camera_size(), grid=self._grid)
         except cf.CalibrationError as e:
             self.cal = None
-            self.status.setText(tr("The game's camera picture was not found on screen ({e}). Make sure the game is "
-                                   "visible on the main display, shows this camera, and that Screen Recording is "
-                                   "allowed for this app (System Settings > Privacy & Security).", e=e))
+            from vcstudio.platform import text
+            self.status.setText(tr(text("calibration_not_found"), e=e))
             self._show_shot(self._shots.get("grey"))
             return
         self.shot = self._shots["grey"]

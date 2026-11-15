@@ -443,7 +443,7 @@ class ReplacementPage:
         self.view.set_overlay("", "ok")
         cs = self.ctx.replacement.compositor.stats
         fail = " · " + tr("failed: {names}", names=', '.join(cs.failed_rois)) if cs.failed_rois else ""
-        gpu = f" (GPU {cs.gpu_ms:.2f} " + tr("ms") + ")" if cs.backend == "metal" else ""
+        gpu = f" (GPU {cs.gpu_ms:.2f} " + tr("ms") + ")" if cs.backend not in ("cpu", "") else ""
         self.stats.setText(tr("{backend} compositor", backend=cs.backend.upper()) + gpu + " · " + tr(
             "render {ms} ms · {drawn} region(s) drawn · {skipped} skipped (no mask) · {active} active region(s) · "
             "{players} video player(s)", ms=f"{cs.render_ms:.1f}", drawn=cs.regions_drawn, skipped=cs.skipped_no_mask,

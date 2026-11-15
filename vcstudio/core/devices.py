@@ -1,4 +1,4 @@
-"""Video device enumeration (AVFoundation). Capture itself arrives in Stage 2."""
+"""Video device enumeration and camera permission (macOS: AVFoundation; Windows: vcstudio.platform.win)."""
 from __future__ import annotations
 
 import logging
@@ -27,6 +27,13 @@ def is_own_output(name: str, model_id: str) -> bool:
 
 
 def list_video_devices() -> list[VideoDevice]:
+    from vcstudio.platform import IS_WINDOWS
+    if IS_WINDOWS:
+        try:
+            from vcstudio.platform.win.devices import list_video_devices as win_list
+        except ImportError:
+            return []              # Windows device enumeration arrives with porting stage 4
+        return win_list()
     try:
         import AVFoundation as AV  # type: ignore
     except ImportError:
@@ -46,6 +53,10 @@ def list_video_devices() -> list[VideoDevice]:
 
 
 def camera_authorization_status() -> str:
+    from vcstudio.platform import IS_WINDOWS
+    if IS_WINDOWS:
+        from vcstudio.platform.win.privacy import camera_authorization_status as win_status
+        return win_status()
     try:
         import AVFoundation as AV  # type: ignore
     except ImportError:

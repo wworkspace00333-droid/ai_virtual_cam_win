@@ -2,6 +2,7 @@
 import json
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -161,7 +162,8 @@ def test_camera_controller_retry_and_reconnect(monkeypatch):
 
 
 def test_feedback_loop_guard(ctx):
-    ctx.settings.set("input.method", "avfoundation")
+    from vcstudio.platform import DEFAULT_DEVICE_METHOD
+    ctx.settings.set("input.method", DEFAULT_DEVICE_METHOD)
     ctx.settings.set("input.device_name_hint", "AI Virtual Camera")
     ctx.settings.set("output.camera_enabled", True)
     with pytest.raises(RuntimeError, match="feed back"):
@@ -244,6 +246,7 @@ def test_memory_threshold_settings_apply_live(ctx):
     assert ctx.watchdog.warn_mb == auto
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="Carbon key codes (Windows: tests/test_ui_win.py)")
 def test_hotkey_parsing_and_native_registration():
     from vcstudio.native import metal
     from vcstudio.native.hotkeys import CMD, CTRL, OPT, SHIFT, GlobalHotkeys, parse

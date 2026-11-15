@@ -11,6 +11,8 @@ import threading
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from vcstudio.platform import COMPOSITORS, DEFAULT_DEVICE_METHOD, INPUT_METHODS
+
 from .jsonio import atomic_write_json, deep_merge, read_json
 from .paths import AppPaths
 
@@ -62,7 +64,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "version": SETTINGS_VERSION,
     "active_profile": "Default",
     "input": {
-        "method": "avfoundation",  # avfoundation | test_pattern | obs_ipc
+        # camera device (macOS: avfoundation; Windows: mediafoundation | directshow) | obs_ipc | test_pattern
+        "method": DEFAULT_DEVICE_METHOD,
         "device_unique_id": None,
         "device_name_hint": "OBS Virtual Camera",
         "preferred_width": 1920,
@@ -96,18 +99,19 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "global_hotkeys": True,
         "language": "auto",          # auto (macOS preferred language) | en | ru; applied at next start
     },
-    "processing": {"compositor": "auto"},     # auto (Metal if available) | metal | cpu
+    "processing": {"compositor": "auto"},     # auto (GPU if available) | metal (macOS) / d3d11 (Windows) | cpu
     "hotkeys": dict(DEFAULT_HOTKEYS),
     "logging": {"level": "INFO", "max_bytes": 5_000_000, "backup_count": 5},
 }
 
 _ALLOWED = {
-    ("input", "method"): {"avfoundation", "test_pattern", "obs_ipc"},
+    # Settings copied from another OS (e.g. "avfoundation" on Windows) are repaired to this OS's default.
+    ("input", "method"): {k for k, _ in INPUT_METHODS},
     ("output", "pixel_format"): {"BGRA", "NV12"},
     ("performance", "mode"): set(PERFORMANCE_MODES),
     ("performance", "memory_limits"): {"auto", "manual"},
     ("logging", "level"): {"DEBUG", "INFO", "WARNING", "ERROR"},
-    ("processing", "compositor"): {"auto", "metal", "cpu"},
+    ("processing", "compositor"): {k for k, _ in COMPOSITORS},
     ("ui", "language"): {"auto", "en", "ru"},
 }
 _RANGES = {

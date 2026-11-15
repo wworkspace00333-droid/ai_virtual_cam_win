@@ -315,19 +315,35 @@ class Compositor:
 
     # ------------------------------------------------------------------ backend
     def set_backend(self, which: str) -> str:
-        """auto | metal | cpu. Returns the backend actually in use."""
+        """auto | metal (macOS) | d3d11 (Windows) | cpu. Returns the backend actually in use.
+
+        `self.metal` holds this platform's GPU backend (the attribute keeps its historical name):
+        MetalBackend on macOS, D3D11Backend (vcstudio/platform/win/d3d11.py) on Windows."""
         with self._lock:
             return self._set_backend(which)
 
-    def _set_backend(self, which: str) -> str:
-        if which in ("auto", "metal") and self.metal is None:
+    @staticmethod
+    def _make_gpu_backend():
+        from vcstudio.platform import IS_WINDOWS
+        if IS_WINDOWS:
             try:
-                self.metal = MetalBackend()
+                from vcstudio.platform.win.d3d11 import D3D11Backend
+            except ImportError:
+                raise RuntimeError("Direct3D 11 compositor arrives with porting stage 7; using the CPU") from None
+            return D3D11Backend()
+        return MetalBackend()
+
+    def _set_backend(self, which: str) -> str:
+        from vcstudio.platform import GPU_COMPOSITOR
+        gpu = which in ("auto", GPU_COMPOSITOR)
+        if gpu and self.metal is None:
+            try:
+                self.metal = self._make_gpu_backend()
                 self.backend_error = ""
             except Exception as e:
                 self.backend_error = str(e)
-                log.warning("Metal backend unavailable, using CPU: %s", e)
-        self.active = self.metal if (which in ("auto", "metal") and self.metal is not None) else self.cpu
+                log.warning("GPU compositor unavailable, using CPU: %s", e)
+        self.active = self.metal if (gpu and self.metal is not None) else self.cpu
         self.stats.backend = self.active.name
         return self.active.name
 
@@ -571,7 +587,7 @@ class Compositor:
         return out
 
     def _metal_failed(self, e: Exception) -> None:
-        self.backend_error = f"Metal render failed, switched to CPU: {e}"
+        self.backend_error = f"GPU ({self.active.name}) render failed, switched to CPU: {e}"
         log.error(self.backend_error)
         self.active = self.cpu
         self.stats.backend = "cpu"

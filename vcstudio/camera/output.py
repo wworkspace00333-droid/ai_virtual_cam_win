@@ -33,6 +33,17 @@ OUTPUT_TARGETS = {
                         "input with Direct OBS frame transfer (the vcstudio-obs plugin), not from OBS Virtual Camera."),
 }
 
+from vcstudio.platform import IS_WINDOWS  # noqa: E402
+
+if IS_WINDOWS:
+    # Windows: the app's own camera (DirectShow + Media Foundation, native/win). The sink name is the
+    # shared-memory channel the camera DLLs read from.
+    OUTPUT_TARGETS = {
+        "ai": OutputTarget("ai", f"{CAMERA_NAME} (this app's Windows camera)", CAMERA_NAME, SINK_NAME,
+                           f"Other apps select “{CAMERA_NAME}”. Needs the camera components installed "
+                           "(the Windows installer registers them)."),
+    }
+
 
 def target_for(device: str, sink: str) -> str:
     """Key of the preset matching device+sink, or "custom"."""

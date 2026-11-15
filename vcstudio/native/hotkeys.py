@@ -99,3 +99,10 @@ class GlobalHotkeys:
     @property
     def count(self) -> int:
         return int(self.lib.vcs_hotkey_count()) if self.available else 0
+
+
+# Windows: RegisterHotKey implementation with the same interface (vcstudio/platform/win/hotkeys.py).
+from vcstudio.platform import IS_WINDOWS as _IS_WINDOWS  # noqa: E402
+
+if _IS_WINDOWS:
+    from vcstudio.platform.win.hotkeys import GlobalHotkeys, parse  # noqa: F401,F811,E402

@@ -672,4 +672,81 @@ RU: dict[str, str] = {
     "Press shortcut": "Нажмите сочетание клавиш",
     "Track objects": "Отслеживать объекты",
     "Game card {n}": "Карточка {n}",
+    # ---- Windows build (vcstudio/platform: text(), DEVICE_METHODS, COMPOSITORS) ----
+    "Camera device (Media Foundation): OBS Virtual Camera": "Камера (Media Foundation): OBS Virtual Camera",
+    "Camera device (DirectShow): OBS Virtual Camera": "Камера (DirectShow): OBS Virtual Camera",
+    "Automatic (Direct3D 11 GPU if available)": "Автоматически (видеокарта Direct3D 11, если доступна)",
+    "Direct3D 11 GPU": "Видеокарта Direct3D 11",
+    "Windows asks apps for camera access in Settings → Privacy & security → Camera.":
+        "Доступ приложений к камере настраивается в «Параметры → Конфиденциальность и защита → Камера».",
+    "Denied. Turn on “Camera access” and “Let desktop apps access your camera” in Settings → Privacy & security → "
+    "Camera, then restart capture.":
+        "Запрещено. Включите «Доступ к камере» и «Разрешить классическим приложениям доступ к камере» в «Параметры → "
+        "Конфиденциальность и защита → Камера», затем перезапустите захват.",
+    "Automatic (Windows display language)": "Автоматически (язык интерфейса Windows)",
+    "With “System-wide” on, shortcuts work even when another app is in front (Windows RegisterHotKey; no "
+    "administrator rights needed). A shortcut another app already owns is reported and falls back to an in-app "
+    "shortcut.":
+        "С включённым «Во всей системе» сочетания работают, даже когда впереди другое приложение (Windows "
+        "RegisterHotKey; права администратора не нужны). Если сочетание уже занято другим приложением, это будет "
+        "показано, и оно будет работать только внутри приложения.",
+    "Automatic: {mb} MB for this PC's {gb} GB": "Автоматически: {mb} МБ для {gb} ГБ этого компьютера",
+    "drop photos here or paste with Ctrl+V": "перетащите фото сюда или вставьте Ctrl+V",
+    "The game's camera picture was not found on screen ({e}). Make sure the game is visible on the main display "
+    "(not minimised or covered by another window) and shows this camera.":
+        "Картинка камеры в игре не найдена на экране ({e}). Проверьте, что игра видна на основном мониторе (не "
+        "свёрнута и не закрыта другим окном) и показывает эту камеру.",
+    "Operating mode and live resource usage. Mode FPS values are targets; measure this PC with "
+    "scripts/benchmark.py.":
+        "Режим работы и текущая загрузка. Значения FPS режимов — целевые; замер на этом компьютере — "
+        "scripts/benchmark.py.",
+    "AI Virtual Camera Studio is already running (process {pid}). Two copies would fight over the output camera, so "
+    "this one will close. Switch to the open window in the taskbar.":
+        "AI Virtual Camera Studio уже запущена (процесс {pid}). Две копии мешали бы друг другу на выходной камере, "
+        "поэтому эта закроется. Переключитесь на открытое окно на панели задач.",
+    "Where processed video goes. “{camera}” is this app's own Windows camera: a DirectShow camera for Windows 10/11 "
+    "and a Media Foundation camera for Windows 11, registered by the installer.":
+        "Куда идёт обработанное видео. «{camera}» — собственная камера приложения для Windows: камера DirectShow для "
+        "Windows 10/11 и камера Media Foundation для Windows 11, их регистрирует установщик.",
+    "One click: the app pauses its own processing, sends a 1080p60 test scene and then your OBS video through AI and "
+    "the compositor into the selected camera, receives it like Zoom or the Camera app would, and shows frame rate, "
+    "dropped frames, latency and whether the processing is visible. About 30 seconds.":
+        "Одним нажатием: приложение приостанавливает свою обработку, отправляет тестовую сцену 1080p60, затем ваше "
+        "видео из OBS через ИИ и компоновщик в выбранную камеру, принимает его как Zoom или приложение «Камера» и "
+        "показывает частоту кадров, потери, задержку и видна ли обработка. Около 30 секунд.",
+    "Send a moving, numbered test pattern to the selected output camera, then select that camera in the Camera app, "
+    "Zoom, Microsoft Teams, Google Chrome or Discord. The loopback test captures the camera like a client app and "
+    "measures delivered frames and latency.":
+        "Отправьте движущийся нумерованный тестовый шаблон в выбранную камеру и выберите её в приложении «Камера», "
+        "Zoom, Microsoft Teams, Google Chrome или Discord. Петлевой тест захватывает камеру как клиентское "
+        "приложение и измеряет доставленные кадры и задержку.",
+    "Working… Windows asks for administrator rights to register the camera.":
+        "Выполняется… Windows запросит права администратора для регистрации камеры.",
+    "Remove “{camera}” from this PC?": "Удалить «{camera}» с этого компьютера?",
+    "Allow camera access in Settings > Privacy & security > Camera.":
+        "Разрешите доступ к камере в «Параметры > Конфиденциальность и защита > Камера».",
+    "Restart Windows to finish.": "Перезагрузите Windows, чтобы завершить.",
+    "Setup tool": "Установщик камеры",
+    "Open camera privacy settings": "Открыть параметры доступа к камере",
+    "Camera components": "Компоненты камеры",
+    "Registered camera components": "Зарегистрированные компоненты камеры",
+    "File": "Файл",
+    "File exists": "Файл на месте",
+    "DirectShow camera (Windows 10/11)": "Камера DirectShow (Windows 10/11)",
+    "Media Foundation camera (Windows 11)": "Камера Media Foundation (Windows 11)",
+    "AI Virtual Camera (this app's Windows camera)": "AI Virtual Camera (камера этого приложения для Windows)",
+    "Other apps select “AI Virtual Camera”. Needs the camera components installed (the Windows installer registers "
+    "them).":
+        "В других приложениях выберите «AI Virtual Camera». Нужны установленные компоненты камеры (их регистрирует "
+        "установщик Windows).",
+    "Not installed. The AI Virtual Camera components (native/win) are built and registered by the Windows "
+    "installer; they are not present in this build yet.":
+        "Не установлена. Компоненты AI Virtual Camera (native/win) собирает и регистрирует установщик Windows; в "
+        "этой сборке их пока нет.",
+    "Camera components found but not registered: click Install (administrator rights needed).":
+        "Компоненты камеры найдены, но не зарегистрированы: нажмите «Установить» (нужны права администратора).",
+    "Camera-device capture on Windows arrives with porting stage 4; use the test pattern until then.":
+        "Захват с камеры на Windows появится на этапе порта 4; до этого используйте тестовый шаблон.",
+    "Direct3D 11 compositor arrives with porting stage 7; using the CPU":
+        "Компоновщик Direct3D 11 появится на этапе порта 7; используется CPU",
 }
