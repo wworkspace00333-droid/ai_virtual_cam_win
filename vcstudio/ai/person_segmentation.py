@@ -66,10 +66,16 @@ class BackgroundSegmenter:
         self.backend = ""
         self.ms = 0.0
         self.runs = 0
+        self.rate_scale = 1.0                      # set by the resource scheduler (vcstudio/core/scheduler.py)
+        from vcstudio.core.performance import FpsCounter
+        self._rate = FpsCounter(2.0)
 
     @property
     def running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
+
+    def rate_fps(self) -> float:
+        return self._rate.rate()
 
     def start(self) -> None:
         if self.running:
@@ -95,8 +101,8 @@ class BackgroundSegmenter:
             self.error = f"{type(e).__name__}: {e}"
             log.error("Background segmentation unavailable: %s", self.error)
             return
-        period = 1.0 / max(1.0, self.fps)
         while not stop.is_set():
+            period = 1.0 / max(1.0, self.fps * self.rate_scale)   # re-read: the scheduler changes it at any time
             t0 = time.perf_counter()
             frame, ver = self.capture.slot.wait_newer(last_ver, timeout=0.25)
             if frame is None or ver == last_ver:
@@ -115,6 +121,7 @@ class BackgroundSegmenter:
                 break
             self.masks.put(prev)
             self.runs += 1
+            self._rate.tick()
             self.ms = (time.perf_counter() - t0) * 1000
             rest = period - (time.perf_counter() - t0)
             if rest > 0:

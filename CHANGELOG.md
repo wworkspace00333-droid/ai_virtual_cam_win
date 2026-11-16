@@ -23,6 +23,13 @@ Fixes from the 0.5 audit (docs/WINDOWS_AUDIT_0.5.md, P0).
   rate and ratcheted down to the floor; it now scales from the unthrottled rate (D26).
 
 ### Added
+- **Resource scheduler** (P2.1, `vcstudio/core/scheduler.py`): one governor for the optional heavy modules. When the
+  output falls below the input rate, the least important active module slows first — background segmentation
+  (15 → 5 fps), then detection (down to 25 %) — and the most important recovers first when there is headroom. The
+  Performance page has an "AI resources" panel (module, priority, rate, fps, cost, state, reason); every step is
+  recorded in the journal. Live on the 2-core server with background blur + people + face hiding at 1080p60: both
+  modules reached their floors within 21 s as designed, but the output stayed at 21–28 fps — the remaining cost is
+  blending the background into every 1080p frame on the CPU (≈ 20 ms), which needs a graphics card.
 - Video file input: start position, Pause and "From the start" buttons, position readout (P1.6).
 - Replacement by silhouette without a segmentation model: when SAM 2.1 is installed (Detection page → Download
   models) and no segmentation model is, the detector's boxes get SAM 2.1 masks — only for the classes the silhouette

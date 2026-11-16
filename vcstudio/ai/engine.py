@@ -172,6 +172,15 @@ class AIEngine:
             self._stats.rate_scale = round(scale, 3)
             self._stats.rate_note = self.adaptive.reason
 
+    def set_rate_scale(self, scale: float, reason: str = "") -> None:
+        """Detector rate factor from the resource scheduler (vcstudio/core/scheduler.py): 1.0 = the mode's rate."""
+        self.adaptive.scale = max(self.adaptive.min_scale, min(1.0, float(scale)))
+        self.adaptive.reason = reason
+        with self._lock:
+            self._stats.rate_scale = round(self.adaptive.scale, 3)
+            if self._stats.rate_note != STANDBY_NOTE:
+                self._stats.rate_note = reason
+
     def set_enabled(self, enabled: bool) -> None:
         with self._lock:
             self._cfg.enabled = enabled

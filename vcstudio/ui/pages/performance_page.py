@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QButtonGroup, QGridLayout, QLabel, QRadioButton
+from PySide6.QtWidgets import QButtonGroup, QGridLayout, QLabel, QRadioButton, QTableWidget, QTableWidgetItem
 
 from vcstudio.core.config import PERFORMANCE_MODES
 from vcstudio.core.performance import ResourceSample
@@ -51,7 +51,49 @@ class PerformancePage:
         self.pipe_info = QLabel(tr("Pipeline not running.")); self.pipe_info.setObjectName("muted"); self.pipe_info.setWordWrap(True)
         pipe.layout_.addWidget(self.pipe_info)
         lay.addWidget(pipe)
+        # resource scheduler (vcstudio/core/scheduler.py): which optional module is slowed and why
+        res = Card("AI resources")
+        hint = QLabel(tr("When the PC cannot keep up, the camera keeps its frame rate: the scheduler slows the "
+                         "least important module first (background segmentation, then detection) and restores them "
+                         "when there is headroom again."))
+        hint.setObjectName("muted"); hint.setWordWrap(True)
+        res.layout_.addWidget(hint)
+        self.res_table = QTableWidget(0, 7)
+        self.res_table.setHorizontalHeaderLabels([tr(h) for h in ("Module", "Priority", "Rate", "FPS", "Cost",
+                                                                   "State", "Reason")])
+        self.res_table.horizontalHeader().setStretchLastSection(True)
+        self.res_table.verticalHeader().setVisible(False)
+        self.res_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.res_table.setMinimumHeight(110)
+        res.layout_.addWidget(self.res_table)
+        self.res_info = QLabel("—"); self.res_info.setObjectName("muted"); self.res_info.setWordWrap(True)
+        res.layout_.addWidget(self.res_info)
+        lay.addWidget(res)
         lay.addStretch()
+
+    MODULE_LABELS = {"background": "Background segmentation", "detector": "Detection (objects, faces)"}
+    LOAD_LABELS = {"idle": "no video", "ok": "keeping up", "overloaded": "overloaded", "recovering": "recovering"}
+
+    def on_scheduler(self, st) -> None:
+        mods = st.modules
+        self.res_table.setRowCount(len(mods))
+        for i, m in enumerate(mods):
+            base, standby = (m.state[:-len(" (standby)")], True) if m.state.endswith(" (standby)") else (m.state, False)
+            state = tr(base) + (" (" + tr("standby") + ")" if standby else "")
+            cells = (tr(self.MODULE_LABELS.get(m.name, m.name)), str(m.priority),
+                     f"{m.scale:.0%}" if m.active else "—", f"{m.rate_fps:.1f}" if m.active else "—",
+                     f"{m.cost_ms:.0f} " + tr("ms") if m.active and m.cost_ms else "—",
+                     state if m.active else tr("off"), m.reason)
+            for j, v in enumerate(cells):
+                it = self.res_table.item(i, j)
+                if it is None:
+                    it = QTableWidgetItem()
+                    self.res_table.setItem(i, j, it)
+                it.setText(v)
+        self.res_info.setText(tr("Load: {load} · output {out} / input {inp} fps · steps down {d}, up {u}",
+                                 load=tr(self.LOAD_LABELS.get(st.load, st.load)), out=f"{st.output_fps:.0f}",
+                                 inp=f"{st.input_fps:.0f}", d=st.steps_down, u=st.steps_up)
+                              + (f" · {st.last_action}" if st.last_action else ""))
 
     def _mode_changed(self, btn, checked):
         if checked:

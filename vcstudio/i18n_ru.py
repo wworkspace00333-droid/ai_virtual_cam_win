@@ -211,6 +211,24 @@ RU: dict[str, str] = {
     "Video file": "Видеофайл",
     "Low disk space: {mb} MB free": "Мало места на диске: свободно {mb} МБ",
     "From the start": "С начала",
+    "AI resources": "Ресурсы ИИ",
+    "When the PC cannot keep up, the camera keeps its frame rate: the scheduler slows the least important module "
+    "first (background segmentation, then detection) and restores them when there is headroom again.":
+        "Когда компьютер не успевает, камера сохраняет частоту кадров: планировщик сначала замедляет наименее важный "
+        "модуль (сегментацию фона, затем распознавание) и возвращает их, когда снова появляется запас.",
+    "Module": "Модуль",
+    "Rate": "Темп",
+    "Cost": "Затраты",
+    "Reason": "Причина",
+    "standby": "ожидание",
+    "Background segmentation": "Сегментация фона",
+    "Detection (objects, faces)": "Распознавание (объекты, лица)",
+    "no video": "нет видео",
+    "keeping up": "успевает",
+    "overloaded": "перегрузка",
+    "recovering": "восстановление",
+    "Load: {load} · output {out} / input {inp} fps · steps down {d}, up {u}":
+        "Нагрузка: {load} · выход {out} / вход {inp} к/с · замедлений {d}, восстановлений {u}",
     "Change on the Input page": "Изменить на странице «Ввод»",
     "Start at": "Начать с",
     "Playback and every loop start here.": "Отсюда начинается воспроизведение и каждый повтор.",

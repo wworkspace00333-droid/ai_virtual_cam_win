@@ -171,6 +171,7 @@ class MainWindow(QMainWindow):
         ps = self.ctx.pipeline.stats()
         self.dashboard.on_pipeline(ps)
         self.performance.on_pipeline(ps, self.ctx.ai.stats(), self.ctx.watchdog.stats)
+        self.performance.on_scheduler(self.ctx.scheduler.status)
         self.dashboard.on_ai(self.ctx.ai.stats())
         self.status_capture.setText(tr("Capture: {state}", state=tr(cs.state.replace('_', ' ')))
                                     + (f" · {cs.measured_fps:.0f} fps" if cs.state in ("running", "frozen") else "")

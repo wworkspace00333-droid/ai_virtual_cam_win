@@ -62,9 +62,28 @@ class AppContext:
         from vcstudio.replacement.background import BackgroundService
         self.background = BackgroundService(self.capture, self.assets)       # blur / replace behind people
         self.pipeline.background = self.background
-        # adaptive detector rate: output vs input rate (only while the pipeline runs; otherwise nothing is judged)
-        self.ai.load_probe = lambda: ((self.pipeline.output_fps(), self.capture.stats().measured_fps)
-                                      if self.pipeline.running else (0.0, 0.0))
+        # Resource scheduler: one governor for the optional heavy modules (vcstudio/core/scheduler.py). It watches
+        # output vs input rate (only while the pipeline runs) and slows background segmentation first, then the
+        # detector. The AI engine's own load probe is off: the scheduler sets its rate factor.
+        from vcstudio.core.scheduler import Module, ResourceScheduler
+        self.ai.load_probe = None
+        self.scheduler = ResourceScheduler(
+            lambda: ((self.pipeline.output_fps(), self.capture.stats().measured_fps)
+                     if self.pipeline.running else (0.0, 0.0)),
+            event_sink=lambda level, msg: self.db.log_event(level, "scheduler", msg))
+        seg = self.background.seg
+        self.scheduler.add(Module(
+            "background", priority=1, min_scale=1 / 3,
+            active=lambda: self.background.active and seg.running,
+            apply=lambda s, why: setattr(seg, "rate_scale", s),
+            rate_fps=seg.rate_fps, cost_ms=lambda: seg.ms,
+            state=lambda: "error" if seg.error else ("running" if seg.running else "stopped")))
+        self.scheduler.add(Module(
+            "detector", priority=2, min_scale=self.ai.adaptive.min_scale,
+            active=lambda: self.ai.running and self.ai.config()[0].enabled,
+            apply=self.ai.set_rate_scale,
+            rate_fps=lambda: self.ai.stats().achieved_fps, cost_ms=lambda: self.ai.stats().inference_ms_avg,
+            state=lambda: self.ai.stats().state + (" (standby)" if not self.ai.config()[0].detector_needed else "")))
         self.watchdog = Watchdog(self)
         mode = self.profiles.active()["body"].get("performance_mode")
         if mode and mode != self.settings.get("performance.mode"):
@@ -175,6 +194,7 @@ class AppContext:
         self.background.start()
         self.pipeline.start()
         self.watchdog.start()
+        self.scheduler.start()
 
     def feedback_loop_risk(self) -> str:
         """Non-empty if the configured input is the device we output to (would feed back into itself)."""
@@ -186,6 +206,7 @@ class AppContext:
         return ""
 
     def stop_capture(self) -> None:
+        self.scheduler.stop()
         self.watchdog.stop()
         self.pipeline.stop()
         self.background.stop()
@@ -195,6 +216,7 @@ class AppContext:
 
     def shutdown(self) -> None:
         log.info("Shutting down")
+        self.scheduler.stop()
         self.watchdog.stop()
         self.pipeline.stop()
         self.background.stop()
