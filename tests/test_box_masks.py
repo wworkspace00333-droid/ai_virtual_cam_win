@@ -1,0 +1,122 @@
+"""Silhouettes without a segmentation model (roadmap P1.2): YOLOX boxes + a SAM 2.1 mask per box."""
+from __future__ import annotations
+
+import sys
+
+import numpy as np
+import pytest
+
+from vcstudio.ai.detection import Detection, DetectionConfig
+from vcstudio.core.profiles import default_profile_body
+from vcstudio.roi.model import ROI
+
+
+class FakeDet:
+    name = "fake"
+    loaded = None
+
+    def __init__(self, dets):
+        self.dets = dets
+
+    def detect(self, frame, conf=0.25, iou=0.5):
+        return [Detection(d.label, d.confidence, d.x0, d.y0, d.x1, d.y1) for d in self.dets], 1.0
+
+
+class FakeSam:
+    def __init__(self):
+        self.images = 0
+        self.boxes = []
+
+    def set_image(self, img):
+        self.images += 1
+        self._shape = img.shape[:2]
+
+    def mask_from_box(self, box):
+        self.boxes.append(box)
+        m = np.zeros(self._shape, bool)
+        x0, y0, x1, y1 = (int(v) for v in box)
+        m[y0 + 2:y1 - 2, x0 + 2:x1 - 2] = True
+        return m, 0.9
+
+
+def frame(w=320, h=240):
+    from vcstudio.core.frame import Frame
+    return Frame(1, 0, 0, w, h, array=np.zeros((h, w, 4), np.uint8))
+
+
+def test_masks_only_for_the_wanted_classes_and_at_most_n():
+    from vcstudio.ai.open_vocab import BoxMaskDetector
+    dets = [Detection("person", 0.9 - i * 0.1, 10 + i * 30, 10, 40 + i * 30, 100) for i in range(6)]
+    dets.append(Detection("car", 0.95, 200, 120, 300, 200))
+    sam = FakeSam()
+    bm = BoxMaskDetector(FakeDet(dets), mask_classes=["person"], max_masks=4, segmenter=sam)
+    out, _ = bm.detect(frame())
+    assert sam.images == 1 and len(sam.boxes) == 4 and bm.masked == 4       # one encode, four masks
+    masked = [d for d in out if d.mask is not None]
+    assert {d.label for d in masked} == {"person"}
+    assert sorted(d.confidence for d in masked) == pytest.approx([0.6, 0.7, 0.8, 0.9])   # the most confident
+    assert next(d for d in out if d.label == "car").mask is None
+    m = masked[0].mask
+    assert m.dtype == np.uint8 and m.max() == 255 and m[0, 0] == 0        # box-local silhouette format
+    sam2 = FakeSam()
+    out, _ = BoxMaskDetector(FakeDet([]), segmenter=sam2).detect(frame())
+    assert out == [] and sam2.images == 0                                 # nothing to mask: no SAM work
+
+
+def test_mask_classes_come_from_the_silhouette_regions():
+    def obj_roi(classes):
+        r = ROI(mode="auto", classes=classes)
+        r.replacement = {"enabled": True, "mode": "object"}
+        return r.to_dict()
+    b = default_profile_body()
+    b["rois"] = [obj_roi(["person"]), obj_roi(["dog"])]
+    c = DetectionConfig.from_profile(b)
+    assert c.need_masks and c.mask_classes == ["dog", "person"]
+    b["rois"].append(obj_roi([]))                                          # one region takes any class
+    assert DetectionConfig.from_profile(b).mask_classes == []
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows models")
+def test_engine_uses_box_masks_when_no_segmentation_model(tmp_path, monkeypatch):
+    from vcstudio.ai import open_vocab
+    from vcstudio.ai.engine import AIEngine
+    from vcstudio.ai.model_manager import ModelManager
+    from vcstudio.core.capture_supervisor import CaptureSupervisor
+    eng = AIEngine(CaptureSupervisor(), ModelManager(tmp_path))
+    real = eng.models.available
+    monkeypatch.setattr(eng.models, "available", lambda *a, **k: {k2: v for k2, v in real().items() if v.task != "segment"})
+    monkeypatch.setattr(open_vocab, "sam_available", lambda: True)
+    monkeypatch.setattr(open_vocab, "PromptSegmenter", lambda *a, **k: FakeSam())
+    cfg = DetectionConfig(need_masks=True, mask_classes=["person"], detector_model="yolox_nano")
+    eng.configure(cfg, "balanced")
+    eng._ensure_models(cfg, "balanced")
+    det = eng._detector
+    assert isinstance(det, open_vocab.BoxMaskDetector) and det.det.name == "yolox_nano"
+    eng._ensure_models(DetectionConfig(need_masks=True, mask_classes=["dog"], detector_model="yolox_nano"), "balanced")
+    assert eng._detector is det and det.mask_classes == ["dog"]            # no reload for new classes
+    eng._ensure_models(DetectionConfig(detector_model="yolox_nano"), "balanced")
+    assert not isinstance(eng._detector, open_vocab.BoxMaskDetector)       # masks no longer needed: plain detector
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows models")
+def test_real_sam_silhouettes_on_the_sample_photo():
+    from vcstudio.ai import open_vocab
+    if not open_vocab.sam_available():
+        pytest.skip("SAM 2.1 not downloaded (Detection page -> Download models)")
+    from vcstudio.ai.backend import make_detector
+    from vcstudio.ai.model_manager import ModelManager
+    from vcstudio.ai.testimages import load_bgra
+    from vcstudio.core.frame import Frame
+    from vcstudio.core.resources import models_dir, sample_photo
+    mm = ModelManager(models_dir())
+    det = make_detector(mm.load(mm.available()["yolox_nano"], "cpu"))
+    img = load_bgra(sample_photo())
+    f = Frame(1, 0, 0, img.shape[1], img.shape[0], array=img)
+    bm = open_vocab.BoxMaskDetector(det, "cpu", ["person"])
+    out, ms = bm.detect(f, 0.3, 0.5)
+    people = [d for d in out if d.label == "person" and d.mask is not None]
+    assert len(people) >= 3
+    for d in people:
+        fill = (d.mask > 127).mean()
+        assert 0.15 < fill < 0.95, fill                                    # a silhouette, not empty or the whole box
+    print(f"\nSAM silhouettes: {len(people)} people, {ms:.0f} ms per frame incl. detector (CPU)")

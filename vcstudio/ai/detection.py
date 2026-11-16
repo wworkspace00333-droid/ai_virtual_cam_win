@@ -68,6 +68,8 @@ class DetectionConfig:
     # some enabled region follows detected objects (auto / hybrid, "Hide face", silhouettes, any object by text);
     # when False only manual regions (or none) use the frame, and the detector runs at a standby rate
     detector_needed: bool = True
+    # classes the silhouette regions replace (empty = any class): masks are only computed for these
+    mask_classes: list[str] = field(default_factory=list)
 
     @property
     def open_vocab(self) -> bool:
@@ -78,8 +80,13 @@ class DetectionConfig:
         ai, det = body.get("ai", {}), body.get("detection", {})
         open_vocab_on = bool((ai.get("open_vocab") or {}).get("enabled"))
         follows = any(r.get("enabled", True) and r.get("mode", "manual") != "manual" for r in body.get("rois", []))
+        obj_rois = [r for r in body.get("rois", []) if r.get("enabled", True) and r.get("mode") != "manual"
+                    and (r.get("replacement") or {}).get("enabled") and (r.get("replacement") or {}).get("mode") == "object"]
+        mask_classes = [] if any(not r.get("classes") for r in obj_rois) else \
+            sorted({c for r in obj_rois for c in r.get("classes", [])})
         return cls(
             detector_needed=follows or open_vocab_on,
+            mask_classes=mask_classes,
             enabled=bool(ai.get("enabled", True)),
             detector_model=ai.get("detector_model") or "auto",
             compute_units=ai.get("compute_units", "all"),

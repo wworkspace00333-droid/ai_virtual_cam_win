@@ -24,6 +24,10 @@ Fixes from the 0.5 audit (docs/WINDOWS_AUDIT_0.5.md, P0).
 
 ### Added
 - Video file input: start position, Pause and "From the start" buttons, position readout (P1.6).
+- Replacement by silhouette without a segmentation model: when SAM 2.1 is installed (Detection page → Download
+  models) and no segmentation model is, the detector's boxes get SAM 2.1 masks — only for the classes the silhouette
+  regions use, at most 4 objects per frame (P1.2, D6). On this server's CPU: 4 people in 3.9 s per frame — it works,
+  but following movement live needs a graphics card.
 
 ### Changed
 - The CI installer build uses a pinned FFmpeg (dated BtbN build + SHA-256) instead of the daily "latest" (D3).

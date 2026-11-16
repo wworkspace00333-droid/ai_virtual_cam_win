@@ -266,6 +266,40 @@ def local_mask(full: np.ndarray, box: tuple[float, float, float, float], max_sid
     return cv2.resize(crop, (ow, oh), interpolation=cv2.INTER_LINEAR)
 
 
+class BoxMaskDetector:
+    """Silhouettes without a segmentation model: the COCO detector's boxes, and a SAM 2.1 mask per box (object
+    replacement needs masks; YOLO-seg is AGPL and not shipped). Masks are made only for `mask_classes` (empty = any)
+    and for at most `max_masks` objects per frame, most confident first; the rest keep their boxes (no mask)."""
+
+    def __init__(self, detector, compute_units: str = "all", mask_classes: list[str] | None = None,
+                 max_masks: int = 4, segmenter=None):
+        self.det = detector
+        self.sam = segmenter if segmenter is not None else PromptSegmenter(compute_units)
+        self.mask_classes = list(mask_classes or [])
+        self.max_masks = max_masks
+        self.name = f"{detector.name}+sam2.1"
+        self.loaded = getattr(detector, "loaded", None)
+        self.backend = getattr(detector, "backend", "")
+        self.masked = 0                                   # masks made in the last frame (stats / tests)
+
+    def detect(self, frame, conf: float = 0.25, iou: float = 0.5) -> tuple[list[Detection], float]:
+        t0 = time.perf_counter()
+        dets, _ = self.det.detect(frame, conf, iou)
+        want = [i for i, d in enumerate(dets) if not self.mask_classes or d.label in self.mask_classes]
+        want = sorted(want, key=lambda i: -dets[i].confidence)[: self.max_masks]
+        self.masked = 0
+        if want:
+            with frame.bgra() as img:
+                self.sam.set_image(img)
+            for i in want:
+                d = dets[i]
+                full, _q = self.sam.mask_from_box((d.x0, d.y0, d.x1, d.y1))
+                dets[i] = Detection(d.label, d.confidence, d.x0, d.y0, d.x1, d.y1, d.class_id, f"{d.source}+sam",
+                                    mask=local_mask(full, (d.x0, d.y0, d.x1, d.y1)))
+                self.masked += 1
+        return dets, (time.perf_counter() - t0) * 1000
+
+
 class OpenVocabPipeline:
     """The AI engine's detector for "any object": OWLv2 boxes for the text queries, and with masks=True a SAM 2.1
     silhouette per box (object replacement needs it). Same interface as the other detectors."""

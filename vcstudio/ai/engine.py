@@ -352,6 +352,9 @@ class AIEngine:
         if cfg.open_vocab:
             self._ensure_open_vocab(cfg)
             return
+        if cfg.need_masks and self._use_box_masks(cfg):
+            self._ensure_box_masks(cfg, mode)
+            return
         # Silhouette replacement needs masks: the segmentation model replaces the detector
         # (it also returns boxes and classes), so only one model is resident.
         task, name = ("segment", cfg.segmentation_model) if cfg.need_masks else ("detect", cfg.detector_model)
@@ -368,6 +371,33 @@ class AIEngine:
             self._sink("ERROR", "ai", f"Model {name} failed: {e}; falling back to the automatic choice")
             log.error("Model %s failed (%s); falling back to the automatic choice", name, e)
             self._switch_to(self._wanted(task, "auto", mode), cfg)
+
+    def _use_box_masks(self, cfg: DetectionConfig) -> bool:
+        """No segmentation model installed (YOLO-seg is not shipped) but SAM 2.1 is: masks from detector boxes."""
+        if cfg.segmentation_model not in ("auto", "", None):
+            return False                         # the user picked a segmentation model explicitly
+        if any(m.task == "segment" for m in self.models.available().values()):
+            return False
+        from vcstudio.ai.open_vocab import sam_available
+        return sam_available()
+
+    def _ensure_box_masks(self, cfg: DetectionConfig, mode: str) -> None:
+        from vcstudio.ai.open_vocab import BoxMaskDetector
+        want = self._wanted("detect", cfg.detector_model, mode)
+        cur = self._detector
+        if isinstance(cur, BoxMaskDetector) and cur.det.name == want.name and \
+                getattr(cur.loaded, "compute_units", cfg.compute_units) == cfg.compute_units:
+            cur.mask_classes = list(cfg.mask_classes)
+            return
+        if isinstance(cur, BoxMaskDetector):
+            self._detector = cur.det             # _switch_to compares plain detector names
+        self._switch_to(want, cfg)
+        t0 = time.perf_counter()
+        self._detector = BoxMaskDetector(self._detector, cfg.compute_units, cfg.mask_classes)
+        with self._lock:
+            self._stats.model = self._detector.name
+            self._stats.model_load_s = round(self._stats.model_load_s + time.perf_counter() - t0, 2)
+        log.info("Silhouettes from %s boxes + SAM 2.1 (no segmentation model installed)", want.name)
 
     def _wanted(self, task: str, name, mode: str):
         want = None
