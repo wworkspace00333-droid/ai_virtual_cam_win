@@ -20,7 +20,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "scripts"))
 
-from integration_faults import Client, desktop_env, make_app, obs_pids, summary, visible_windows  # noqa: E402
+from integration_faults import (Client, desktop_env, make_app, obs_close, obs_pids, obs_start, summary,  # noqa: E402
+                                visible_windows)
 
 
 def main(out_path: str, shot: str | None) -> int:
@@ -29,9 +30,10 @@ def main(out_path: str, shot: str | None) -> int:
     res: dict = {"ok": False, "home": home}
     proc = None
     client = Client()
+    started_obs = not obs_pids()             # OBS started here is closed again at the end
     try:
-        if not obs_pids():
-            raise RuntimeError("start OBS with the VCS-E2E scene first (scripts/obs_e2e_scene.py)")
+        if started_obs:
+            obs_start(); time.sleep(8)
         ctx = make_app()                        # same profile as the fault test; saved to the data folder
         ctx.settings.set("input.autostart", True)
         ctx.stop_capture(); ctx.shutdown()
@@ -81,6 +83,11 @@ def main(out_path: str, shot: str | None) -> int:
         client.stop()
         if proc and proc.poll() is None:
             proc.kill()
+        if started_obs and obs_pids():
+            try:
+                res["obs_closed_at_end_s"] = round(obs_close(), 2)
+            except Exception as e:
+                res["obs_close_error"] = str(e)
         Path(out_path).write_text(json.dumps(res, indent=2), encoding="utf-8")
         print(json.dumps({k: v for k, v in res.items() if k != "traceback"}, indent=1))
 

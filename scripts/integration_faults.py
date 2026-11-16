@@ -186,8 +186,9 @@ def main(out_path: str) -> int:
     states: list[tuple[float, str]] = []
     ctx = None
     stop_watch = threading.Event()
+    started_obs = not obs_pids()       # OBS that this run started is closed again at the end (scenario B restarts it)
     try:
-        if not obs_pids():
+        if started_obs:
             obs_start(); time.sleep(8)
         ctx = make_app()
         holder = {"ctx": ctx}
@@ -263,6 +264,11 @@ def main(out_path: str) -> int:
         client.stop()
         if ctx is not None:
             ctx.shutdown()
+        if started_obs and obs_pids():
+            try:
+                res["obs_closed_at_end_s"] = round(obs_close(), 2)
+            except Exception as e:      # never hide the run's own result
+                res["obs_close_error"] = str(e)
         Path(out_path).write_text(json.dumps(res, indent=2), encoding="utf-8")
         print(json.dumps({k: v for k, v in res.items() if k != "traceback"}, indent=1))
 
