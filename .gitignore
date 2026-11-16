@@ -12,3 +12,10 @@ logs/
 .DS_Store
 .venv-convert/
 !models/face_detection_yunet_2023mar.onnx
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+third_party_build/
