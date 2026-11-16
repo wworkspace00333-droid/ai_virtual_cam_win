@@ -3,7 +3,7 @@
 AI Virtual Camera Studio is proprietary software (see `LICENSE`). It includes the open-source components listed below,
 each under its own licence. The full licence texts are installed with the program in
 `<install folder>\_internal\licenses\`. The Windows installer is checked by `scripts/check_licenses.py`: no GPL or
-AGPL component is allowed in it.
+AGPL component is allowed in it, except the separately licensed OBS plugin, which ships with its source (see the end).
 
 Last reviewed: 2026-11-16, for version 0.3.2. This file is a technical record, not legal advice.
 
@@ -61,8 +61,15 @@ version, for no more than the cost of physically performing the distribution.
 Decoding H.264 / HEVC and other formats may be covered by patents in some countries. Software licences do not grant
 patent licences. The program decodes such formats only for the user's own replacement clips.
 
-## OBS plugin (open question)
+## OBS plugin (open source, GPL-2.0-or-later)
 
-`vcstudio-obs.dll`, installed into OBS Studio as an optional plugin, links against OBS's `obs.dll` (GPL-2.0-or-later).
-Its licensing is an open release item (docs/AUDIT_WIN.md, L11): the usual practice is to publish such a plugin's source
-under a GPL-compatible licence, separately from the proprietary program, which talks to it only through shared memory.
+`vcstudio-obs.dll`, installed into OBS Studio as an optional plugin, links against OBS Studio (`obs.dll`,
+`obs-frontend-api.dll`, GPL-2.0-or-later) and is therefore itself licensed under the **GNU General Public License,
+version 2 or (at your option) any later version**. It is a separate work from AI Virtual Camera Studio: the program
+does not link the plugin or OBS; the two only exchange frames through shared memory.
+
+Its complete source code (`vcstudio-obs.c`, the protocol header `vcs_frame_shm.h` — MIT licence — and the build
+scripts) and the GPL text (`COPYING`) are installed with every copy of the plugin, in `<install folder>\obs-plugin-source\`
+and `<install folder>\_internal\obs-plugin\source\`. It is built with MSVC from these files and the OBS Studio headers
+of the matching version (https://github.com/obsproject/obs-studio). You may modify and redistribute the plugin under
+the GPL.

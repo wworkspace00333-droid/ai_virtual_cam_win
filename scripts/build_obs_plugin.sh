@@ -1,4 +1,5 @@
 #!/bin/zsh
+# SPDX-License-Identifier: GPL-2.0-or-later  (build script of the GPL OBS plugin, native/obs-plugin/README.md)
 # Build (and optionally install) the vcstudio-obs OBS plugin against the installed OBS.app.
 #   scripts/build_obs_plugin.sh            -> build/obs-plugin/vcstudio-obs.plugin
 #   scripts/build_obs_plugin.sh --install  -> also copies it to ~/Library/Application Support/obs-studio/plugins/

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-or-later  (build script of the GPL OBS plugin, native/obs-plugin/README.md)
 <#
 Build the vcstudio-obs plugin for OBS Studio on Windows (x64) with MSVC.
 

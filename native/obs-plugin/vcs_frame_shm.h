@@ -1,4 +1,11 @@
+// SPDX-License-Identifier: MIT
 /*
+ * Copyright (C) 2025-2026 the AI Virtual Camera Studio authors
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this file, to deal in it without
+ * restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute,
+ * sublicense, and/or sell copies, subject to including this notice. THE FILE IS PROVIDED "AS IS", WITHOUT WARRANTY
+ * OF ANY KIND. (MIT licence; this protocol header is shared by the GPL plugin and the proprietary program.)
+ *
  * Shared-memory frame transport between the OBS plugin (writer) and AI Virtual Camera Studio (reader).
  *
  * macOS:   POSIX shared memory "/vcs-obs-frames", sized for the maximum resolution up front.

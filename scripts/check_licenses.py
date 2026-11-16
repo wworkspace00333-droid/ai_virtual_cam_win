@@ -155,6 +155,15 @@ def check_app(report: list, app: Path) -> int:
             report.append({"kind": "model", "name": str(f.relative_to(app)), "licence": "not on SHIPPED_MODELS",
                            "ok": False, "as": "in the app folder"})
             bad += 1
+    # the OBS plugin is GPL-2.0-or-later and ships by design (a separate work running inside OBS): every copy of
+    # the binary must come with its complete source and the GPL text
+    for dll in app.rglob("vcstudio-obs.dll"):
+        src = dll.parent / "source"
+        missing = [n for n in ("vcstudio-obs.c", "vcs_frame_shm.h", "COPYING", "scripts/build_obs_plugin_win.ps1")
+                   if not (src / n).exists()]
+        report.append({"kind": "gpl-src", "name": str(dll.relative_to(app)), "licence": "GPL-2.0-or-later",
+                       "ok": not missing, "as": "source shipped" if not missing else "missing: " + ", ".join(missing)})
+        bad += bool(missing)
     for need in ("LICENSE", "THIRD_PARTY_NOTICES.md"):
         if not list(app.rglob(need)):
             report.append({"kind": "notice", "name": need, "licence": "", "ok": False, "as": "missing in the app"})

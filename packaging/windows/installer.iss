@@ -79,6 +79,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; previous app folder first. The camera DLLs in _internal\native may still be loaded; those deletes fail quietly and
 ; the new copies replace them (restartreplace) below.
 Type: filesandordirs; Name: "{app}\_internal"
+Type: filesandordirs; Name: "{app}\obs-plugin-source"
 
 [Files]
 ; the camera DLLs may be loaded by Frame Server / client apps during an update: replace them after a restart then
@@ -88,6 +89,10 @@ Source: "{#SourceDir}\_internal\obs-plugin\vcstudio-obs.dll"; DestDir: "{#ObsPlu
 ; licence texts next to the program (the app bundles them too, for the About dialog)
 Source: "..\..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "..\..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
+; the OBS plugin is GPL-2.0-or-later: its complete source travels with every copy of the binary
+Source: "..\..\native\obs-plugin\*"; DestDir: "{app}\obs-plugin-source"; Flags: ignoreversion
+Source: "..\..\scripts\build_obs_plugin_win.ps1"; DestDir: "{app}\obs-plugin-source\scripts"; Flags: ignoreversion
+Source: "..\..\scripts\build_obs_plugin.sh"; DestDir: "{app}\obs-plugin-source\scripts"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"

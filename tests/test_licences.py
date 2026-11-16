@@ -53,6 +53,31 @@ def test_app_folder_scan_flags_gpl_and_unlisted_models(tmp_path):
     assert not any("yolox_nano" in n for n in names)
 
 
+def test_gpl_obs_plugin_must_ship_with_its_source(tmp_path):
+    plugin = tmp_path / "_internal" / "obs-plugin"
+    plugin.mkdir(parents=True)
+    (plugin / "vcstudio-obs.dll").write_bytes(b"")
+    report: list = []
+    cl.check_app(report, tmp_path)
+    r = next(r for r in report if r["kind"] == "gpl-src")
+    assert not r["ok"] and "COPYING" in r["as"]
+    src = plugin / "source"
+    (src / "scripts").mkdir(parents=True)
+    for n in ("vcstudio-obs.c", "vcs_frame_shm.h", "COPYING", "scripts/build_obs_plugin_win.ps1"):
+        (src / n).write_bytes(b"x")
+    report = []
+    cl.check_app(report, tmp_path)
+    assert next(r for r in report if r["kind"] == "gpl-src")["ok"]
+
+
+def test_plugin_source_files_carry_their_licences():
+    c = (ROOT / "native" / "obs-plugin" / "vcstudio-obs.c").read_text(encoding="utf-8")
+    h = (ROOT / "native" / "obs-plugin" / "vcs_frame_shm.h").read_text(encoding="utf-8")
+    assert c.startswith("// SPDX-License-Identifier: GPL-2.0-or-later")
+    assert h.startswith("// SPDX-License-Identifier: MIT")          # shared with the proprietary program
+    assert "GNU GENERAL PUBLIC LICENSE" in (ROOT / "native" / "obs-plugin" / "COPYING").read_text(encoding="utf-8")
+
+
 YOLOX = ROOT / "models" / "yolox_nano.onnx"
 
 

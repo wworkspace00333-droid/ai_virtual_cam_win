@@ -1,4 +1,16 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
+ * Copyright (C) 2025-2026 the AI Virtual Camera Studio authors
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
+ * Public License as published by the Free Software Foundation; either version 2 of the License, or (at your
+ * option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License (COPYING in this folder) for more details.
+ *
+ * This plugin is licensed separately from AI Virtual Camera Studio, which is proprietary: the plugin runs inside
+ * OBS Studio (GPL-2.0-or-later) and only exchanges frames with the separate program through shared memory.
+ *
  * vcstudio-obs: OBS Studio plugin that shares OBS's final program output with AI Virtual Camera Studio
  * through shared memory (see vcs_frame_shm.h). Frames are converted to BGRA by OBS's own GPU/CPU
  * conversion path (obs_add_raw_video_callback) at the output resolution.

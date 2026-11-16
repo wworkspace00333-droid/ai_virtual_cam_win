@@ -5,6 +5,10 @@ This software and its source code are proprietary and confidential. No licence i
 modify, merge, publish, distribute, sublicense or sell copies of this software, in whole or in part,
 except with the prior written permission of the copyright holders.
 
+The OBS Studio plugin in native/obs-plugin (vcstudio-obs) is not covered by this notice: it is free software
+under the GNU General Public License, version 2 or later (native/obs-plugin/COPYING), and its source is shipped
+with it. Its protocol header vcs_frame_shm.h is under the MIT licence.
+
 The software includes third-party components that are licensed under their own terms (open-source
 licences). Those terms, and not this notice, apply to those components; they are listed with their
 licence texts in THIRD_PARTY_NOTICES.md and are shipped with the installed application.

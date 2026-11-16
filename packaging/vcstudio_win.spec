@@ -56,6 +56,11 @@ for py in glob.glob(str(ROOT / "scripts" / "*.py")):
 
 binaries = [(str(NATIVE / n), "native") for n in
             ("vcs_d3d11.dll", "vcs_mfcap.dll", "vcam_dshow.dll", "vcam_mf.dll", "vcam-setup.exe", "mf_client_test.exe")]
+# the OBS plugin is GPL-2.0-or-later (native/obs-plugin/README.md): its complete source goes with the binary
+for f in ("vcstudio-obs.c", "vcs_frame_shm.h", "COPYING", "README.md"):
+    datas.append((str(ROOT / "native" / "obs-plugin" / f), "obs-plugin/source"))
+for f in ("build_obs_plugin_win.ps1", "build_obs_plugin.sh"):
+    datas.append((str(ROOT / "scripts" / f), "obs-plugin/source/scripts"))
 # data, not a binary: its imports (obs.dll, obs-frontend-api.dll) exist only inside OBS
 datas.append((str(ROOT / "build" / "obs-plugin" / "win" / "vcstudio-obs.dll"), "obs-plugin"))
 missing = [b for b, _ in binaries + datas[-1:] if not Path(b).exists()]
