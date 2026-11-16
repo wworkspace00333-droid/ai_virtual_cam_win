@@ -1,9 +1,16 @@
 """Writer side of the app -> "AI Virtual Camera" frame transport (native/win/vcam/vcam_shm.h).
 
 Creates "Local\\AIVirtualCamera.Frames" in the user's session with a security descriptor that lets the
-camera readers open it:
-  owner: full access;  Everyone, LOCAL SERVICE (Frame Server), app containers: read;
+camera readers open it, and nobody else:
+  this user: full access (the DirectShow camera runs inside this user's apps);
+  LOCAL SERVICE (the Frame Server, which runs the Media Foundation camera): read;
+  app containers and restricted (sandboxed) processes: read — both are checked twice by Windows, so they
+  still need to run as this user;
   integrity label Low with no-write-up, so low-integrity client processes can still read.
+Not Everyone: the section can be opened from other sessions as \\Sessions\\<id>\\BaseNamedObjects\\..., and
+"Everyone: read" let another user of the same PC watch this user's camera output.
+If the name already exists, it must belong to this user (another copy of the app or a test writer); a section
+pre-created by someone else is refused instead of written into.
 Publishing follows the seqlock protocol; heartbeat and timestamps use QueryPerformanceCounter in ns
 (time.perf_counter_ns), the clock the camera DLLs read with QueryPerformanceCounter.
 """
@@ -24,10 +31,64 @@ TOTAL = HEADER + SLOTS * SLOT_BYTES
 # header offsets (vcam_shm_header)
 O_MAGIC, O_VERSION, O_SLOTS, O_HEADER, O_SLOT_BYTES, O_LATEST, O_HEARTBEAT = 0, 4, 8, 12, 16, 24, 32
 O_PID, O_FPS_NUM, O_FPS_DEN, O_ACTIVE, O_WIDTH, O_HEIGHT, O_SLOT0, SLOT_SIZE = 40, 44, 48, 52, 56, 60, 72, 32
-SDDL = "D:(A;;GA;;;OW)(A;;GR;;;WD)(A;;GR;;;LS)(A;;GR;;;AC)S:(ML;;NW;;;LW)"
+ERROR_ALREADY_EXISTS = 183
+
+
+def sddl_for(user_sid: str) -> str:
+    return f"D:P(A;;GA;;;{user_sid})(A;;GR;;;LS)(A;;GR;;;AC)(A;;GR;;;RC)S:(ML;;NW;;;LW)"
+
 
 _k32 = ctypes.WinDLL("kernel32", use_last_error=True)
 _adv = ctypes.WinDLL("advapi32", use_last_error=True)
+_k32.GetCurrentProcess.restype = wintypes.HANDLE
+_adv.OpenProcessToken.argtypes = [wintypes.HANDLE, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE)]
+_adv.GetTokenInformation.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD,
+                                     ctypes.POINTER(wintypes.DWORD)]
+_adv.ConvertSidToStringSidW.argtypes = [ctypes.c_void_p, ctypes.POINTER(wintypes.LPWSTR)]
+_adv.GetSecurityInfo.argtypes = [wintypes.HANDLE, ctypes.c_int, wintypes.DWORD, ctypes.POINTER(ctypes.c_void_p),
+                                 ctypes.POINTER(ctypes.c_void_p), ctypes.c_void_p, ctypes.c_void_p,
+                                 ctypes.POINTER(ctypes.c_void_p)]
+_adv.GetSecurityInfo.restype = wintypes.DWORD
+
+
+def _sid_str(psid) -> str:
+    s = wintypes.LPWSTR()
+    if not _adv.ConvertSidToStringSidW(psid, ctypes.byref(s)):
+        raise OSError(ctypes.get_last_error(), "ConvertSidToStringSid")
+    try:
+        return s.value
+    finally:
+        _k32.LocalFree(s)
+
+
+def token_sids() -> tuple[str, str]:
+    """(user SID, default owner SID) of this process; the owner is Administrators when the app runs elevated."""
+    tok = wintypes.HANDLE()
+    if not _adv.OpenProcessToken(_k32.GetCurrentProcess(), 0x0008, ctypes.byref(tok)):     # TOKEN_QUERY
+        raise OSError(ctypes.get_last_error(), "OpenProcessToken")
+    try:
+        out = []
+        for cls in (1, 4):                                                                 # TokenUser, TokenOwner
+            n = wintypes.DWORD()
+            _adv.GetTokenInformation(tok, cls, None, 0, ctypes.byref(n))
+            buf = ctypes.create_string_buffer(n.value)
+            if not _adv.GetTokenInformation(tok, cls, buf, n, ctypes.byref(n)):
+                raise OSError(ctypes.get_last_error(), "GetTokenInformation")
+            out.append(_sid_str(ctypes.c_void_p.from_buffer(buf).value))   # first field: PSID
+        return out[0], out[1]
+    finally:
+        _k32.CloseHandle(tok)
+
+
+def object_owner(handle) -> str:
+    owner, sd = ctypes.c_void_p(), ctypes.c_void_p()
+    err = _adv.GetSecurityInfo(handle, 6, 0x1, ctypes.byref(owner), None, None, None, ctypes.byref(sd))  # KERNEL_OBJECT, OWNER
+    if err:
+        raise OSError(err, "GetSecurityInfo")
+    try:
+        return _sid_str(owner)
+    finally:
+        _k32.LocalFree(sd)
 _k32.CreateFileMappingW.restype = wintypes.HANDLE
 _k32.CreateFileMappingW.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD,
                                     wintypes.LPCWSTR]
@@ -46,8 +107,9 @@ class SECURITY_ATTRIBUTES(ctypes.Structure):
 
 class VcamWriter:
     def __init__(self, name: str = NAME):
+        user, owner = token_sids()
         sd = ctypes.c_void_p()
-        if not _adv.ConvertStringSecurityDescriptorToSecurityDescriptorW(SDDL, 1, ctypes.byref(sd), None):
+        if not _adv.ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl_for(user), 1, ctypes.byref(sd), None):
             raise OSError(ctypes.get_last_error(), "security descriptor")
         try:
             sa = SECURITY_ATTRIBUTES(ctypes.sizeof(SECURITY_ATTRIBUTES), sd, False)
@@ -57,6 +119,16 @@ class VcamWriter:
             _k32.LocalFree(sd)
         if not self.h:
             raise OSError(err, f"CreateFileMapping({name}) failed")
+        if err == ERROR_ALREADY_EXISTS:
+            try:
+                found = object_owner(self.h)
+            except OSError:
+                found = "?"
+            if found not in (user, owner):
+                _k32.CloseHandle(self.h)
+                self.h = None
+                raise PermissionError(f"{name} already exists and belongs to {found}, not to this user; refusing to "
+                                      "send camera frames into it")
         self.base = _k32.MapViewOfFile(self.h, 0x0002 | 0x0004, 0, 0, 0)          # FILE_MAP_WRITE | READ
         if not self.base:
             err = ctypes.get_last_error()

@@ -154,8 +154,10 @@ class AIEngine:
         prewarm()
         if self._thread and self._thread.is_alive():
             return
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._run, name="ai-engine", daemon=True)
+        # Every worker gets its own stop event: a worker abandoned by restart() (stuck in a model call) keeps
+        # its event set and exits instead of running next to the new one once its call returns.
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, args=(self._stop,), name="ai-engine", daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
@@ -343,25 +345,27 @@ class AIEngine:
         elif not cfg.face_detection:
             self._face = None
 
-    def _run(self) -> None:
+    def _run(self, stop: threading.Event) -> None:
         from vcstudio.platform import autorelease_pool
         # macOS: plain Python threads have no Objective-C autorelease pool. Without draining one per
         # iteration, Core ML / Vision results (MLMultiArray, observations, pixel buffers) live for
         # the lifetime of the thread (measured: footprint +65 MB/s with the segmentation model).
         # Elsewhere autorelease_pool() is a no-op.
-        st = {"last_ver": -1, "next_due": 0.0, "backoff": 0.5}
-        while not self._stop.is_set():
+        st = {"last_ver": -1, "next_due": 0.0, "backoff": 0.5, "stop": stop}
+        while not stop.is_set():
             with autorelease_pool():
                 self._iteration(st)
-        self._detector = None
+        if stop is self._stop:            # an abandoned worker must not touch the models of its successor
+            self._detector = None
 
     def _iteration(self, st: dict) -> None:
+        stop: threading.Event = st["stop"]
         cfg, mode = self.config()
         if not cfg.enabled:
             self._set_state("disabled")
             self.results.clear()
             self.tracker.reset()
-            self._stop.wait(0.1)
+            stop.wait(0.1)
             return
         frame, ver = self.capture.slot.wait_newer(st["last_ver"], timeout=0.25)
         if frame is None or ver == st["last_ver"]:
@@ -371,13 +375,14 @@ class AIEngine:
             self._ensure_models(cfg, mode)   # lazy: models load only once frames flow
         except Exception as e:
             self._set_state("error", f"model load failed: {e}")
-            self._stop.wait(min(st["backoff"], 10))
+            stop.wait(min(st["backoff"], 10))
             st["backoff"] *= 2
             return
         target = self.target_fps()
         now = time.perf_counter()
         if target and now < st["next_due"]:
-            self._stop.wait(st["next_due"] - now)
+            if stop.wait(st["next_due"] - now):
+                return
             frame, ver = self.capture.slot.peek()   # newest frame after waiting
             if frame is None:
                 return
@@ -392,13 +397,18 @@ class AIEngine:
             st["next_due"] = 0.0
         tcfg = self.tracker_config()
         model_conf = min(cfg.confidence, tcfg.low_thresh) if tcfg.enabled else cfg.confidence
+        detector, face = self._detector, self._face
+        if detector is None:
+            return
         try:
-            dets, ms = self._detector.detect(frame, model_conf, cfg.iou)
+            dets, ms = detector.detect(frame, model_conf, cfg.iou)
             face_ms = 0.0
-            if self._face is not None:
-                fd, face_ms = self._face.detect(frame)
+            if face is not None:
+                fd, face_ms = face.detect(frame)
                 dets.extend(fd)
                 self._face_lat.append(face_ms)
+            if stop.is_set():          # stopped or abandoned while the model ran: publish nothing
+                return
             candidates = filter_detections(dets, cfg, min_conf=model_conf)   # class filters only
             kept = [d for d in candidates if d.confidence >= cfg.confidence]
             tracked = []
@@ -406,7 +416,7 @@ class AIEngine:
                 self.tracker.update(candidates, frame.pts, (frame.width, frame.height))
                 tracked = self.tracker.snapshot(frame.pts)
             res = DetectionResult(frame.seq, frame.pts, frame.width, frame.height, kept, ms, face_ms,
-                                  self._detector.name, host_time_s(), len(dets), tracked)
+                                  detector.name, host_time_s(), len(dets), tracked)
             self.results.put(res)
             self._lat.append(ms)
             self._fps.tick()
@@ -421,6 +431,8 @@ class AIEngine:
             self._set_state("running")
             st["backoff"] = 0.5
         except Exception as e:
+            if stop.is_set():          # the models were unloaded under a stopping / abandoned worker
+                return
             with self._lock:
                 self._stats.errors += 1
                 self._stats.consecutive_errors += 1
@@ -432,5 +444,5 @@ class AIEngine:
                 self._face = None
                 self.models.unload()
                 self.results.clear()
-                self._stop.wait(min(st["backoff"], 10))
+                stop.wait(min(st["backoff"], 10))
                 st["backoff"] *= 2

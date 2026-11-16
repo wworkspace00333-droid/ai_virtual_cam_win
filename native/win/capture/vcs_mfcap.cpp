@@ -145,21 +145,41 @@ public:
 	}
 };
 
-static std::atomic<int> g_started{0};
+// MFStartup / MFShutdown are reference counted by Windows too, but the first startup and the last shutdown
+// must not interleave between two threads opening / closing captures: one lock around the count.
+static std::mutex g_mf_mu;
+static int g_started = 0;
+
+static HRESULT mf_acquire() {
+	std::lock_guard<std::mutex> g(g_mf_mu);
+	if (g_started == 0) {
+		HRESULT hr = MFStartup(MF_VERSION);
+		if (FAILED(hr)) return hr;
+	}
+	++g_started;
+	return S_OK;
+}
+
+static void mf_release() {
+	std::lock_guard<std::mutex> g(g_mf_mu);
+	if (g_started > 0 && --g_started == 0) MFShutdown();
+}
 
 extern "C" __declspec(dllexport) void *mfcap_open(const wchar_t *symlink, int want_w, int want_h, double want_fps,
                                                   int *out_w, int *out_h, double *out_fps, wchar_t *subtype,
                                                   int subtype_cap, wchar_t *err, int errcap) {
-	HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);          // RPC_E_CHANGED_MODE: MF is free-threaded
-	(void)hr;
-	if (g_started++ == 0 && FAILED(hr = MFStartup(MF_VERSION))) {
-		--g_started;
+	// COM for the source reader. Deliberately not balanced with CoUninitialize: the capture objects live on
+	// after this call, and leaving the multithreaded apartment could tear it down under them. Repeated calls
+	// on one thread only raise COM's per-thread count (RPC_E_CHANGED_MODE is fine: MF is free-threaded).
+	(void)CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+	HRESULT hr;
+	if (FAILED(hr = mf_acquire())) {
 		set_err(err, errcap, L"MFStartup failed", hr);
 		return nullptr;
 	}
 	auto fail = [&](const wchar_t *what, HRESULT code) -> void * {
 		set_err(err, errcap, what, code);
-		if (--g_started == 0) MFShutdown();
+		mf_release();
 		return nullptr;
 	};
 	ComPtr<IMFAttributes> at;
@@ -255,7 +275,12 @@ extern "C" __declspec(dllexport) void *mfcap_open(const wchar_t *symlink, int wa
 extern "C" __declspec(dllexport) int mfcap_read(void *h, uint8_t *dst, int dst_bytes, long long *ts_100ns,
                                                 int timeout_ms) {
 	Capture *c = static_cast<Capture *>(h);
-	if (!c) return -1;
+	if (!c || c->closing) return -1;
+	// The caller must not close the capture while it reads (the Python side lets the reading thread close it).
+	// As a second line of defence the read holds its own reference, so a close that lands during the wait
+	// below wakes it (mfcap_close sets the event) and the object outlives this call.
+	c->AddRef();
+	struct Unref { Capture *c; ~Unref() { c->Release(); } } unref{c};
 	bool fresh;
 	{
 		std::lock_guard<std::mutex> g(c->mu);
@@ -264,7 +289,7 @@ extern "C" __declspec(dllexport) int mfcap_read(void *h, uint8_t *dst, int dst_b
 	}
 	if (!fresh) WaitForSingleObject(c->event, (DWORD)timeout_ms);       // outside the lock
 	std::lock_guard<std::mutex> g(c->mu);
-	if (c->lost) return -1;
+	if (c->lost || c->closing) return -1;
 	if (c->seq == c->delivered) return 0;
 	const size_t need = (size_t)c->w * c->h * 4;
 	if ((size_t)dst_bytes < need || c->front.size() < need) return -2;
@@ -285,9 +310,10 @@ extern "C" __declspec(dllexport) void mfcap_close(void *h) {
 	Capture *c = static_cast<Capture *>(h);
 	if (!c) return;
 	c->closing = true;
+	SetEvent(c->event);                       // wake a read waiting for a frame
 	if (c->source) c->source->Shutdown();     // stops the device; pending callbacks see `closing`
 	c->reader.Reset();
 	c->source.Reset();
 	c->Release();                             // the reader's reference to the callback goes with the reader
-	if (--g_started == 0) MFShutdown();
+	mf_release();
 }

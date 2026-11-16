@@ -148,9 +148,7 @@ class WindowsCameraSource(CaptureSource):
         self._nominal = (aw, ah, afps)
         self._cap = cap
         self._on_frame, self._on_event = on_frame, on_event
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._run, name=f"capture-{self.method}", daemon=True)
-        self._thread.start()
+        self._launch(self._run, cap, f"capture-{self.method}")
         log.info("%s capture started: %s (index %d) %dx%d @ %.2f fps", self.method, dev.name, dev.index, aw, ah, afps)
 
     def _start_mf(self, dev, w, h, fps, chosen, on_frame, on_event) -> None:
@@ -167,17 +165,33 @@ class WindowsCameraSource(CaptureSource):
         self._nominal = (cap.width, cap.height, cap.fps)
         self._cap = cap
         self._on_frame, self._on_event = on_frame, on_event
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._run_mf, name="capture-mediafoundation", daemon=True)
-        self._thread.start()
+        self._launch(self._run_mf, cap, "capture-mediafoundation")
         log.info("mediafoundation capture started: %s %dx%d @ %.2f fps (%s)", dev.name, cap.width, cap.height,
                  cap.fps, cap.subtype)
 
-    def _run_mf(self) -> None:
-        cap = self._cap
+    # The capture thread owns its device: it is the only one that reads it, and it closes it when it ends.
+    # stop() never closes a device another thread may still be reading (a DirectShow read can block, and
+    # mfcap_close frees what mfcap_read uses); if the thread does not end in time it is abandoned with its
+    # own stop event set, and closes the device as soon as its read returns.
+    def _launch(self, target, cap, name: str) -> None:
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._owned, args=(target, cap, self._stop), name=name, daemon=True)
+        self._thread.start()
+
+    def _owned(self, target, cap, stop: threading.Event) -> None:
+        try:
+            target(cap, stop)
+        finally:
+            try:
+                cap.close() if self.method == "mediafoundation" else cap.release()
+                log.info("%s capture stopped: %s", self.method, self.name)
+            except Exception:
+                log.exception("closing the capture device failed")
+
+    def _run_mf(self, cap, stop: threading.Event) -> None:
         pool = FramePool()
         seq = 0
-        while not self._stop.is_set() and cap is not None:
+        while not stop.is_set():
             out = pool.get(cap.height, cap.width)
             r = cap.read(out, 200)
             if r == cap.TIMEOUT:
@@ -200,22 +214,21 @@ class WindowsCameraSource(CaptureSource):
 
     def stop(self) -> None:
         self._stop.set()
+        self._on_frame = None                 # an abandoned thread delivers nothing more
         t = self._thread
         if t is not None and t is not threading.current_thread():
             t.join(timeout=3)
+            if t.is_alive():
+                log.warning("%s capture thread did not stop within 3 s; its device is closed when the read returns",
+                            self.method)
         self._thread = None
-        cap, self._cap = self._cap, None
-        if cap is not None:
-            cap.close() if self.method == "mediafoundation" else cap.release()
-            log.info("%s capture stopped: %s", self.method, self.name)
-        self._on_frame = None
+        self._cap = None
 
     # ------------------------------------------------------------------ capture thread
-    def _run(self) -> None:
-        cap = self._cap
+    def _run(self, cap, stop: threading.Event) -> None:
         pool = FramePool()
         seq, fails = 0, 0
-        while not self._stop.is_set() and cap is not None:
+        while not stop.is_set():
             ok, img = cap.read()
             if not ok or img is None:
                 fails += 1
@@ -224,7 +237,7 @@ class WindowsCameraSource(CaptureSource):
                     if cb:
                         cb("disconnected", f"{self.name} stopped delivering frames")
                     return
-                self._stop.wait(0.01)
+                stop.wait(0.01)
                 continue
             fails = 0
             arrival = host_time_s()

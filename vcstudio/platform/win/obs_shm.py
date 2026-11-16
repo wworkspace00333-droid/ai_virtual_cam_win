@@ -165,21 +165,29 @@ class ObsShmSource(CaptureSource):
         except OSError as e:
             raise CaptureError(f"cannot open OBS shared memory ({e})") from e
         self._nominal = (status["width"], status["height"], status["fps"])
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._run, args=(on_frame, on_event), name="obs-shm-reader", daemon=True)
+        # The reader thread owns the mapped view and unmaps it when it ends: unmapping it from stop() while the
+        # thread copies a frame out of it would be an access violation (the process dies, no Python exception).
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._owned, args=(self._view, self._stop, on_frame, on_event),
+                                        name="obs-shm-reader", daemon=True)
         self._thread.start()
         log.info("OBS direct frame transfer: %dx%d @ %.2f fps (OBS pid %s)", status["width"], status["height"],
                  status["fps"], status["writer_pid"])
 
-    def _run(self, on_frame, on_event) -> None:
+    def _owned(self, v, stop, on_frame, on_event) -> None:
+        try:
+            self._run(v, stop, on_frame, on_event)
+        finally:
+            v.close()
+
+    def _run(self, v, stop, on_frame, on_event) -> None:
         from vcstudio.platform.win.capture import FramePool
-        v = self._view
         pool = FramePool()
         last, seq = 0, 0
-        while not self._stop.is_set() and v is not None:
+        while not stop.is_set():
             if not v.u32(O_ACTIVE):
                 on_event("disconnected", "OBS stopped sharing frames")
-                self._stop.wait(0.2)
+                stop.wait(0.2)
                 continue
             got = v.read_latest(pool, last)
             if got is None:
@@ -191,13 +199,16 @@ class ObsShmSource(CaptureSource):
             now = host_time_s()
             pts = ts_ns / 1e9
             h, w = img.shape[:2]
+            if stop.is_set():
+                return
             on_frame(Frame(seq, pts if 0 <= now - pts < 1.0 else now, now, w, h, array=img, source=self.name))
 
     def stop(self) -> None:
         self._stop.set()
-        if self._thread:
-            self._thread.join(2)
+        t = self._thread
+        if t is not None and t is not threading.current_thread():
+            t.join(2)
+            if t.is_alive():
+                log.warning("OBS reader thread did not stop within 2 s; it unmaps the view when it ends")
         self._thread = None
-        if self._view:
-            self._view.close()
-            self._view = None
+        self._view = None

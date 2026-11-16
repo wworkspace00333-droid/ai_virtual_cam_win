@@ -62,25 +62,48 @@ class PipelineStats:
 
 
 class CameraOutputController:
-    """Owns the CMIO sink connection: lazy open, retry with backoff, reconnect after errors."""
+    """Owns the virtual camera connection: lazy open, retry with backoff, reconnect after errors.
+
+    Thread-safe: send() (pipeline thread, possibly also a thread abandoned by a watchdog restart) and
+    configure() / close() / shutdown() (GUI thread) are serialised by one lock. After shutdown() a late send()
+    from a pipeline thread that is still finishing its frame does not reopen the camera; resume() allows it again."""
 
     def __init__(self, device: str, sink: str, enabled: bool = True, pixel_format: str = "BGRA"):
         self.device, self.sink, self.enabled = device, sink, enabled
         self.pixel_format = pixel_format
         self._out = None
         self._next_try = 0.0
+        self._lock = threading.RLock()
+        self._shut = False
         self.state = "disabled" if not enabled else "not_installed"
         self.error = ""
 
     def configure(self, device: str, sink: str, enabled: bool, pixel_format: str | None = None) -> None:
         pixel_format = pixel_format or self.pixel_format
-        if (device, sink, enabled, pixel_format) != (self.device, self.sink, self.enabled, self.pixel_format):
+        with self._lock:
+            if (device, sink, enabled, pixel_format) != (self.device, self.sink, self.enabled, self.pixel_format):
+                self.close()
+                self.device, self.sink, self.enabled, self.pixel_format = device, sink, enabled, pixel_format
+                self._next_try = 0.0
+                self.state = "disabled" if not enabled else "not_installed"
+
+    def shutdown(self) -> None:
+        """Close and refuse sends until resume() (pipeline stopped)."""
+        with self._lock:
+            self._shut = True
             self.close()
-            self.device, self.sink, self.enabled, self.pixel_format = device, sink, enabled, pixel_format
-            self._next_try = 0.0
-            self.state = "disabled" if not enabled else "not_installed"
+
+    def resume(self) -> None:
+        with self._lock:
+            self._shut = False
 
     def send(self, pb, pts: float) -> bool | None:
+        with self._lock:
+            if self._shut:
+                return None
+            return self._send(pb, pts)
+
+    def _send(self, pb, pts: float) -> bool | None:
         if not self.enabled:
             self.state = "disabled"
             return None
@@ -109,15 +132,17 @@ class CameraOutputController:
             return None
 
     def stats(self) -> tuple[int, int]:
-        return self._out.stats() if self._out else (0, 0)
+        out = self._out
+        return out.stats() if out else (0, 0)
 
     def close(self) -> None:
-        if self._out is not None:
-            try:
-                self._out.close()
-            except Exception:
-                pass
-            self._out = None
+        with self._lock:
+            if self._out is not None:
+                try:
+                    self._out.close()
+                except Exception:
+                    pass
+                self._out = None
 
 
 class VideoPipeline:
@@ -150,6 +175,7 @@ class VideoPipeline:
         self._stop.clear()
         self._generation += 1
         gen = self._generation
+        self.camera.resume()
         self.heartbeat = time.monotonic()
         self._thread = threading.Thread(target=self._run, args=(gen,), name="video-pipeline", daemon=True)
         self._thread.start()
@@ -157,11 +183,14 @@ class VideoPipeline:
 
     def stop(self) -> None:
         self._stop.set()
+        self._generation += 1             # a thread that outlives the join below ends at its next check
         t = self._thread
         if t is not None:
             t.join(timeout=3)
+            if t.is_alive():
+                log.warning("Pipeline thread did not stop within 3 s; the camera is closed anyway")
         self._thread = None
-        self.camera.close()
+        self.camera.shutdown()            # waits for a send in progress; later sends are refused
         self.processed.clear()
         self._last_out = None
         with self._lock:
