@@ -95,7 +95,7 @@ class CaptureSource:
 # Camera permission
 # ----------------------------------------------------------------------------------------------
 
-def request_camera_access(timeout: float = 60.0) -> bool:
+def request_camera_access(timeout: float = 60.0) -> bool:  # pragma: macos
     """Ask macOS for camera access (shows the system prompt once). Blocks up to `timeout`."""
     import AVFoundation as AV  # type: ignore
     status = int(AV.AVCaptureDevice.authorizationStatusForMediaType_(AV.AVMediaTypeVideo))
@@ -126,7 +126,7 @@ def request_camera_access(timeout: float = 60.0) -> bool:
 # AVFoundation
 # ----------------------------------------------------------------------------------------------
 
-def _fourcc(code: int) -> str:
+def _fourcc(code: int) -> str:  # pragma: macos
     try:
         s = int(code).to_bytes(4, "big").decode("ascii")
         return s if s.isprintable() else str(code)
@@ -134,7 +134,7 @@ def _fourcc(code: int) -> str:
         return str(code)
 
 
-def find_av_device(unique_id: str | None, name_hint: str | None):
+def find_av_device(unique_id: str | None, name_hint: str | None):  # pragma: macos
     import AVFoundation as AV  # type: ignore
     devices = list(AV.AVCaptureDevice.devicesWithMediaType_(AV.AVMediaTypeVideo) or [])
     if unique_id:
@@ -148,7 +148,7 @@ def find_av_device(unique_id: str | None, name_hint: str | None):
     return None
 
 
-def device_formats(device) -> list[DeviceFormat]:
+def device_formats(device) -> list[DeviceFormat]:  # pragma: macos
     import CoreMedia as CM  # type: ignore
     out = []
     for f in device.formats():
@@ -173,7 +173,7 @@ def formats_for_device_id(unique_id: str) -> list[DeviceFormat]:
     return device_formats(d) if d is not None else []
 
 
-def _make_delegate_class():
+def _make_delegate_class():  # pragma: macos
     """Create the Objective-C delegate class once (PyObjC classes are global)."""
     import objc  # type: ignore
     from Foundation import NSObject  # type: ignore
@@ -204,7 +204,7 @@ def _make_delegate_class():
     return VCSCaptureDelegate
 
 
-class AVFoundationSource(CaptureSource):
+class AVFoundationSource(CaptureSource):  # pragma: macos
     kind = "avfoundation"
 
     def __init__(self, unique_id: str | None, name_hint: str | None = None, width: int = 1920,

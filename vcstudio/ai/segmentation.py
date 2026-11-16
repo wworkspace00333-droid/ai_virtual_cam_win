@@ -23,7 +23,7 @@ MASK_MAX = 256           # box-local mask resolution cap (memory/CPU bound)
 PAD_VALUE = 114
 
 
-def _ml_to_numpy(fv) -> np.ndarray:
+def _ml_to_numpy(fv) -> np.ndarray:  # pragma: macos
     import CoreML  # type: ignore
     a = fv.multiArrayValue()
     shape = [int(x) for x in a.shape()]
@@ -82,7 +82,7 @@ class SegmentationDetector:
         c[py:py + nh, px:px + nw] = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_LINEAR)
         return c, r, px, py
 
-    def _letterbox_gpu(self, frame):
+    def _letterbox_gpu(self, frame):  # pragma: macos
         """Letterbox on the GPU straight into a 640x640 IOSurface (no CPU read of the 1080p frame)."""
         from vcstudio.native.metal import scaler_context
         ctx = scaler_context()

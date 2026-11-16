@@ -15,7 +15,7 @@ def _run(cmd: list[str], timeout: float = 5) -> str:
         return ""
 
 
-def metal_info() -> dict[str, Any]:
+def metal_info() -> dict[str, Any]:  # pragma: macos
     try:
         import Metal  # type: ignore
         d = Metal.MTLCreateSystemDefaultDevice()
@@ -28,7 +28,7 @@ def metal_info() -> dict[str, Any]:
         return {"available": False, "error": str(e)}
 
 
-def coreml_info() -> dict[str, Any]:
+def coreml_info() -> dict[str, Any]:  # pragma: macos
     try:
         import importlib
         importlib.import_module("CoreML")
@@ -37,7 +37,7 @@ def coreml_info() -> dict[str, Any]:
         return {"available": False, "error": str(e)}
 
 
-def camera_extensions() -> list[dict[str, str]]:
+def camera_extensions() -> list[dict[str, str]]:  # pragma: macos
     """Parse `systemextensionsctl list` for CMIO camera extensions (macOS only; [] elsewhere)."""
     if sys.platform != "darwin":
         return []
@@ -56,7 +56,7 @@ def camera_extensions() -> list[dict[str, str]]:
     return exts
 
 
-def signing_identities() -> int:
+def signing_identities() -> int:  # pragma: macos
     out = _run(["/usr/bin/security", "find-identity", "-v", "-p", "codesigning"])
     for line in out.splitlines():
         if "valid identities found" in line:

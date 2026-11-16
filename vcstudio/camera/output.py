@@ -66,7 +66,7 @@ class CameraOutputError(RuntimeError):
         self.code = code
 
 
-def _lib():
+def _lib():  # pragma: macos
     from vcstudio.native import metal
     lib = metal._load()
     if lib is None:
@@ -85,13 +85,13 @@ def _lib():
     return lib
 
 
-def list_cmio_devices() -> list[str]:
+def list_cmio_devices() -> list[str]:  # pragma: macos
     buf = ctypes.create_string_buffer(8192)
     n = _lib().vcs_cam_list_devices(buf, len(buf))
     return [s for s in buf.value.decode().split("\n") if s] if n > 0 else []
 
 
-def list_streams(device: str) -> list[str]:
+def list_streams(device: str) -> list[str]:  # pragma: macos
     buf = ctypes.create_string_buffer(8192)
     n = _lib().vcs_cam_list_streams(device.encode(), buf, len(buf))
     return [s for s in buf.value.decode().split("\n") if s] if n > 0 else []
@@ -100,7 +100,7 @@ def list_streams(device: str) -> list[str]:
 PIXEL_FORMATS = {"BGRA": 0, "NV12": int.from_bytes(b"420v", "big")}   # 0 = send frames as rendered (BGRA)
 
 
-class VirtualCameraOutput:
+class VirtualCameraOutput:  # pragma: macos
     def __init__(self, device: str = CAMERA_NAME, sink: str = SINK_NAME, pixel_format: str = "BGRA"):
         self.device, self.sink = device, sink
         self.pixel_format = pixel_format if pixel_format in PIXEL_FORMATS else "BGRA"

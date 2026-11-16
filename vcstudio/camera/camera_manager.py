@@ -31,7 +31,7 @@ class CameraStatus:
         return self.extension_enabled and self.extension_active and self.device_visible
 
 
-def host_app() -> Path | None:
+def host_app() -> Path | None:  # pragma: macos
     env = os.environ.get("VCSTUDIO_HOST_APP")
     for p in ([Path(env)] if env else []) + [DEFAULT_HOST_APP]:
         if (p / "Contents" / "MacOS" / "AIVirtualCameraStudio").exists():
@@ -98,7 +98,7 @@ def status() -> CameraStatus:
     return st
 
 
-def _run_host(flag: str, timeout: float = 150) -> tuple[int, str]:
+def _run_host(flag: str, timeout: float = 150) -> tuple[int, str]:  # pragma: macos
     app = host_app()
     if app is None:
         return 1, "Signed host app not found in /Applications (run scripts/build_camera.sh)."
