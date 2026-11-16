@@ -31,6 +31,7 @@ for name in ("street.jpg", "logo_alpha.png", "clip_h264.mp4"):
     datas.append((str(ROOT / "tests" / "data" / name), "sample_data"))
 for name in ("LICENSE", "THIRD_PARTY_NOTICES.md"):
     datas.append((str(ROOT / name), "."))
+datas.append((str(ROOT / "packaging" / "AppIcon.ico"), "."))            # window and tray icon
 # licence texts of everything that ships: packaging/licenses (GPL/LGPL texts, YOLOX, YuNet), DirectShow BaseClasses,
 # and the licence files of every runtime Python package (their dist-info), ONNX Runtime's notices, PyAV's FFmpeg.
 for f in (ROOT / "packaging" / "licenses").glob("*.txt"):

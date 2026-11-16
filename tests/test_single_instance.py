@@ -54,7 +54,7 @@ def test_lock_is_exclusive_and_released(tmp_path):
 
 def test_second_gui_copy_exits(tmp_path):
     env = dict(os.environ, VCSTUDIO_HOME=str(tmp_path), QT_QPA_PLATFORM="offscreen", VCS_DISABLE_GLOBAL_HOTKEYS="1",
-               VCS_NO_AUTOSTART="1")
+               VCS_NO_AUTOSTART="1", VCS_NO_WIZARD="1")
     first = subprocess.Popen([sys.executable, "-m", "vcstudio"], cwd=ROOT, env=env,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:

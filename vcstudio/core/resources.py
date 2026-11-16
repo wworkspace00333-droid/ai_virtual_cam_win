@@ -46,6 +46,12 @@ def sample(name: str) -> Path:
     return bundle_root() / "sample_data" / name if frozen() else REPO / "tests" / "data" / name
 
 
+def app_icon_path() -> Path | None:
+    """Window / tray icon (packaging/AppIcon.ico; bundled at the root of the frozen app)."""
+    p = bundle_root() / "AppIcon.ico" if frozen() else REPO / "packaging" / "AppIcon.ico"
+    return p if p.exists() else None
+
+
 def camera_test_page() -> Path:
     """Local browser page for checking the virtual camera (Virtual Camera page, Windows)."""
     return bundle_root() / "vcstudio" / "camera" / "camera_test.html"

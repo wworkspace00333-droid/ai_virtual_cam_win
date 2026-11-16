@@ -36,6 +36,8 @@ def main(out_path: str, shot: str | None) -> int:
             obs_start(); time.sleep(8)
         ctx = make_app()                        # same profile as the fault test; saved to the data folder
         ctx.settings.set("input.autostart", True)
+        ctx.settings.set("ui.first_run_done", True)          # no first-run wizard in this automated run
+        ctx.settings.set("ui.close_to_tray", False)          # the X button must quit (measured below)
         ctx.stop_capture(); ctx.shutdown()
         env = desktop_env(VCSTUDIO_HOME=home, PYTHONPATH=str(ROOT))
         env.pop("VCS_NO_AUTOSTART", None)

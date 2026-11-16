@@ -96,6 +96,18 @@ class MainWindow(QMainWindow):
         self._tick()
         if ctx.settings.get("input.autostart") and not os.environ.get("VCS_NO_AUTOSTART"):
             QTimer.singleShot(500, self._autostart)
+        # tray icon: the camera keeps working with the window hidden (vcstudio/ui/tray.py)
+        from vcstudio.ui.tray import AppTray, app_icon
+        self.setWindowIcon(app_icon())
+        self._quitting = False
+        self.tray = AppTray(self) if AppTray.available() and not os.environ.get("VCS_NO_TRAY") else None
+
+    def quit_app(self) -> None:
+        """Really exit (tray "Quit"): stop processing, save, close."""
+        self._quitting = True
+        self.close()
+        from PySide6.QtWidgets import QApplication
+        QApplication.quit()
 
     def _autostart(self) -> None:
         """Start capture on launch; failures (no OBS, feedback-loop risk) are shown on the pages, not raised."""
@@ -219,6 +231,15 @@ class MainWindow(QMainWindow):
             dlg.refresh()
 
     def closeEvent(self, e):  # noqa: N802
+        if (not self._quitting and self.tray is not None and self.ctx.settings.get("ui.close_to_tray")
+                and self.isVisible()):
+            e.ignore()                       # the window goes to the tray; processing and the camera go on
+            self.ctx.settings.set("ui.window_geometry", bytes(self.saveGeometry().toBase64()).decode(), persist=False)
+            self.hide()
+            self.tray.notify_hidden()
+            return
+        if self.tray is not None:
+            self.tray.hide()
         self.timer.stop()
         self.global_hotkeys.clear()
         self.pages[self.page_keys().index("camera")].shutdown()
@@ -226,3 +247,6 @@ class MainWindow(QMainWindow):
         self.ctx.settings.set("ui.window_geometry", bytes(self.saveGeometry().toBase64()).decode(), persist=False)
         self.ctx.settings.save()
         super().closeEvent(e)
+        if self.tray is not None:            # quitOnLastWindowClosed is off while a tray icon exists
+            from PySide6.QtWidgets import QApplication
+            QApplication.quit()

@@ -74,6 +74,10 @@ Name: "camera\dshowtoo"; Description: "{cm:DShowToo}"; Check: IsWindows11
 Name: "obsplugin"; Description: "{cm:ObsPlugin}"; Check: ObsInstalled
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
+[Registry]
+; "Start with Windows" is turned on in the app (Settings, current user); uninstalling removes the entry
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "AIVirtualCameraStudio"; Flags: uninsdeletevalue dontcreatekey
+
 [InstallDelete]
 ; an update must not keep files the new version no longer ships (models, libraries with other licences): clear the
 ; previous app folder first. The camera DLLs in _internal\native may still be loaded; those deletes fail quietly and

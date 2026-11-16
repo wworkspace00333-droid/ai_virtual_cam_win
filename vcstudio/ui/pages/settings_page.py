@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import (QComboBox, QFormLayout, QHBoxLayout, QKeySequenceEdit, QLabel, QLineEdit, QMessageBox,
                                QPushButton, QSpinBox, QCheckBox)
@@ -116,7 +118,58 @@ class SettingsPage:
         apply_btn.clicked.connect(self.apply_hotkeys)
         reset_btn.clicked.connect(self.reset_hotkeys)
         lay.addWidget(hk)
+
+        from vcstudio.platform import IS_WINDOWS
+        if IS_WINDOWS:          # tray, start with Windows, setup again, diagnostics
+            from vcstudio.platform.win import autostart
+            app = Card("Windows and tray")
+            self.win_start = QCheckBox(tr("Start with Windows (in the tray)"))
+            self.win_start.setChecked(autostart.is_enabled())
+            self.to_tray = QCheckBox(tr("Closing the window keeps the app running in the tray"))
+            self.to_tray.setChecked(bool(s.get("ui.close_to_tray")))
+            app.layout_.addWidget(self.win_start); app.layout_.addWidget(self.to_tray)
+            brow = QHBoxLayout()
+            self.wizard_btn = QPushButton(tr("Run the setup again"))
+            self.diag_btn = QPushButton(tr("Save diagnostics…"))
+            brow.addWidget(self.wizard_btn); brow.addWidget(self.diag_btn); brow.addStretch()
+            app.layout_.addLayout(brow)
+            self.app_info = QLabel(); self.app_info.setObjectName("muted"); self.app_info.setWordWrap(True)
+            app.layout_.addWidget(self.app_info)
+            lay.addWidget(app)
+            self.win_start.toggled.connect(self._toggle_autostart)
+            self.to_tray.toggled.connect(lambda on: s.set("ui.close_to_tray", on))
+            self.wizard_btn.clicked.connect(self._run_wizard)
+            self.diag_btn.clicked.connect(self._save_diagnostics)
         lay.addStretch()
+
+    def _toggle_autostart(self, on: bool) -> None:
+        from vcstudio.platform.win import autostart
+        try:
+            autostart.set_enabled(on)
+            self.app_info.setText(tr("Starts with Windows: {cmd}", cmd=autostart.current()) if on
+                                  else tr("Does not start with Windows."))
+        except OSError as e:
+            self.app_info.setText(tr("Could not change: {e}", e=e))
+
+    def _run_wizard(self) -> None:
+        from vcstudio.ui.first_run import FirstRunWizard
+        FirstRunWizard(self.ctx.settings, self.ctx.models, parent=self.widget).exec()
+        self.app_info.setText(tr("Setup saved. A changed language applies after a restart."))
+
+    def _save_diagnostics(self) -> None:
+        from PySide6.QtWidgets import QFileDialog
+        from vcstudio.app.diagnostics import default_name, write_zip
+        path, _ = QFileDialog.getSaveFileName(self.widget, tr("Save diagnostics"),
+                                              str(self.ctx.paths.root / default_name()), "ZIP (*.zip)")
+        if not path:
+            return
+        try:
+            info = write_zip(self.ctx, Path(path))
+            self.app_info.setText(tr("Saved {path} ({n} files, {kb} KB). Personal data (user name, computer name, "
+                                     "home folder) is replaced. Nothing is sent anywhere.",
+                                     path=path, n=info["files"], kb=info["kb"]))
+        except Exception as e:
+            self.app_info.setText(tr("Could not save diagnostics: {e}", e=e))
 
     def save(self):
         s = self.ctx.settings

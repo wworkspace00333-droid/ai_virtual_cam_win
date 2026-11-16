@@ -100,6 +100,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "preview_max_fps": 30,
         "global_hotkeys": True,
         "language": "auto",          # auto (macOS preferred language) | en | ru; applied at next start
+        "first_run_done": False,     # the first-run wizard (vcstudio/ui/first_run.py) ran once
+        "close_to_tray": True,       # closing the window keeps the app (and the camera) running in the tray
+        "start_minimized": False,    # with Windows sign-in autostart: start in the tray
     },
     "processing": {"compositor": "auto"},     # auto (GPU if available) | metal (macOS) / d3d11 (Windows) | cpu
     "hotkeys": dict(DEFAULT_HOTKEYS),

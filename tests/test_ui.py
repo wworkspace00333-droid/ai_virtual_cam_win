@@ -67,6 +67,35 @@ def test_camera_page_offers_reinstall_and_app_checks(win, monkeypatch):
     assert calls == ["reinstall"]
 
 
+@pytest.mark.skipif(__import__("sys").platform != "win32", reason="Windows texts")
+def test_no_macos_wording_anywhere_in_the_windows_window(win):
+    """Every page, every label / button / tooltip / combo item: no Core ML, Apple, macOS or Mac on Windows.
+    (English source texts; their Russian versions are checked in test_ui_win.test_platform_texts_and_choices.)"""
+    import re
+
+    from PySide6.QtWidgets import QAbstractButton, QComboBox, QGroupBox, QLabel, QLineEdit, QWidget
+    try:
+        bad = re.compile(r"Core ?ML|Apple|macOS|\bMac\b|Neural Engine|Metal\b|IOAccelerator|systemextensionsctl|"
+                         r"AVFoundation|VideoToolbox|\.mlpackage")
+        found = []
+        for i in range(len(win.pages)):
+            win.nav.setCurrentRow(i)
+            for w in win.pages[i].widget.findChildren(QWidget):
+                texts = [w.toolTip()]
+                if isinstance(w, (QLabel, QAbstractButton)):
+                    texts.append(w.text())
+                if isinstance(w, QGroupBox):
+                    texts.append(w.title())
+                if isinstance(w, QLineEdit):
+                    texts.append(w.placeholderText())
+                if isinstance(w, QComboBox):
+                    texts += [w.itemText(k) for k in range(w.count())]
+                found += [f"{win.pages[i].title}: {t!r}" for t in texts if t and bad.search(t)]
+        assert not found, "\n".join(found[:20])
+    finally:
+        win.nav.setCurrentRow(0)
+
+
 def test_camera_output_waits_before_the_first_frame():
     from vcstudio.core.video_pipeline import CameraOutputController
     assert CameraOutputController("AI Virtual Camera", "", True).state == "waiting"

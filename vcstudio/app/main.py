@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import signal
 import sys
 from pathlib import Path
@@ -86,6 +87,11 @@ def main(argv: list[str] | None = None) -> int:
     from vcstudio import i18n
     lang = argv[argv.index("--lang") + 1] if "--lang" in argv else ctx.settings.get("ui.language")
     i18n.set_language(i18n.resolve(lang))
+    if ("--smoke-test" not in argv and "--snapshot" not in argv and "--lang" not in argv
+            and not os.environ.get("VCS_NO_WIZARD")):
+        from vcstudio.ui.first_run import run_if_needed
+        if run_if_needed(ctx.settings, ctx.models):          # first start: language, source, mode
+            i18n.set_language(i18n.resolve(ctx.settings.get("ui.language")))
 
     def excepthook(t, v, tb):
         logging.getLogger("vcstudio.crash").critical("Unhandled exception", exc_info=(t, v, tb))
@@ -96,7 +102,12 @@ def main(argv: list[str] | None = None) -> int:
     sys.excepthook = excepthook
 
     win = MainWindow(ctx)
-    win.show()
+    if "--minimized" in argv and win.tray is not None:      # Windows sign-in autostart: start in the tray
+        app.setQuitOnLastWindowClosed(False)
+    else:
+        win.show()
+    if win.tray is not None:
+        app.setQuitOnLastWindowClosed(False)                 # hiding to the tray must not end the app
     if "--smoke-test" not in argv and "--snapshot" not in argv:
         # first start only: measure this PC and pick the performance mode (vcstudio/ai/auto_profile.py)
         from PySide6.QtCore import QObject, Signal
