@@ -97,6 +97,22 @@ def main(argv: list[str] | None = None) -> int:
 
     win = MainWindow(ctx)
     win.show()
+    if "--smoke-test" not in argv and "--snapshot" not in argv:
+        # first start only: measure this PC and pick the performance mode (vcstudio/ai/auto_profile.py)
+        from PySide6.QtCore import QObject, Signal
+
+        from vcstudio.ai import auto_profile
+
+        class _AutoSig(QObject):
+            done = Signal(object)
+        auto_sig = _AutoSig()
+
+        def _apply(r):
+            if auto_profile.apply_result(ctx, r):
+                win.performance.sync_mode()
+                win.dashboard.refresh_profile()
+        auto_sig.done.connect(_apply)
+        auto_profile.choose_once(ctx.settings, ctx.models, auto_sig.done.emit)
     # Let Ctrl+C in a terminal quit cleanly
     signal.signal(signal.SIGINT, lambda *_: app.quit())
     keepalive = QTimer(); keepalive.start(250); keepalive.timeout.connect(lambda: None)

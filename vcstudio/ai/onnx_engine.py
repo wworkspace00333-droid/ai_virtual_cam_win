@@ -71,25 +71,67 @@ def provider_plan(compute_units: str) -> list[tuple[str, dict]]:
     return plan
 
 
-def create_session(path: Path, compute_units: str = "all"):
-    """InferenceSession on the first provider of the plan that works; returns (session, provider label)."""
+def _cache_file(path: Path, cache_dir: Path, provider: str, opts: dict) -> Path:
+    """Optimised-model cache entry. ORT_ENABLE_ALL graphs can contain provider- and machine-specific nodes, so the
+    key covers the model file (size, mtime), ONNX Runtime version, provider, its options and the GPU name."""
+    import hashlib
+
+    import onnxruntime as ort
+    st = path.stat()
+    gpu = _best_dml_device()[1] if provider == "DmlExecutionProvider" else ""
+    key = f"{path.resolve()}|{st.st_size}|{int(st.st_mtime)}|{ort.__version__}|{provider}|{sorted(opts.items())}|{gpu}"
+    return cache_dir / f"{path.stem}-{provider.replace('ExecutionProvider', '').lower()}-" \
+                       f"{hashlib.sha256(key.encode()).hexdigest()[:12]}.opt.onnx"
+
+
+def create_session(path: Path, compute_units: str = "all", cache_dir: Path | None = None):
+    """InferenceSession on the first provider of the plan that works; returns (session, provider label).
+
+    With `cache_dir`, the graph optimised for that provider is saved on the first load and later loads open the saved
+    graph with optimisation off (no repeated optimisation pass). A cache entry that fails to load is removed and the
+    original model is used."""
     import onnxruntime as ort
     errors = []
     for name, opts in provider_plan(compute_units):
-        so = ort.SessionOptions()
-        so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        so.log_severity_level = 3
-        so.intra_op_num_threads = cpu_threads()
-        if name == "DmlExecutionProvider":            # DirectML requirements
-            so.enable_mem_pattern = False
-            so.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        def options(optimise: bool, save_to: Path | None = None, name: str = name):
+            so = ort.SessionOptions()
+            so.graph_optimization_level = (ort.GraphOptimizationLevel.ORT_ENABLE_ALL if optimise
+                                           else ort.GraphOptimizationLevel.ORT_DISABLE_ALL)
+            so.log_severity_level = 3
+            so.intra_op_num_threads = cpu_threads()
+            if name == "DmlExecutionProvider":        # DirectML requirements
+                so.enable_mem_pattern = False
+                so.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+            if save_to is not None:
+                so.optimized_model_filepath = str(save_to)
+            return so
         providers = [(name, opts)] if name == "CPUExecutionProvider" else [(name, opts), "CPUExecutionProvider"]
-        try:
-            sess = ort.InferenceSession(str(path), sess_options=so, providers=providers)
-        except Exception as e:                       # e.g. CUDA libraries missing, no D3D12 device
-            errors.append(f"{name}: {e}")
-            log.warning("ONNX Runtime %s unavailable for %s: %s", name, path.name, e)
-            continue
+        cached = _cache_file(path, cache_dir, name, opts) if cache_dir is not None else None
+        sess = None
+        if cached is not None and cached.exists():
+            try:
+                sess = ort.InferenceSession(str(cached), sess_options=options(False), providers=providers)
+            except Exception as e:                   # stale / foreign cache entry: rebuild it
+                log.warning("Optimised-model cache %s unusable (%s); rebuilding", cached.name, e)
+                cached.unlink(missing_ok=True)
+                sess = None
+        if sess is None:
+            save = None
+            if cached is not None:
+                cached.parent.mkdir(parents=True, exist_ok=True)
+                save = cached.with_suffix(".part")
+            try:
+                sess = ort.InferenceSession(str(path), sess_options=options(True, save), providers=providers)
+            except Exception as e:                   # e.g. CUDA libraries missing, no D3D12 device
+                errors.append(f"{name}: {e}")
+                log.warning("ONNX Runtime %s unavailable for %s: %s", name, path.name, e)
+                if save is not None:
+                    save.unlink(missing_ok=True)
+                continue
+            if save is not None and save.exists() and sess.get_providers()[0] == name:
+                save.replace(cached)                 # only a graph built for the provider actually used
+            elif save is not None:
+                save.unlink(missing_ok=True)
         used = sess.get_providers()[0]
         label = {"CUDAExecutionProvider": "CUDA", "DmlExecutionProvider": "DirectML",
                  "CPUExecutionProvider": "CPU"}.get(used, used)

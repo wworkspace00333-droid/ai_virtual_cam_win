@@ -193,7 +193,7 @@ class ModelManager:
                 from vcstudio.ai.onnx_engine import create_session
                 t0 = time.perf_counter()
                 try:
-                    sess, backend = create_session(info.package, compute_units)
+                    sess, backend = create_session(info.package, compute_units, cache_dir=self.cache_dir / "onnx")
                 except Exception as e:
                     raise ModelError(f"ONNX Runtime load failed for {info.name}: {e}") from e
                 lm = LoadedModel(info, sess, compute_units, time.perf_counter() - t0, backend)

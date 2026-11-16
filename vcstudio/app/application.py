@@ -59,6 +59,9 @@ class AppContext:
                                                  o["pixel_format"])
         self.pipeline = VideoPipeline(self.capture, self.ai, self.rois, self.replacement, self.camera_out,
                                       event_sink=self.db.log_event)
+        # adaptive detector rate: output vs input rate (only while the pipeline runs; otherwise nothing is judged)
+        self.ai.load_probe = lambda: ((self.pipeline.output_fps(), self.capture.stats().measured_fps)
+                                      if self.pipeline.running else (0.0, 0.0))
         self.watchdog = Watchdog(self)
         mode = self.profiles.active()["body"].get("performance_mode")
         if mode and mode != self.settings.get("performance.mode"):

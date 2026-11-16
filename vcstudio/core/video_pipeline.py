@@ -42,6 +42,7 @@ class PipelineStats:
     frames_out: int = 0
     inputs_skipped: int = 0           # newer input arrived before the previous one was processed
     latency_ms: float = 0.0           # capture arrival -> output ready (EMA)
+    latency_ms_p50: float = 0.0       # over the last 240 frames
     latency_ms_p95: float = 0.0
     process_ms: float = 0.0           # per-frame processing time (EMA)
     render_ms: float = 0.0
@@ -227,12 +228,17 @@ class VideoPipeline:
         self.replacement_enabled = on
         self._event("INFO", f"replacement {'enabled' if on else 'disabled'}")
 
+    def output_fps(self) -> float:
+        """Frames sent per second (1 s window); cheap, for the AI engine's adaptive rate."""
+        return self._fps.rate()
+
     def stats(self) -> PipelineStats:
         with self._lock:
             s = copy.copy(self._stats)
         s.output_fps = self._fps.rate()
         if self._lat:
             lat = sorted(self._lat)
+            s.latency_ms_p50 = lat[(len(lat) - 1) // 2]
             s.latency_ms_p95 = lat[int(0.95 * (len(lat) - 1))]
         s.camera_state, s.camera_error, s.camera_device = self.camera.state, self.camera.error, self.camera.device
         s.camera_sent, s.camera_dropped = self.camera.stats()

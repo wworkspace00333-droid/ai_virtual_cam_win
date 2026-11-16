@@ -168,12 +168,17 @@ def markdown(rep: dict) -> str:
     b = rep.get("pipeline") or {}
     if b.get("results"):
         L += ["", f"## Pipeline per mode ({b.get('input')}, {b.get('seconds_per_run')} s per run)", "",
-              "| scenario | mode | compositor | AI | out fps (avg / min) | latency ms (avg / p95) | AI fps | CPU % | MB |",
-              "|---|---|---|---|---|---|---|---|---|"]
+              "| scenario | mode | compositor | AI | out fps (avg / min) | latency ms (p50 / p95) | AI fps (rate) "
+              "| CPU % | GPU % | MB |",
+              "|---|---|---|---|---|---|---|---|---|---|"]
         for r in b["results"]:
+            gpu = r.get("gpu_util_pct_avg")
+            scale = r.get("ai_rate_scale", 1.0)
             L.append(f"| {r['scenario']} | {r['mode']} | {r.get('compositor')} | {r['ai_model']} on {r.get('ai_backend')} | "
-                     f"{r['output_fps_avg']} / {r['output_fps_min_1s']} | {r['latency_ms_avg']} / {r['latency_ms_p95']} | "
-                     f"{r['ai_fps']} | {r['app_cpu_pct']} | {r['footprint_mb']} |")
+                     f"{r['output_fps_avg']} / {r['output_fps_min_1s']} | "
+                     f"{r.get('latency_ms_p50', r['latency_ms_avg'])} / {r['latency_ms_p95']} | "
+                     f"{r['ai_fps']}{'' if scale >= 1 else f' ({scale:.0%})'} | {r['app_cpu_pct']} | "
+                     f"{'n/a' if gpu is None else gpu} | {r['footprint_mb']} |")
     c = rep.get("camera") or {}
     L += ["", "## Camera (Media Foundation, through Frame Server)", ""]
     if c.get("modes"):

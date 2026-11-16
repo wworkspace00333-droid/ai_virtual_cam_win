@@ -61,6 +61,8 @@ class AIStats:
     tracks_recovered: int = 0
     tracker_ms: float = 0.0
     last_error: str = ""
+    rate_scale: float = 1.0         # adaptive detector rate (vcstudio/ai/adaptive.py): 1.0 = the mode's own rate
+    rate_note: str = ""
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -106,6 +108,11 @@ class AIEngine:
         self.mq_note_tpl, self.mq_note_args = "", {}
         self._face = None                 # Apple Vision (macOS) or YuNet (Windows)
         self.face_error = ""              # why face detection is unavailable (it never stops object detection)
+        # Adaptive detector rate: the app sets load_probe to () -> (output fps, input fps); under overload the
+        # detector slows down instead of the camera output (vcstudio/ai/adaptive.py).
+        from vcstudio.ai.adaptive import AdaptiveAIRate
+        self.adaptive = AdaptiveAIRate()
+        self.load_probe: Callable[[], tuple[float, float]] | None = None
 
     # ------------------------------------------------------------- config
     def configure(self, cfg: DetectionConfig, performance_mode: str, tracking: TrackerConfig | None = None) -> None:
@@ -138,10 +145,24 @@ class AIEngine:
             return self._cfg, self._mode
 
     def target_fps(self) -> float | None:
+        """The detector rate: the profile's fixed rate, or the mode's rate scaled down under overload."""
         cfg, mode = self.config()
         if cfg.frequency_mode == "fixed":
-            return max(0.5, cfg.fixed_fps)
-        return PERFORMANCE_MODES[mode].ai_fps
+            return max(0.5, cfg.fixed_fps)       # the user's explicit choice is kept
+        return self.adaptive.apply(PERFORMANCE_MODES[mode].ai_fps, self._fps.rate())
+
+    def _update_adaptive(self) -> None:
+        probe = self.load_probe
+        if probe is None or time.monotonic() - self.adaptive._last < self.adaptive.period:
+            return
+        try:
+            out_fps, in_fps = probe()
+        except Exception:                        # a probe must never stop inference
+            return
+        scale = self.adaptive.update(time.monotonic(), out_fps, in_fps)
+        with self._lock:
+            self._stats.rate_scale = round(scale, 3)
+            self._stats.rate_note = self.adaptive.reason
 
     def set_enabled(self, enabled: bool) -> None:
         with self._lock:
@@ -378,6 +399,7 @@ class AIEngine:
             stop.wait(min(st["backoff"], 10))
             st["backoff"] *= 2
             return
+        self._update_adaptive()
         target = self.target_fps()
         now = time.perf_counter()
         if target and now < st["next_due"]:

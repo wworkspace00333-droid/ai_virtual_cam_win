@@ -56,7 +56,8 @@ def measure(ctx, seconds):
     s, a = ctx.pipeline.stats(), ctx.ai.stats()
     return {
         "output_fps_avg": round(statistics.mean(fps_samples), 1), "output_fps_min_1s": round(min(fps_samples), 1),
-        "latency_ms_avg": round(statistics.mean(lat), 2), "latency_ms_p95": round(s.latency_ms_p95, 2),
+        "latency_ms_avg": round(statistics.mean(lat), 2), "latency_ms_p50": round(s.latency_ms_p50, 2),
+        "latency_ms_p95": round(s.latency_ms_p95, 2), "ai_rate_scale": a.rate_scale,
         "process_ms_avg": round(statistics.mean(proc_ms), 2), "gpu_render_ms": round(s.gpu_ms, 2),
         "render_errors": s.render_errors, "inputs_skipped": s.inputs_skipped,
         "ai_model": a.model, "ai_backend": a.backend, "compositor": s.backend, "ai_target_fps": a.target_fps,

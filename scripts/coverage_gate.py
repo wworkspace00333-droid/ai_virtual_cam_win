@@ -49,6 +49,11 @@ def main() -> int:
             core[1] += tot
     pct = 100 * core[0] / max(core[1], 1)
     print(f"\ncore packages: {pct:.1f}% (minimum {a.min:.0f}%)   all measured code: {d['totals']['percent_covered']:.1f}%")
+    import os
+    if os.environ.get("GITHUB_ACTIONS"):          # visible on the run page without signing in
+        level = "notice" if pct >= a.min else "error"
+        print(f"::{level} title=Coverage::core packages {pct:.1f}% (minimum {a.min:.0f}%), "
+              f"all measured code {d['totals']['percent_covered']:.1f}%")
     return 0 if pct >= a.min else 1
 
 
