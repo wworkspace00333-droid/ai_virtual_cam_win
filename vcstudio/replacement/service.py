@@ -36,8 +36,9 @@ class ReplacementService:
         specs, assets = self.state()
         return self.compositor.render(frame, regions, specs, assets, t)
 
-    def render_pb(self, frame, regions, t: float | None = None, pre_ops=None):
-        specs, assets = self.state()
+    def render_pb(self, frame, regions, t: float | None = None, pre_ops=None, state=None):
+        """`state` = (specs, assets) of the scene being drawn (vcstudio/core/scene.py); default: the loaded ones."""
+        specs, assets = state if state is not None else self.state()
         return self.compositor.render_pb(frame, regions, specs, assets, t, pre_ops)
 
     def players_for_roi(self, roi_id: str):

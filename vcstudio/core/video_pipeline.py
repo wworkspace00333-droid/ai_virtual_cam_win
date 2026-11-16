@@ -167,6 +167,7 @@ class VideoPipeline:
         self._last_out: Frame | None = None
         self.override = None              # callable(w, h) -> BGRA array sent instead of the video (calibration)
         self.background = None            # BackgroundService (vcstudio/replacement/background.py), set by the app
+        self.scene = None                 # SceneState (vcstudio/core/scene.py): published whole by the app
         self._override_cache: tuple | None = None
         self._consecutive_errors = 0
         self._generation = 0
@@ -294,26 +295,36 @@ class VideoPipeline:
                 rendered: Frame | None = None
                 work = frame                  # the frame the outputs are made from (CPU background applied)
                 pre_ops: list = []            # GPU background layers, drawn by the compositor before the regions
+                # One scene for the whole frame (vcstudio/core/scene.py): a switch published while this frame is drawn
+                # takes effect on the next frame, never half-way through this one.
+                sc = self.scene
                 bg = self.background
+                snap = (sc.bg_cfg, sc.bg_image) if sc is not None and sc.bg_cfg is not None else None
                 if bg is not None and not self.passthrough and self.replacement_enabled:
                     try:
                         if bg.use_gpu_layers(self.replacement.compositor.active.name):
-                            pre_ops = bg.ops(frame)
+                            pre_ops = bg.ops(frame, snap)
                         else:
-                            work = bg.apply(frame)
+                            work = bg.apply(frame, snap)
                     except Exception as e:    # the frame goes on without background; the camera never waits
                         with self._lock:
                             self._stats.last_error = f"background: {type(e).__name__}: {e}"
                         log.exception("background failed; frame passed without it")
-                regions_on = not self.passthrough and self.replacement_enabled and self.replacement.active()
+                active = sc.replacement_active if sc is not None else self.replacement.active()
+                regions_on = not self.passthrough and self.replacement_enabled and active
                 if regions_on or pre_ops:
                     try:
                         regions = []
                         if regions_on:
                             tracked = self.ai.tracked_at(frame.pts)
-                            regions = self.rois.resolve(tracked, frame.width, frame.height)
+                            if sc is not None:
+                                from vcstudio.roi.resolver import resolve
+                                regions = resolve(list(sc.rois), tracked, frame.width, frame.height)
+                            else:
+                                regions = self.rois.resolve(tracked, frame.width, frame.height)
                         regions_n = len(regions)
-                        pb = self.replacement.render_pb(work, regions, frame.pts, pre_ops)
+                        pb = self.replacement.render_pb(work, regions, frame.pts, pre_ops,
+                                                        state=(sc.specs, sc.assets) if sc is not None else None)
                         rendered = Frame(frame.seq, frame.pts, frame.arrival, frame.width, frame.height,
                                          pixel_buffer=pb, source="processed" if regions_on else "background")
                         self._consecutive_errors = 0
@@ -329,6 +340,8 @@ class VideoPipeline:
                 out = rendered if rendered is not None else Frame(
                     frame.seq, frame.pts, frame.arrival, frame.width, frame.height,
                     pixel_buffer=pixel_buffer_for(work), source="passthrough" if work is frame else "background")
+                if sc is not None:
+                    out.meta["scene"] = sc.version
                 self._last_out = out
             self.camera.send(out.pixel_buffer, frame.pts)
             self.processed.put((frame, out))

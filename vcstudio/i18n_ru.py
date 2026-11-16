@@ -211,6 +211,24 @@ RU: dict[str, str] = {
     "Video file": "Видеофайл",
     "Low disk space: {mb} MB free": "Мало места на диске: свободно {mb} МБ",
     "From the start": "С начала",
+    "Scenes": "Сцены",
+    "A scene is a complete look — regions, replacements, background, AI settings and, if you want, its own input. "
+    "Switching is instant and whole: the camera never shows half of one scene and half of another. Create, rename or "
+    "export scenes on the Profiles page.":
+        "Сцена — это готовый вид: зоны, замены, фон, настройки ИИ и, если нужно, свой источник видео. Переключение "
+        "мгновенное и целиком: камера никогда не показывает половину одной сцены и половину другой. Создавать, "
+        "переименовывать и экспортировать сцены можно на странице «Профили».",
+    "Hotkey": "Клавиша",
+    "Same input as now": "Тот же вход, что сейчас",
+    "Use the current input": "Запомнить текущий вход",
+    "Same as now": "Как сейчас",
+    "Switch to this scene": "Переключить на эту сцену",
+    "Active scene": "Активная сцена",
+    "No picture yet": "Пока нет картинки",
+    "Active scene: {name}. Hotkeys work in other apps too when “System-wide” is on (Settings).":
+        "Активная сцена: {name}. Клавиши работают и в других программах, если включено «Во всей системе» "
+        "(«Настройки»).",
+    **{f"Scene {n}": f"Сцена {n}" for n in range(1, 10)},
     "AI resources": "Ресурсы ИИ",
     "When the PC cannot keep up, the camera keeps its frame rate: the scheduler slows the least important module "
     "first (background segmentation, then detection) and restores them when there is headroom again.":

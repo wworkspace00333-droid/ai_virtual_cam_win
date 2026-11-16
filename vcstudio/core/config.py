@@ -58,6 +58,7 @@ DEFAULT_HOTKEYS: dict[str, str] = {
     "card_next": "Ctrl+Alt+Right",
     "card_prev": "Ctrl+Alt+Left",
     "card_toggle": "Ctrl+Alt+C",
+    **{f"scene_{n}": f"Ctrl+Alt+{n}" for n in range(1, 10)},        # scene slots 1..9 (vcstudio/core/scene.py)
 }
 
 DEFAULT_SETTINGS: dict[str, Any] = {

@@ -16,9 +16,10 @@ def win(qtbot, paths):
     ctx.shutdown()
 
 
-def test_twelve_pages_in_spec_order(win):
+def test_pages_in_spec_order(win):
     assert [p.title for p in win.pages] == ["Dashboard", "Input", "Preview", "AI Engine", "Detection", "ROI Editor",
-                                            "Replacement", "Profiles", "Virtual Camera", "Performance", "Logs", "Settings"]
+                                            "Replacement", "Scenes", "Profiles", "Virtual Camera", "Performance",
+                                            "Logs", "Settings"]
     for i in range(len(win.pages)):
         win.nav.setCurrentRow(i)
         assert win.stack.currentIndex() == i

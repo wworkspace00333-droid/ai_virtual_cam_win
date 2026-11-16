@@ -30,7 +30,7 @@ ACTION_SPECS: list[ActionSpec] = [
     ActionSpec("card_next", "Game card: next", 1),
     ActionSpec("card_prev", "Game card: previous", 1),
     ActionSpec("card_toggle", "Game card: show / hide", 1),
-]
+] + [ActionSpec(f"scene_{n}", f"Scene {n}", 1) for n in range(1, 10)]   # vcstudio/core/scene.py slots
 CURRENT_STAGE = 10
 
 

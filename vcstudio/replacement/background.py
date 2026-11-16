@@ -91,30 +91,43 @@ class BackgroundService:
     def use_gpu_layers(self, compositor_backend: str) -> bool:
         return compositor_backend in self.GPU_BACKENDS
 
-    def apply(self, frame: Frame) -> Frame:
-        """CPU path: the frame with its background blurred / replaced (OpenCV blend), or the frame itself."""
-        if not self.active:
+    def snapshot(self) -> tuple[BackgroundConfig, np.ndarray | None]:
+        """(config, decoded image) as loaded now — part of an atomic SceneState (vcstudio/core/scene.py)."""
+        with self._lock:
+            return self.cfg, self._image
+
+    def _resolve(self, snap) -> tuple[BackgroundConfig, np.ndarray | None]:
+        return snap if snap is not None else self.snapshot()
+
+    @staticmethod
+    def _snap_active(cfg: BackgroundConfig, image) -> bool:
+        return cfg.mode != "off" and (cfg.mode != "image" or image is not None)
+
+    def apply(self, frame: Frame, snap=None) -> Frame:
+        """CPU path: the frame with its background blurred / replaced (OpenCV blend), or the frame itself.
+        `snap` = (config, image) of the scene being drawn; default: the service's current state."""
+        cfg, image = self._resolve(snap)
+        if not self._snap_active(cfg, image):
             return frame
         mask, _ = self.seg.masks.peek()
         if mask is None:
             return frame
         from vcstudio.ai.person_segmentation import composite_background
-        with self._lock:
-            cfg, image = self.cfg, self._image
         with frame.bgra() as img:
             out = composite_background(img, mask, cfg.mode, cfg.strength, image, cfg.edge)
         self.applied += 1
         return Frame(frame.seq, frame.pts, frame.arrival, frame.width, frame.height, array=out,
                      source=f"{frame.source}+background")
 
-    def ops(self, frame: Frame) -> list:
+    def ops(self, frame: Frame, snap=None) -> list:
         """Compositor layers that draw the background (empty: nothing to do / no mask yet).
 
         One "composite" layer over the whole frame: the source is a blurred quarter-size copy of the frame (blur) or
         the chosen image (image), scaled to the frame by the sampler; the layer's mask is "not a person". The GPU
         backend (Direct3D 11 / Metal) and the CPU backend run the same layer code (parity-tested), so the costly
         full-size blend runs on the GPU when there is one; the CPU only blurs a quarter-size image."""
-        if not self.active:
+        cfg, image = self._resolve(snap)
+        if not self._snap_active(cfg, image):
             return []
         mask, ver = self.seg.masks.peek()
         if mask is None:
@@ -122,8 +135,6 @@ class BackgroundService:
         import cv2
 
         from vcstudio.replacement.compositor import DrawOp
-        with self._lock:
-            cfg, image = self.cfg, self._image
         W, H = frame.width, frame.height
         lo, hi = max(0.0, cfg.edge - 0.25), min(1.0, cfg.edge + 0.25)
         person = np.clip((mask - lo) / max(1e-6, hi - lo), 0.0, 1.0)

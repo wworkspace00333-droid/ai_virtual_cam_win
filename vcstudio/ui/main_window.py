@@ -23,6 +23,7 @@ from vcstudio.ui.pages.detection_page import DetectionPage
 from vcstudio.ui.pages.roi_page import ROIPage
 from vcstudio.ui.pages.replacement_page import ReplacementPage
 from vcstudio.ui.pages.camera_page import VirtualCameraPage
+from vcstudio.ui.pages.scenes_page import ScenesPage
 from vcstudio.ui.video_view import PreviewFeeder
 
 log = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ class MainWindow(QMainWindow):
         self.pages = [self.dashboard, self.input_page,
                       PreviewPage(ctx, self.feeder, lambda: self.goto("input"), self.start_processing),
                       AIEnginePage(ctx), DetectionPage(ctx, self.feeder), ROIPage(ctx, self.feeder),
-                      ReplacementPage(ctx), ProfilesPage(ctx, self), VirtualCameraPage(ctx),
+                      ReplacementPage(ctx), ScenesPage(ctx), ProfilesPage(ctx, self), VirtualCameraPage(ctx),
                       self.performance, self.logs, SettingsPage(ctx, self.actions_, self)]
         central = QWidget()
         h = QHBoxLayout(central)
@@ -216,6 +217,13 @@ class MainWindow(QMainWindow):
                 self.ctx.profiles.switch(self.ctx.profiles.next_name())
             except ProfileError as e:
                 log.error("switch profile failed: %s", e)
+        elif aid.startswith("scene_"):
+            try:
+                name = self.ctx.scenes.switch_slot(int(aid.split("_", 1)[1]))
+                if name is None:
+                    log.info("No scene in slot %s", aid)
+            except (ProfileError, ValueError) as e:
+                log.error("switch scene failed: %s", e)
         elif aid in ("card_next", "card_prev", "card_toggle"):
             from vcstudio.game import cardframe as cf
             if aid == "card_toggle":

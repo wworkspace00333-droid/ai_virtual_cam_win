@@ -180,9 +180,9 @@ def test_pipeline_uses_gpu_layers_when_the_compositor_is_a_hardware_gpu(paths, m
     seen = []
     real = ctx.replacement.render_pb
 
-    def spy(frame, regions, t=None, pre_ops=None):
+    def spy(frame, regions, t=None, pre_ops=None, state=None):
         seen.append(len(pre_ops or []))
-        return real(frame, regions, t, pre_ops)
+        return real(frame, regions, t, pre_ops, state=state)
     monkeypatch.setattr(ctx.replacement, "render_pb", spy)
     monkeypatch.setattr(ctx.background, "use_gpu_layers", lambda name: True)
     try:

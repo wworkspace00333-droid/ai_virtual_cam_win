@@ -23,6 +23,14 @@ Fixes from the 0.5 audit (docs/WINDOWS_AUDIT_0.5.md, P0).
   rate and ratcheted down to the floor; it now scales from the unthrottled rate (D26).
 
 ### Added
+- **Scenes** (P2.2, `vcstudio/core/scene.py`, new "Scenes" page): a scene is a profile (regions, replacements,
+  background, AI) plus a hotkey slot (Ctrl+Alt+1…9; without explicit slots, list order) and, optionally, its own input
+  (a camera, a file or a screen). **Atomic scene state:** the app builds one immutable snapshot of everything a frame
+  needs (regions, replacement specs, assets, background with its decoded image) after the new scene is loaded and
+  publishes it with a single assignment; the output thread takes that one reference per frame, so a frame is always
+  entirely one scene. Before, regions, replacements and background were swapped one after another and a frame in
+  between could mix them. Test: 12 switches between a red and a green scene with video flowing — every output frame
+  one solid colour matching the scene recorded in it. Scene cards show a thumbnail of the scene's last output.
 - **Resource scheduler** (P2.1, `vcstudio/core/scheduler.py`): one governor for the optional heavy modules. When the
   output falls below the input rate, the least important active module slows first — background segmentation
   (15 → 5 fps), then detection (down to 25 %) — and the most important recovers first when there is headroom. The

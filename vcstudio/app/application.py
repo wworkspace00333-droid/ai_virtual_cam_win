@@ -85,6 +85,8 @@ class AppContext:
             rate_fps=lambda: self.ai.stats().achieved_fps, cost_ms=lambda: self.ai.stats().inference_ms_avg,
             state=lambda: self.ai.stats().state + (" (standby)" if not self.ai.config()[0].detector_needed else "")))
         self.watchdog = Watchdog(self)
+        from vcstudio.core.scene import SceneManager
+        self.scenes = SceneManager(self)
         mode = self.profiles.active()["body"].get("performance_mode")
         if mode and mode != self.settings.get("performance.mode"):
             self.settings.set("performance.mode", mode)
@@ -106,6 +108,9 @@ class AppContext:
         self.replacement.load_profile(body)
         if hasattr(self, "background"):
             self.background.load_profile(body)
+            # everything of the new scene is loaded (incl. the decoded background image): publish it in one go
+            from vcstudio.core.scene import build_state
+            self.pipeline.scene = build_state(self.profiles.active_name, self.rois, self.replacement, self.background)
             if self.pipeline.running:
                 self.background.sync()
         self.ai.configure(DetectionConfig.from_profile(body), self.settings.get("performance.mode"),
