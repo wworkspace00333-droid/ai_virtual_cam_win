@@ -113,6 +113,10 @@ int wmain(int argc, wchar_t **argv) {
 	if (!raw) {
 		rgb->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
 		rgb->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
+		rgb->DeleteItem(MF_MT_YUV_MATRIX);                       // full-range RGB out (not "studio" 16-235)
+		rgb->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_0_255);
+		rgb->DeleteItem(MF_MT_DEFAULT_STRIDE);
+		rgb->DeleteItem(MF_MT_SAMPLE_SIZE);
 		hr = reader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, nullptr, rgb.Get());
 		if (FAILED(hr)) printf("note: RGB32 output not set (0x%08lX), reading native type\n", (unsigned long)hr);
 	}
@@ -123,6 +127,7 @@ int wmain(int argc, wchar_t **argv) {
 	MFGetAttributeRatio(cur.Get(), MF_MT_FRAME_RATE, &num, &den);
 	GUID sub = GUID_NULL;
 	cur->GetGUID(MF_MT_SUBTYPE, &sub);
+	UINT32 matrix = MFGetAttributeUINT32(cur.Get(), MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT601);
 	printf("format %ux%u @ %.2f fps, subtype %08lX\n", w, h, den ? (double)num / den : 0.0, sub.Data1);
 	int got = 0;
 	unsigned centre = 0;
@@ -142,10 +147,13 @@ int wmain(int argc, wchar_t **argv) {
 				size_t off = ((size_t)(h / 2) * w + w / 2) * 4;
 				if (sub == MFVideoFormat_RGB32 && off + 4 <= len) centre = *(unsigned *)(p + off);
 				size_t yo = (size_t)(h / 2) * w + w / 2, uvo = (size_t)w * h + (size_t)(h / 4) * w + (w / 2 & ~1u);
-				if (sub == MFVideoFormat_NV12 && uvo + 1 < len) {
+				if (sub == MFVideoFormat_NV12 && uvo + 1 < len) {        // limited range, matrix the type declares
 					double c = 1.164 * (p[yo] - 16), d = p[uvo] - 128, e = p[uvo + 1] - 128;
 					auto cl = [](double v) { return (unsigned)(v < 0 ? 0 : v > 255 ? 255 : v + 0.5); };
-					centre = cl(c + 2.017 * d) | cl(c - 0.392 * d - 0.813 * e) << 8 | cl(c + 1.596 * e) << 16;
+					if (matrix == MFVideoTransferMatrix_BT709)
+						centre = cl(c + 2.112 * d) | cl(c - 0.213 * d - 0.533 * e) << 8 | cl(c + 1.793 * e) << 16;
+					else
+						centre = cl(c + 2.017 * d) | cl(c - 0.392 * d - 0.813 * e) << 8 | cl(c + 1.596 * e) << 16;
 				}
 				b->Unlock();
 			}

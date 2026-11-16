@@ -43,6 +43,17 @@ int main() {
 	uint8_t v = nv[(size_t)W * H + (size_t)300 * W + 101];
 	CHECK(v > 200, "nv12 red V %d", v);
 
+	// NV12 BT.709 (the Media Foundation camera): red (200,0,0) -> Y = 16 + 47*200/256 = 52.7
+	std::vector<uint8_t> nv709((size_t)W * H * 3 / 2);
+	vcam::convert(src.data(), W, H, vcam::PixFmt::NV12, nv709.data(), W, vcam::Matrix::BT709);
+	CHECK(abs(nv709[(size_t)600 * W + 100] - 53) <= 2, "nv12 bt709 red luma %d", nv709[(size_t)600 * W + 100]);
+	// decode the BT.709 chroma back: R = 1.164 (Y - 16) + 1.793 (V - 128) ~ 200
+	{
+		int Y = nv709[(size_t)600 * W + 100], V = nv709[(size_t)W * H + (size_t)300 * W + 101];
+		double r = 1.164 * (Y - 16) + 1.793 * (V - 128);
+		CHECK(r > 194 && r < 206, "nv12 bt709 red decodes to %.1f", r);
+	}
+
 	// waiting card: dark background, some light text pixels
 	std::vector<uint8_t> card;
 	vcam::waiting_card(1280, 720, card);

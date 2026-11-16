@@ -101,7 +101,10 @@ class VcamWriter:
 
     def close(self) -> None:
         if self.base:
-            self._u32(O_ACTIVE, 0)
+            # only the current writer marks the output closed: a second, short-lived writer on the same section
+            # (a test, the test-pattern sender of another copy) must not blank the camera of the one still running
+            if ctypes.c_int32.from_address(self.base + O_PID).value == os.getpid():
+                self._u32(O_ACTIVE, 0)
             _k32.UnmapViewOfFile(self.base)
             self.base = None
         if self.h:

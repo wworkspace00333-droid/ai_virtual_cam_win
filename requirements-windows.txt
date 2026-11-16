@@ -4,8 +4,9 @@
 PySide6>=6.8
 numpy>=1.26
 scipy>=1.11
-opencv-python-headless>=4.10,<5  # capture (DirectShow / Media Foundation), imaging, YuNet, ArUco.
-                                 # 5.0 wheels lack the MSMF backend; the app is developed and tested on 4.14
+opencv-python-headless>=4.10,<5  # DirectShow capture, imaging, YuNet, ArUco. The Windows wheels have no MSMF
+                                 # backend: Media Foundation capture uses native\win\capture\vcs_mfcap.dll. Tested on 4.14
+pyinstaller>=6.10              # build only: scripts\build_installer_win.ps1 (+ Inno Setup 6)
 psutil>=5.9
 onnxruntime-directml>=1.20     # AI on any DirectX 12 GPU (NVIDIA / AMD / Intel) + CPU fallback.
                                # For CUDA instead: pip uninstall onnxruntime-directml; pip install onnxruntime-gpu

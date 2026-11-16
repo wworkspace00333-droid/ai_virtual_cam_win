@@ -78,8 +78,9 @@ static HRESULT make_type(const Mode &m, IMFMediaType **out) {
 	t->SetUINT32(MF_MT_DEFAULT_STRIDE, m.nv12 ? m.w : m.w * 4);
 	t->SetUINT32(MF_MT_SAMPLE_SIZE, (UINT32)vcam::frame_bytes(m.nv12 ? vcam::PixFmt::NV12 : vcam::PixFmt::BGRA32, m.w, m.h));
 	t->SetUINT32(MF_MT_FIXED_SIZE_SAMPLES, TRUE);
-	if (m.nv12) {   // vcam_frames.cpp encodes BT.601 limited range; unset, Windows assumes BT.709 for HD sizes
-		t->SetUINT32(MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT601);
+	if (m.nv12) {   // vcam_frames.cpp encodes BT.709 limited range for this camera (the Windows video processor
+		            // decodes HD NV12 as BT.709 whatever the type says); declared so attribute-aware clients agree
+		t->SetUINT32(MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT709);
 		t->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_16_235);
 		t->SetUINT32(MF_MT_VIDEO_PRIMARIES, MFVideoPrimaries_BT709);
 		t->SetUINT32(MF_MT_TRANSFER_FUNCTION, MFVideoTransFunc_709);
@@ -137,7 +138,7 @@ public:
 		w_ = (int)w; h_ = (int)hh;
 		fmt_ = sub == MFVideoFormat_NV12 ? vcam::PixFmt::NV12 : vcam::PixFmt::BGRA32;
 		period100ns_ = den && num ? (LONGLONG)10000000 * den / num : 333333;
-		producer_.set_format(w_, h_, fmt_);
+		producer_.set_format(w_, h_, fmt_, vcam::Matrix::BT709);
 		next_ = 0;
 		state_ = MF_STREAM_STATE_RUNNING;
 		PROPVARIANT pv; PropVariantInit(&pv);

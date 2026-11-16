@@ -41,19 +41,36 @@ static HANDLE open_session_section(DWORD session) {
 	return ntOpenSection(&h, SECTION_MAP_READ | SECTION_QUERY, &oa) >= 0 ? h : nullptr;
 }
 
+// The app's section in a given session, if it is there and the app sent a frame recently; returns the heartbeat.
+static uint64_t session_heartbeat(HANDLE h) {
+	void *v = MapViewOfFile(h, FILE_MAP_READ, 0, 0, sizeof(vcam_shm_header));
+	if (!v) return 0;
+	const vcam_shm_header *hdr = (const vcam_shm_header *)v;
+	uint64_t hb = (hdr->magic == VCAM_SHM_MAGIC && hdr->version == VCAM_SHM_VERSION) ? hdr->heartbeat_ns : 0;
+	UnmapViewOfFile(v);
+	return hb;
+}
+
 bool FrameReader::open(bool fromService) {
 	close();
 	HANDLE h = nullptr;
 	if (fromService) {
+		// Frame Server runs in session 0; the app runs in a user session: the console, or a Remote Desktop session
+		// that is not the console. WTSEnumerateSessions does not list those to LOCAL SERVICE (measured on Windows
+		// Server 2025 over RDP), so probe the session namespaces directly and take the section whose writer sent
+		// a frame most recently (two users running the app: the one that is streaming wins).
+		uint64_t best = 0;
 		DWORD console = WTSGetActiveConsoleSessionId();
-		if (console != 0xFFFFFFFF) h = open_session_section(console);
-		if (!h) {                                   // remote desktop sessions: first one that has the app
-			WTS_SESSION_INFOW *info = nullptr;
-			DWORD n = 0;
-			if (WTSEnumerateSessionsW(WTS_CURRENT_SERVER_HANDLE, 0, 1, &info, &n)) {
-				for (DWORD i = 0; i < n && !h; ++i)
-					if (info[i].State == WTSActive) h = open_session_section(info[i].SessionId);
-				WTSFreeMemory(info);
+		for (DWORD s = 1; s <= 64; ++s) {
+			HANDLE c = open_session_section(s);
+			if (!c) continue;
+			uint64_t hb = session_heartbeat(c);
+			if (hb > best || (!h && s == console)) {
+				if (h) CloseHandle(h);
+				h = c;
+				best = hb > best ? hb : best;
+			} else {
+				CloseHandle(c);
 			}
 		}
 	}
@@ -141,12 +158,19 @@ void scale_bgra(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh
 	}
 }
 
-// BT.601 limited range (what webcams deliver and clients assume for YUY2/NV12)
-static inline uint8_t Y(int r, int g, int b) { return (uint8_t)((66 * r + 129 * g + 25 * b + 128) / 256 + 16); }
-static inline uint8_t U(int r, int g, int b) { return (uint8_t)((-38 * r - 74 * g + 112 * b + 128) / 256 + 128); }
-static inline uint8_t V(int r, int g, int b) { return (uint8_t)((112 * r - 94 * g - 18 * b + 128) / 256 + 128); }
+// Limited-range YCbCr coefficients x256. BT.601: what DirectShow apps and OpenCV assume for YUY2 / NV12.
+// BT.709: what the Windows video processor applies to HD NV12 from the Media Foundation camera (measured: it
+// decodes HD NV12 as BT.709 even when the type declares BT.601), declared in the MF media types.
+struct Coef { int yr, yg, yb, ur, ug, ub, vr, vg, vb; };
+static const Coef kBT601 = {66, 129, 25, -38, -74, 112, 112, -94, -18};
+static const Coef kBT709 = {47, 157, 16, -26, -87, 112, 112, -102, -10};
+static thread_local const Coef *g_coef = &kBT601;
+static inline uint8_t Y(int r, int g, int b) { const Coef &k = *g_coef; return (uint8_t)((k.yr * r + k.yg * g + k.yb * b + 128) / 256 + 16); }
+static inline uint8_t U(int r, int g, int b) { const Coef &k = *g_coef; return (uint8_t)((k.ur * r + k.ug * g + k.ub * b + 128) / 256 + 128); }
+static inline uint8_t V(int r, int g, int b) { const Coef &k = *g_coef; return (uint8_t)((k.vr * r + k.vg * g + k.vb * b + 128) / 256 + 128); }
 
-void convert(const uint8_t *bgra, int w, int h, PixFmt f, uint8_t *dst, int stride) {
+void convert(const uint8_t *bgra, int w, int h, PixFmt f, uint8_t *dst, int stride, Matrix m) {
+	g_coef = m == Matrix::BT709 ? &kBT709 : &kBT601;
 	switch (f) {
 	case PixFmt::BGRA32:
 		for (int y = 0; y < h; ++y) memcpy(dst + (size_t)y * stride, bgra + (size_t)y * w * 4, (size_t)w * 4);
@@ -265,7 +289,7 @@ bool FrameProducer::produce(FrameReader &reader, bool fromService, uint8_t *dst,
 		src = card_.data();
 		last_ = 0;                                    // re-read the newest frame when the app comes back
 	}
-	convert(src, w_, h_, fmt_, dst, stride);
+	convert(src, w_, h_, fmt_, dst, stride, matrix_);
 	return app;
 }
 

@@ -14,6 +14,7 @@
 namespace vcam {
 
 enum class PixFmt { BGRA32, RGB32_BOTTOMUP, RGB24_BOTTOMUP, YUY2, NV12 };
+enum class Matrix { BT601, BT709 };       // YCbCr matrix of YUY2 / NV12 output (limited range)
 
 inline uint64_t now_ns() {
 	static LARGE_INTEGER freq = [] { LARGE_INTEGER f; QueryPerformanceFrequency(&f); return f; }();
@@ -50,14 +51,14 @@ private:
 void scale_bgra(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh);
 // BGRA (top-down, tightly packed) -> client format into `dst` with the given row stride for packed
 // formats (NV12: luma stride, chroma plane follows at stride * h).
-void convert(const uint8_t *bgra, int w, int h, PixFmt f, uint8_t *dst, int stride);
+void convert(const uint8_t *bgra, int w, int h, PixFmt f, uint8_t *dst, int stride, Matrix m = Matrix::BT601);
 // "Waiting for AI Virtual Camera Studio..." card (BGRA), drawn with GDI.
 void waiting_card(int w, int h, std::vector<uint8_t> &out);
 
 // Per-stream helper: keeps the last frame, produces the bytes for one output sample.
 class FrameProducer {
 public:
-	void set_format(int w, int h, PixFmt f) { w_ = w; h_ = h; fmt_ = f; card_.clear(); }
+	void set_format(int w, int h, PixFmt f, Matrix m = Matrix::BT601) { w_ = w; h_ = h; fmt_ = f; matrix_ = m; card_.clear(); }
 	// Fills dst (frame_bytes(fmt, w, h) bytes, given stride) with the newest app frame or the card.
 	// Returns true if an app frame (not the card) was produced.
 	bool produce(FrameReader &reader, bool fromService, uint8_t *dst, int stride);
@@ -65,6 +66,7 @@ public:
 private:
 	int w_ = 0, h_ = 0;
 	PixFmt fmt_ = PixFmt::YUY2;
+	Matrix matrix_ = Matrix::BT601;
 	uint64_t last_ = 0;
 	uint32_t lw_ = 0, lh_ = 0;
 	std::vector<uint8_t> raw_, scaled_, card_;

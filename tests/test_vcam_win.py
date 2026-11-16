@@ -213,7 +213,7 @@ def test_media_foundation_source_in_process():
         assert m, r.stdout
         return int(m[1]), float(m[2]), tuple(int(x, 16) for x in m.group(3, 4, 5))
     n, fps, px = read()
-    assert n == 45 and 25 <= fps <= 35 and px == (40, 32, 28)          # 1080p30 NV12/RGB32 card
+    assert n == 45 and 25 <= fps <= 35 and all(abs(a - b) <= 3 for a, b in zip(px, (40, 32, 28)))   # the card
     w = VcamWriter()
     stop = threading.Event()
     img = np.zeros((1080, 1920, 4), np.uint8); img[..., 1] = 40; img[..., 2] = 200; img[..., 3] = 255
@@ -229,7 +229,7 @@ def test_media_foundation_source_in_process():
         n, fps, px = read()
     finally:
         stop.set(); t.join(); w.close()
-    assert n == 45 and px == (0, 40, 200)
+    assert n == 45 and all(abs(a - b) <= 3 for a, b in zip(px, (0, 40, 200))), px
 
 
 MF_DEVICE = "AI Virtual Camera (Windows Virtual Camera)"
@@ -249,8 +249,8 @@ def _mf_installed() -> bool:
 @pytest.mark.parametrize("native,fps", [(1, 60), (3, 60), (4, 30)])   # NV12 1080p60, NV12 720p60, RGB32 1080p30
 def test_media_foundation_camera_through_frame_server(native, fps):
     """The registered Windows 11 camera opened by name like Zoom / the Camera app: Frame Server (session 0) hosts
-    the media source, which reads the app's frames from this session. NV12 is decoded here as BT.601 limited
-    range, which the media type declares."""
+    the media source, which reads the app's frames from this session. NV12 is decoded here with the matrix the type declares (BT.709 limited
+    range for HD (the Windows video processor applies BT.709 to HD NV12), which the media type declares."""
     import subprocess
     from vcstudio.platform.win.vcam_writer import VcamWriter
 
@@ -258,7 +258,7 @@ def test_media_foundation_camera_through_frame_server(native, fps):
         r = subprocess.run([str(MF_CLIENT), "--device", MF_DEVICE, str(n), str(native), "raw"],
                            capture_output=True, text=True, timeout=60)
         assert r.returncode == 0, r.stdout + r.stderr
-        assert re.search(r"native %d: .*matrix (2|0), range (2|0)  <- selected" % native, r.stdout), r.stdout
+        assert re.search(r"native %d: .*matrix (1|0), range (2|0)  <- selected" % native, r.stdout), r.stdout
         m = re.search(r"frames (\d+) in [\d.]+ s \(([\d.]+) fps\), centre BGRA (\w\w) (\w\w) (\w\w)", r.stdout)
         assert m, r.stdout
         return int(m[1]), float(m[2]), [int(x, 16) for x in m.group(3, 4, 5)]
@@ -338,8 +338,11 @@ def test_rename_live_and_back():
     import subprocess
     from vcstudio.platform.win.devices import list_video_devices
     from vcstudio.platform.win.vcam_status import camera_name, components, setup_tool
-    tool, old = setup_tool(), camera_name()
-    assert tool and any(c.state == "installed" for c in components())
+    # the vcam-setup.exe next to the registered DLLs: one elsewhere (the build folder) would re-register the camera
+    # to its own folder, which Frame Server (LOCAL SERVICE) may not be able to read
+    reg = [Path(c.path).parent / "vcam-setup.exe" for c in components() if c.state == "installed"]
+    tool, old = (reg[0] if reg and reg[0].exists() else setup_tool()), camera_name()
+    assert tool and reg
     try:
         r = subprocess.run([str(tool), "--rename", "Test Cam 9"], capture_output=True, text=True, timeout=120)
         assert r.returncode == 0, r.stdout + r.stderr

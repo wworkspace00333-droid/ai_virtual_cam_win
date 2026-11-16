@@ -213,6 +213,9 @@ extern "C" __declspec(dllexport) void *mfcap_open(const wchar_t *symlink, int wa
 	rgb->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
 	rgb->DeleteItem(MF_MT_DEFAULT_STRIDE);
 	rgb->DeleteItem(MF_MT_SAMPLE_SIZE);
+	// copied from a YUV type these would make the processor output "studio" RGB (16-235): ask for full range
+	rgb->DeleteItem(MF_MT_YUV_MATRIX);
+	rgb->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_0_255);
 	if (FAILED(hr = c->reader->SetCurrentMediaType(stream, nullptr, rgb.Get()))) {
 		c->reader.Reset(); c->source->Shutdown(); c->Release();
 		return fail(L"no converter to BGRA for this mode", hr);
