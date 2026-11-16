@@ -83,8 +83,16 @@ class BackgroundService:
         elif not self.active and self.seg.running:
             self.seg.stop()
 
+    # Measured on the 2-core development server (1080p, blur): compositor layers on software Direct3D (WARP) 34 ms,
+    # on the CPU compositor 243 ms, the direct OpenCV blend (apply) 18-24 ms. So the layers are used only with a
+    # hardware GPU compositor; otherwise apply() is faster. Hardware GPU timings: not measured yet.
+    GPU_BACKENDS = ("d3d11", "metal")
+
+    def use_gpu_layers(self, compositor_backend: str) -> bool:
+        return compositor_backend in self.GPU_BACKENDS
+
     def apply(self, frame: Frame) -> Frame:
-        """The frame with its background blurred / replaced, or the frame itself when there is nothing to do."""
+        """CPU path: the frame with its background blurred / replaced (OpenCV blend), or the frame itself."""
         if not self.active:
             return frame
         mask, _ = self.seg.masks.peek()
@@ -98,3 +106,41 @@ class BackgroundService:
         self.applied += 1
         return Frame(frame.seq, frame.pts, frame.arrival, frame.width, frame.height, array=out,
                      source=f"{frame.source}+background")
+
+    def ops(self, frame: Frame) -> list:
+        """Compositor layers that draw the background (empty: nothing to do / no mask yet).
+
+        One "composite" layer over the whole frame: the source is a blurred quarter-size copy of the frame (blur) or
+        the chosen image (image), scaled to the frame by the sampler; the layer's mask is "not a person". The GPU
+        backend (Direct3D 11 / Metal) and the CPU backend run the same layer code (parity-tested), so the costly
+        full-size blend runs on the GPU when there is one; the CPU only blurs a quarter-size image."""
+        if not self.active:
+            return []
+        mask, ver = self.seg.masks.peek()
+        if mask is None:
+            return []
+        import cv2
+
+        from vcstudio.replacement.compositor import DrawOp
+        with self._lock:
+            cfg, image = self.cfg, self._image
+        W, H = frame.width, frame.height
+        lo, hi = max(0.0, cfg.edge - 0.25), min(1.0, cfg.edge + 0.25)
+        person = np.clip((mask - lo) / max(1e-6, hi - lo), 0.0, 1.0)
+        not_person = np.ascontiguousarray(((1.0 - person) * 255 + 0.5).astype(np.uint8))
+        if cfg.mode == "blur":
+            with frame.bgra() as img:
+                small = cv2.resize(img, (max(1, W // 4), max(1, H // 4)), interpolation=cv2.INTER_AREA)
+            src = cv2.GaussianBlur(small, (0, 0), sigmaX=max(0.5, (cfg.strength | 1) / 4))
+            src[..., 3] = 255                                           # opaque (premultiplied = straight)
+            src_key: tuple = ("bgblur", frame.seq)                      # changes every frame: uploaded per frame
+        else:
+            src = image
+            src_key = ("img", "background", cfg.asset_id)               # uploaded once, kept on the GPU
+        sh, sw = src.shape[:2]
+        sx, sy = sw / W, sh / H
+        inv = np.array([[sx, 0.0, 0.5 * sx - 0.5], [0.0, sy, 0.5 * sy - 0.5]])   # frame px -> src px (pixel centres)
+        self.applied += 1
+        return [DrawOp("__background__", "composite", (0, 0, W, H), 1.0, mask=not_person,
+                       mask_rect=(0.0, 0.0, float(W), float(H)), mask_key=("bgmask", ver), src=np.ascontiguousarray(src),
+                       src_key=src_key, inv=inv)]

@@ -36,9 +36,9 @@ class ReplacementService:
         specs, assets = self.state()
         return self.compositor.render(frame, regions, specs, assets, t)
 
-    def render_pb(self, frame, regions, t: float | None = None):
+    def render_pb(self, frame, regions, t: float | None = None, pre_ops=None):
         specs, assets = self.state()
-        return self.compositor.render_pb(frame, regions, specs, assets, t)
+        return self.compositor.render_pb(frame, regions, specs, assets, t, pre_ops)
 
     def players_for_roi(self, roi_id: str):
         """Video players currently serving an ROI (for UI transport controls)."""

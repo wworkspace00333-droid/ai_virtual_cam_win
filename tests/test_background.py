@@ -77,6 +77,11 @@ def _ctx(paths, mode="blur", fail=False):
     return ctx
 
 
+def _out_source(ctx):
+    item = ctx.pipeline.processed.peek()[0]
+    return item[1].source if item is not None else None
+
+
 def _wait_for(pred, timeout=8.0):
     end = time.monotonic() + timeout
     while time.monotonic() < end:
@@ -90,14 +95,13 @@ def test_pipeline_outputs_the_background_processed_frame_and_keeps_the_original_
     ctx = _ctx(paths)
     try:
         ctx.start_capture()
-        assert _wait_for(lambda: (ctx.pipeline.processed.peek()[0] or (None, None))[1] is not None
-                         and ctx.pipeline.processed.peek()[0][1].source == "background")
+        assert _wait_for(lambda: _out_source(ctx) == "background")
         orig, out = ctx.pipeline.processed.peek()[0]
         assert "background" not in orig.source                     # the "original" preview is untouched
         assert ctx.background.seg.backend == "fake" and ctx.background.applied > 0
         ctx.update_active_profile(lambda b: b["background"].__setitem__("mode", "off"))
         assert _wait_for(lambda: not ctx.background.seg.running)  # switching off stops the segmentation thread
-        assert _wait_for(lambda: ctx.pipeline.processed.peek()[0][1].source == "passthrough")
+        assert _wait_for(lambda: _out_source(ctx) == "passthrough")
     finally:
         ctx.stop_capture()
         ctx.shutdown()
@@ -108,8 +112,83 @@ def test_segmentation_failure_never_stops_the_camera_output(paths):
     try:
         ctx.start_capture()
         assert _wait_for(lambda: ctx.pipeline.stats().frames_out > 30)
-        assert ctx.pipeline.processed.peek()[0][1].source == "passthrough"      # unchanged frames, no stall
+        assert _out_source(ctx) == "passthrough"      # unchanged frames, no stall
         assert "simulated segmentation failure" in ctx.background.seg.error
+    finally:
+        ctx.stop_capture()
+        ctx.shutdown()
+
+
+def _bg_service(mode, image=None):
+    from vcstudio.replacement.background import BackgroundConfig, BackgroundService
+
+    class _Cap:                                          # BackgroundService only needs .slot for its thread
+        slot = None
+    svc = BackgroundService(_Cap(), None, segmenter_factory=lambda: _FakeSeg())
+    svc.cfg = BackgroundConfig(mode=mode, strength=31, asset_id="a1")
+    svc._image = image
+    svc.seg.masks.put(_FakeSeg().probability(None))
+    return svc
+
+
+@pytest.mark.parametrize("mode", ["blur", "image"])
+def test_background_layers_render_the_same_on_cpu_and_gpu(tmp_path, mode):
+    from vcstudio.core.bench_source import sample_scene
+    from vcstudio.core.frame import Frame
+    from vcstudio.platform import GPU_COMPOSITOR
+    from vcstudio.replacement.assets import AssetLibrary
+    from vcstudio.replacement.compositor import Compositor
+    img = sample_scene(640, 360)
+    pic = np.zeros((200, 300, 4), np.uint8); pic[..., 1] = 180; pic[..., 2] = 40; pic[..., 3] = 255
+    svc = _bg_service(mode, pic)
+    ops = svc.ops(Frame(1, 0, 0, 640, 360, array=img))
+    assert len(ops) == 1 and ops[0].kind == "composite" and ops[0].bbox == (0, 0, 640, 360)
+    lib = AssetLibrary(tmp_path / "a")
+    cpu, gpu = Compositor(lib, "cpu"), Compositor(lib, GPU_COMPOSITOR)
+    try:
+        a = cpu.render(img, [], {}, {}, pre_ops=ops)
+        if not gpu.active.name.startswith(GPU_COMPOSITOR):
+            pytest.skip(f"no GPU compositor: {gpu.backend_error}")
+        b = gpu.render(img, [], {}, {}, pre_ops=ops)
+    finally:
+        cpu.close(); gpu.close()
+    d = np.abs(a.astype(int) - b.astype(int))[..., :3]
+    # same layer maths on both backends (filtering rounding differs by a few levels at mask edges, as in test_metal)
+    assert d.max() <= 6 and d.mean() < 0.5 and (d > 3).mean() < 0.001, (d.max(), d.mean(), (d > 3).mean())
+    centre, corner = a[180, 320, :3], a[10, 10, :3]
+    assert np.array_equal(centre, img[180, 320, :3])     # the person (mask centre) is untouched
+    if mode == "image":
+        assert tuple(corner) == (0, 180, 40)             # replaced
+
+
+def test_no_mask_yet_means_no_layers():
+    from vcstudio.core.frame import Frame
+    svc = _bg_service("blur")
+    svc.seg.masks.clear()
+    assert svc.ops(Frame(1, 0, 0, 64, 36, array=np.zeros((36, 64, 4), np.uint8))) == []
+
+
+def test_gpu_layers_only_with_a_hardware_gpu_compositor():
+    svc = _bg_service("blur")
+    assert svc.use_gpu_layers("d3d11") and svc.use_gpu_layers("metal")
+    assert not svc.use_gpu_layers("d3d11-warp") and not svc.use_gpu_layers("cpu")
+
+
+def test_pipeline_uses_gpu_layers_when_the_compositor_is_a_hardware_gpu(paths, monkeypatch):
+    """Simulated hardware backend name: the background goes to the compositor as layers (pre_ops)."""
+    ctx = _ctx(paths)
+    seen = []
+    real = ctx.replacement.render_pb
+
+    def spy(frame, regions, t=None, pre_ops=None):
+        seen.append(len(pre_ops or []))
+        return real(frame, regions, t, pre_ops)
+    monkeypatch.setattr(ctx.replacement, "render_pb", spy)
+    monkeypatch.setattr(ctx.background, "use_gpu_layers", lambda name: True)
+    try:
+        ctx.start_capture()
+        assert _wait_for(lambda: any(n == 1 for n in seen))
+        assert _wait_for(lambda: _out_source(ctx) == "background")
     finally:
         ctx.stop_capture()
         ctx.shutdown()

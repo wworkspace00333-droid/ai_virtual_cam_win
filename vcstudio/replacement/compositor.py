@@ -546,15 +546,15 @@ class Compositor:
 
     # ------------------------------------------------------------------ render
     def render(self, frame: np.ndarray, regions: list, specs: dict[str, ReplacementSpec],
-               assets: dict[str, Asset], t: float | None = None) -> np.ndarray:
-        """BGRA array in -> new BGRA array out (input untouched)."""
+               assets: dict[str, Asset], t: float | None = None, pre_ops: list[DrawOp] | None = None) -> np.ndarray:
+        """BGRA array in -> new BGRA array out (input untouched). `pre_ops` are drawn first (the background)."""
         with self._lock:
-            return self._render(frame, regions, specs, assets, t)
+            return self._render(frame, regions, specs, assets, t, pre_ops or [])
 
-    def _render(self, frame, regions, specs, assets, t):
+    def _render(self, frame, regions, specs, assets, t, pre_ops=()):
         t0 = time.perf_counter()
         H, W = frame.shape[:2]
-        ops = self.plan(W, H, regions, specs, assets, t)
+        ops = list(pre_ops) + self.plan(W, H, regions, specs, assets, t)
         t1 = time.perf_counter()
         out = None
         if self.active is self.metal and self.metal is not None:
@@ -568,16 +568,16 @@ class Compositor:
         return out
 
     def render_pb(self, frame, regions: list, specs: dict[str, ReplacementSpec], assets: dict[str, Asset],
-                  t: float | None = None):
+                  t: float | None = None, pre_ops: list[DrawOp] | None = None):
         """Frame (pixel buffer or array) in -> CVPixelBuffer out (zero-copy path for the output pipeline)."""
         with self._lock:
-            return self._render_pb(frame, regions, specs, assets, t)
+            return self._render_pb(frame, regions, specs, assets, t, pre_ops or [])
 
-    def _render_pb(self, frame, regions, specs, assets, t):
+    def _render_pb(self, frame, regions, specs, assets, t, pre_ops=()):
         from vcstudio.core.frame import Frame
         from vcstudio.core.pixelbuffer import pixel_buffer_for
         t0 = time.perf_counter()
-        ops = self.plan(frame.width, frame.height, regions, specs, assets, t)
+        ops = list(pre_ops) + self.plan(frame.width, frame.height, regions, specs, assets, t)
         t1 = time.perf_counter()
         if self.active is self.metal and self.metal is not None:
             try:

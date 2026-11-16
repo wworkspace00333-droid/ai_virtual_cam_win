@@ -292,23 +292,30 @@ class VideoPipeline:
                 out = self._last_out
             else:
                 rendered: Frame | None = None
-                work = frame                  # the frame the outputs are made from (background applied)
+                work = frame                  # the frame the outputs are made from (CPU background applied)
+                pre_ops: list = []            # GPU background layers, drawn by the compositor before the regions
                 bg = self.background
                 if bg is not None and not self.passthrough and self.replacement_enabled:
                     try:
-                        work = bg.apply(frame)
-                    except Exception as e:    # the original frame goes on; the camera never waits for this
+                        if bg.use_gpu_layers(self.replacement.compositor.active.name):
+                            pre_ops = bg.ops(frame)
+                        else:
+                            work = bg.apply(frame)
+                    except Exception as e:    # the frame goes on without background; the camera never waits
                         with self._lock:
                             self._stats.last_error = f"background: {type(e).__name__}: {e}"
-                        log.exception("background compositing failed; frame passed unchanged")
-                if not self.passthrough and self.replacement_enabled and self.replacement.active():
+                        log.exception("background failed; frame passed without it")
+                regions_on = not self.passthrough and self.replacement_enabled and self.replacement.active()
+                if regions_on or pre_ops:
                     try:
-                        tracked = self.ai.tracked_at(frame.pts)
-                        regions = self.rois.resolve(tracked, frame.width, frame.height)
+                        regions = []
+                        if regions_on:
+                            tracked = self.ai.tracked_at(frame.pts)
+                            regions = self.rois.resolve(tracked, frame.width, frame.height)
                         regions_n = len(regions)
-                        pb = self.replacement.render_pb(work, regions, frame.pts)
+                        pb = self.replacement.render_pb(work, regions, frame.pts, pre_ops)
                         rendered = Frame(frame.seq, frame.pts, frame.arrival, frame.width, frame.height,
-                                         pixel_buffer=pb, source="processed")
+                                         pixel_buffer=pb, source="processed" if regions_on else "background")
                         self._consecutive_errors = 0
                     except Exception as e:
                         self._consecutive_errors += 1
@@ -318,7 +325,7 @@ class VideoPipeline:
                         log.exception("frame processing failed; passing this frame through")
                         if self._consecutive_errors >= AUTO_PASSTHROUGH_ERRORS:
                             self.set_passthrough(True, f"automatic: {self._consecutive_errors} consecutive render failures")
-                # no regions: forward the (background-processed) frame; passthrough: the input buffer itself
+                # nothing drawn: forward the (CPU background) frame; passthrough: the input buffer itself (zero-copy)
                 out = rendered if rendered is not None else Frame(
                     frame.seq, frame.pts, frame.arrival, frame.width, frame.height,
                     pixel_buffer=pixel_buffer_for(work), source="passthrough" if work is frame else "background")
