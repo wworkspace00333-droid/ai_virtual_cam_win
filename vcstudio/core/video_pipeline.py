@@ -166,6 +166,7 @@ class VideoPipeline:
         self.heartbeat = 0.0              # monotonic time of the last loop iteration (watchdog)
         self._last_out: Frame | None = None
         self.override = None              # callable(w, h) -> BGRA array sent instead of the video (calibration)
+        self.background = None            # BackgroundService (vcstudio/replacement/background.py), set by the app
         self._override_cache: tuple | None = None
         self._consecutive_errors = 0
         self._generation = 0
@@ -291,12 +292,21 @@ class VideoPipeline:
                 out = self._last_out
             else:
                 rendered: Frame | None = None
+                work = frame                  # the frame the outputs are made from (background applied)
+                bg = self.background
+                if bg is not None and not self.passthrough and self.replacement_enabled:
+                    try:
+                        work = bg.apply(frame)
+                    except Exception as e:    # the original frame goes on; the camera never waits for this
+                        with self._lock:
+                            self._stats.last_error = f"background: {type(e).__name__}: {e}"
+                        log.exception("background compositing failed; frame passed unchanged")
                 if not self.passthrough and self.replacement_enabled and self.replacement.active():
                     try:
                         tracked = self.ai.tracked_at(frame.pts)
                         regions = self.rois.resolve(tracked, frame.width, frame.height)
                         regions_n = len(regions)
-                        pb = self.replacement.render_pb(frame, regions, frame.pts)
+                        pb = self.replacement.render_pb(work, regions, frame.pts)
                         rendered = Frame(frame.seq, frame.pts, frame.arrival, frame.width, frame.height,
                                          pixel_buffer=pb, source="processed")
                         self._consecutive_errors = 0
@@ -308,10 +318,10 @@ class VideoPipeline:
                         log.exception("frame processing failed; passing this frame through")
                         if self._consecutive_errors >= AUTO_PASSTHROUGH_ERRORS:
                             self.set_passthrough(True, f"automatic: {self._consecutive_errors} consecutive render failures")
-                # passthrough: forward the input buffer itself (zero-copy for camera frames)
+                # no regions: forward the (background-processed) frame; passthrough: the input buffer itself
                 out = rendered if rendered is not None else Frame(
                     frame.seq, frame.pts, frame.arrival, frame.width, frame.height,
-                    pixel_buffer=pixel_buffer_for(frame), source="passthrough")
+                    pixel_buffer=pixel_buffer_for(work), source="passthrough" if work is frame else "background")
                 self._last_out = out
             self.camera.send(out.pixel_buffer, frame.pts)
             self.processed.put((frame, out))

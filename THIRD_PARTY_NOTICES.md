@@ -32,6 +32,7 @@ Last reviewed: 2026-11-16, for version 0.3.2. This file is a technical record, n
 |---|---|---|---|
 | YOLOX-Nano, YOLOX-Tiny, YOLOX-S (object detection, ONNX) | Apache-2.0 (code and weights) | Megvii-BaseDetection/YOLOX, release 0.1.1rc0 | `c789161e…`, `427cc366…`, `c5c2d13e…` (full values in `scripts/fetch_models.py`) |
 | YuNet face detector `face_detection_yunet_2023mar.onnx` | MIT, © 2020 Shiqi Yu | OpenCV Zoo | `8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4` |
+| Person segmentation PP-HumanSeg `human_segmentation_pphumanseg_2023mar.onnx` (background blur / replacement) | Apache-2.0, © 2021 PaddlePaddle Authors (`licenses\PP-HumanSeg-LICENSE.txt`) | PaddleHub, ported to ONNX by OpenCV Zoo | `552d8a984054e59b5d773d24b9b12022b22046ceb2bbc4c9aaeaceb36a9ddf24` |
 | Sample photo `street.jpg` | CC0 1.0 (public domain dedication) | Wikimedia Commons, "Moscow, Paveletskaya Square, people at bus stop Sept 2025 02.jpg" by Retired electrician, 1280 px rendition | `8b70107df5dff1c92309dca9db880d6245f68ec71b5bd6883102efaeadf80a58` |
 | Sample logo and clips (`logo_alpha.png`, `clip_h264.mp4`) | made for this project | — | — |
 

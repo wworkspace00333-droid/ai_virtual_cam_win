@@ -17,7 +17,8 @@ ROOT = Path(SPECPATH).parent
 VERSION = os.environ.get("VCS_VERSION", "0.3.2")
 NATIVE = ROOT / "build" / "native"
 
-SHIPPED_MODELS = ["yolox_nano", "yolox_tiny", "yolox_s", "face_detection_yunet_2023mar"]   # see scripts/fetch_models.py
+SHIPPED_MODELS = ["yolox_nano", "yolox_tiny", "yolox_s", "face_detection_yunet_2023mar",
+                  "human_segmentation_pphumanseg_2023mar"]   # see scripts/fetch_models.py
 datas = []
 for stem in SHIPPED_MODELS:
     mp = ROOT / "models" / f"{stem}.onnx"

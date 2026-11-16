@@ -110,6 +110,18 @@ RU: dict[str, str] = {
     "See Virtual Camera page.": "См. страницу «Виртуальная камера».",
     "Camera waiting for video": "Камера ждёт видео",
     "Reinstall camera": "Переустановить камеру",
+    "Background": "Фон",
+    "Blur or replace everything behind people in the whole frame (person segmentation, PP-HumanSeg). Region replacements are drawn on top.":
+        "Размыть или заменить всё за людьми во всём кадре (сегментация людей, PP-HumanSeg). Замены по зонам рисуются поверх.",
+    "Off": "Выключен",
+    "Blur": "Размытие",
+    "Image from the library": "Картинка из библиотеки",
+    "Image": "Картинка",
+    "(choose an image)": "(выберите картинку)",
+    "The person segmentation model is not installed (scripts/fetch_models.py).": "Модель сегментации людей не установлена (scripts/fetch_models.py).",
+    "Choose an image: add one to the asset library above first.": "Выберите картинку: сначала добавьте её в библиотеку выше.",
+    "Segmentation: {state}": "Сегментация: {state}",
+    "running ({ms} ms, {backend})": "работает ({ms} мс, {backend})",
     "Reinstall": "Переустановка",
     "Removes both camera devices and registers them again (administrator rights). Use it when other apps stopped seeing the camera.":
         "Удаляет обе камеры и регистрирует их заново (нужны права администратора). Помогает, если другие приложения перестали видеть камеру.",

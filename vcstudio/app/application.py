@@ -59,6 +59,9 @@ class AppContext:
                                                  o["pixel_format"])
         self.pipeline = VideoPipeline(self.capture, self.ai, self.rois, self.replacement, self.camera_out,
                                       event_sink=self.db.log_event)
+        from vcstudio.replacement.background import BackgroundService
+        self.background = BackgroundService(self.capture, self.assets)       # blur / replace behind people
+        self.pipeline.background = self.background
         # adaptive detector rate: output vs input rate (only while the pipeline runs; otherwise nothing is judged)
         self.ai.load_probe = lambda: ((self.pipeline.output_fps(), self.capture.stats().measured_fps)
                                       if self.pipeline.running else (0.0, 0.0))
@@ -82,6 +85,10 @@ class AppContext:
         body = self.profiles.active()["body"]
         self.rois.load_profile(body)
         self.replacement.load_profile(body)
+        if hasattr(self, "background"):
+            self.background.load_profile(body)
+            if self.pipeline.running:
+                self.background.sync()
         self.ai.configure(DetectionConfig.from_profile(body), self.settings.get("performance.mode"),
                           TrackerConfig.from_profile(body))
 
@@ -156,6 +163,7 @@ class AppContext:
         log.info("Starting capture (%s)", i["method"])
         sup.start(self.capture_factory())
         self.ai.start()
+        self.background.start()
         self.pipeline.start()
         self.watchdog.start()
 
@@ -171,6 +179,7 @@ class AppContext:
     def stop_capture(self) -> None:
         self.watchdog.stop()
         self.pipeline.stop()
+        self.background.stop()
         self.ai.stop()
         self.capture.stop()
         self.replacement.compositor.release_resources()
@@ -179,6 +188,7 @@ class AppContext:
         log.info("Shutting down")
         self.watchdog.stop()
         self.pipeline.stop()
+        self.background.stop()
         self.replacement.close()
         self.ai.stop()
         self.capture.stop()

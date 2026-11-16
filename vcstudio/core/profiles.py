@@ -59,6 +59,8 @@ def default_profile_body() -> dict[str, Any]:
         "rois": [],                              # list of ROI dicts (schema in roi/roi_manager, Stage 5)
         "assets": [],                            # replacement asset registry: {id, path, kind}
         "masks": {"feather_px": 4, "refine_edges": True, "threshold": 0.5},
+        # whole-frame background behind people (vcstudio/replacement/background.py): off | blur | image
+        "background": {"mode": "off", "strength": 25, "asset_id": None, "edge": 0.5, "fps": 15},
         "playback": {"loop": True, "start_offset_s": 0.0, "sync": "wallclock"},
         "performance_mode": "balanced",
         "output": {"width": 1920, "height": 1080, "fps": 60, "pixel_format": "BGRA"},

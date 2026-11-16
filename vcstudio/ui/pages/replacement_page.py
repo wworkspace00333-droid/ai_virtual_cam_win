@@ -132,6 +132,30 @@ class ReplacementPage:
         top.addWidget(st, 3)
         lay.addLayout(top)
 
+        # ---------------- background behind people (whole frame)
+        bgc = Card("Background")
+        bgh = QLabel(tr("Blur or replace everything behind people in the whole frame (person segmentation, "
+                        "PP-HumanSeg). Region replacements are drawn on top."))
+        bgh.setObjectName("muted"); bgh.setWordWrap(True)
+        bgc.layout_.addWidget(bgh)
+        bf = QFormLayout()
+        self.bg_mode = QComboBox()
+        for k, v in (("off", "Off"), ("blur", "Blur"), ("image", "Image from the library")):
+            self.bg_mode.addItem(tr(v), k)
+        self.bg_strength = QSlider(Qt.Horizontal); self.bg_strength.setRange(3, 99)
+        self.bg_image = QComboBox()
+        bf.addRow(tr("Background"), self.bg_mode)
+        bf.addRow(tr("Blur strength"), self.bg_strength)
+        bf.addRow(tr("Image"), self.bg_image)
+        bgc.layout_.addLayout(bf)
+        self.bg_info = QLabel(); self.bg_info.setObjectName("muted"); self.bg_info.setWordWrap(True)
+        bgc.layout_.addWidget(self.bg_info)
+        lay.addWidget(bgc)
+        self._bg_loading = False
+        self.bg_mode.currentIndexChanged.connect(self._save_background)
+        self.bg_image.currentIndexChanged.connect(self._save_background)
+        self.bg_strength.valueChanged.connect(self._save_background)
+
         pv = Card("Live replacement preview")
         from vcstudio.platform import text
         note = QLabel(tr(text("replacement_note"), fps=PREVIEW_FPS))
@@ -187,6 +211,52 @@ class ReplacementPage:
     def reload(self):
         self._refresh_assets()
         self._refresh_roi_list(keep=False)
+        self._load_background()
+
+    # ---------------------------------------------------------------- background
+    def _load_background(self):
+        from vcstudio.replacement.background import BackgroundConfig
+        cfg = BackgroundConfig.from_profile(self._body())
+        self._bg_loading = True
+        try:
+            self.bg_image.clear()
+            self.bg_image.addItem(tr("(choose an image)"), None)
+            for a in assets_from_profile(self._body()).values():
+                if a.kind == "image":
+                    self.bg_image.addItem(a.name, a.id)
+            self.bg_mode.setCurrentIndex(max(0, self.bg_mode.findData(cfg.mode)))
+            self.bg_strength.setValue(cfg.strength)
+            self.bg_image.setCurrentIndex(max(0, self.bg_image.findData(cfg.asset_id)))
+        finally:
+            self._bg_loading = False
+        self._background_widgets()
+
+    def _background_widgets(self):
+        mode = self.bg_mode.currentData()
+        self.bg_strength.setEnabled(mode == "blur")
+        self.bg_image.setEnabled(mode == "image")
+        from vcstudio.ai.person_segmentation import model_path
+        if mode != "off" and not model_path().exists():
+            self.bg_info.setText(tr("The person segmentation model is not installed (scripts/fetch_models.py)."))
+        elif mode == "image" and not self.bg_image.currentData():
+            self.bg_info.setText(tr("Choose an image: add one to the asset library above first."))
+        else:
+            seg = self.ctx.background.seg
+            self.bg_info.setText(tr("Segmentation: {state}", state=seg.error or (
+                tr("running ({ms} ms, {backend})", ms=f"{seg.ms:.0f}", backend=seg.backend) if seg.running
+                else tr("starts with capture"))) if mode != "off" else "")
+
+    def _save_background(self, *_):
+        if self._bg_loading:
+            return
+        b = {"mode": self.bg_mode.currentData(), "strength": self.bg_strength.value(),
+             "asset_id": self.bg_image.currentData()}
+        self._loading = True
+        try:
+            self.ctx.update_active_profile(lambda body: body.setdefault("background", {}).update(b))
+        finally:
+            self._loading = False
+        self._background_widgets()
 
     def _refresh_assets(self):
         assets = assets_from_profile(self._body())
@@ -216,6 +286,8 @@ class ReplacementPage:
         self.asset.setCurrentIndex(max(0, self.asset.findData(sel)))
         self.asset.blockSignals(False)
         self._asset_selected()
+        if hasattr(self, "bg_image"):
+            self._load_background()                  # the background image list follows the library
 
     def _refresh_roi_list(self, keep: bool):
         rois = rois_from_profile(self._body())

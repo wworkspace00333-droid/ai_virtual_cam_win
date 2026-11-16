@@ -26,6 +26,11 @@ MODELS = {
                         "427cc366d34e27ff7a03e2899b5e3671425c262ea2291f88bb942bc1cc70b0f7", "Apache-2.0"),
     "yolox_s.onnx": (YOLOX + "yolox_s.onnx",
                      "c5c2d13e59ae883e6af3b45daea64af4833a4951c92d116ec270d9ddbe998063", "Apache-2.0"),
+    # person segmentation for background blur / replacement: PP-HumanSeg (PaddlePaddle), OpenCV Zoo ONNX port
+    "human_segmentation_pphumanseg_2023mar.onnx": (
+        "https://github.com/opencv/opencv_zoo/raw/main/models/human_segmentation_pphumanseg/"
+        "human_segmentation_pphumanseg_2023mar.onnx",
+        "552d8a984054e59b5d773d24b9b12022b22046ceb2bbc4c9aaeaceb36a9ddf24", "Apache-2.0"),
     # committed to git (227 KB); listed so --check covers it
     "face_detection_yunet_2023mar.onnx": (
         "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",
