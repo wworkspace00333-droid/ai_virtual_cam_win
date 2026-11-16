@@ -73,7 +73,7 @@ def _file_version(path: Path) -> str | None:
     p, n = ctypes.c_void_p(), wintypes.UINT()
     if not ver.VerQueryValueW(buf, "\\", ctypes.byref(p), ctypes.byref(n)) or not p:
         return None
-    words = (ctypes.c_uint32 * 13).from_address(p.value)       # VS_FIXEDFILEINFO
+    words = (ctypes.c_uint32 * 13).from_address(int(p.value or 0))     # VS_FIXEDFILEINFO (p checked non-null)
     ms, ls = words[4], words[5]                                  # dwProductVersionMS / LS
     return f"{ms >> 16}.{ms & 0xFFFF}.{ls >> 16}"
 

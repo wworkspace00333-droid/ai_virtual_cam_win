@@ -2,6 +2,7 @@
 (macOS: IOAccelerator via ioreg; Windows: PDH "GPU Engine" counters)."""
 from __future__ import annotations
 
+import ctypes
 import os
 import re
 import subprocess
@@ -14,8 +15,8 @@ _GPU_RE = re.compile(r'"Device Utilization %"=(\d+)')
 _GPU_MEM_RE = re.compile(r'"In use system memory"=(\d+)')
 
 
-class _RusageInfoV2(__import__("ctypes").Structure):
-    import ctypes as _c
+class _RusageInfoV2(ctypes.Structure):
+    _c = ctypes
     _fields_ = [("ri_uuid", _c.c_uint8 * 16), ("ri_user_time", _c.c_uint64), ("ri_system_time", _c.c_uint64),
                 ("ri_pkg_idle_wkups", _c.c_uint64), ("ri_interrupt_wkups", _c.c_uint64), ("ri_pageins", _c.c_uint64),
                 ("ri_wired_size", _c.c_uint64), ("ri_resident_size", _c.c_uint64), ("ri_phys_footprint", _c.c_uint64),

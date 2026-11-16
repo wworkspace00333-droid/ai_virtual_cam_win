@@ -29,7 +29,7 @@ def _to_bgra8(img: np.ndarray) -> np.ndarray:
     if img.dtype == np.uint16:
         img = (img >> 8).astype(np.uint8)
     elif img.dtype != np.uint8:
-        img = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        img = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)  # type: ignore[call-overload]
     if img.ndim == 2:
         return cv2.cvtColor(img, cv2.COLOR_GRAY2BGRA)
     if img.shape[2] == 3:

@@ -21,6 +21,7 @@ import logging
 import threading
 import time
 from dataclasses import asdict, dataclass
+from typing import Any
 
 import numpy as np
 
@@ -71,7 +72,7 @@ class CameraOutputController:
     def __init__(self, device: str, sink: str, enabled: bool = True, pixel_format: str = "BGRA"):
         self.device, self.sink, self.enabled = device, sink, enabled
         self.pixel_format = pixel_format
-        self._out = None
+        self._out: Any = None             # VirtualCameraOutput once opened
         self._next_try = 0.0
         self._lock = threading.RLock()
         self._shut = False
@@ -156,7 +157,7 @@ class VideoPipeline:
         self._lock = threading.Lock()
         self._stats = PipelineStats()
         self._fps = FpsCounter(1.0)
-        self._lat = collections.deque(maxlen=240)
+        self._lat: collections.deque[float] = collections.deque(maxlen=240)
         self.paused = False
         self.passthrough = False
         self.passthrough_reason = ""
@@ -283,15 +284,15 @@ class VideoPipeline:
             elif self.paused and self._last_out is not None:
                 out = self._last_out
             else:
-                out = None
+                rendered: Frame | None = None
                 if not self.passthrough and self.replacement_enabled and self.replacement.active():
                     try:
                         tracked = self.ai.tracked_at(frame.pts)
                         regions = self.rois.resolve(tracked, frame.width, frame.height)
                         regions_n = len(regions)
                         pb = self.replacement.render_pb(frame, regions, frame.pts)
-                        out = Frame(frame.seq, frame.pts, frame.arrival, frame.width, frame.height,
-                                    pixel_buffer=pb, source="processed")
+                        rendered = Frame(frame.seq, frame.pts, frame.arrival, frame.width, frame.height,
+                                         pixel_buffer=pb, source="processed")
                         self._consecutive_errors = 0
                     except Exception as e:
                         self._consecutive_errors += 1
@@ -301,9 +302,10 @@ class VideoPipeline:
                         log.exception("frame processing failed; passing this frame through")
                         if self._consecutive_errors >= AUTO_PASSTHROUGH_ERRORS:
                             self.set_passthrough(True, f"automatic: {self._consecutive_errors} consecutive render failures")
-                if out is None:   # passthrough: forward the input buffer itself (zero-copy for camera frames)
-                    out = Frame(frame.seq, frame.pts, frame.arrival, frame.width, frame.height,
-                                pixel_buffer=pixel_buffer_for(frame), source="passthrough")
+                # passthrough: forward the input buffer itself (zero-copy for camera frames)
+                out = rendered if rendered is not None else Frame(
+                    frame.seq, frame.pts, frame.arrival, frame.width, frame.height,
+                    pixel_buffer=pixel_buffer_for(frame), source="passthrough")
                 self._last_out = out
             self.camera.send(out.pixel_buffer, frame.pts)
             self.processed.put((frame, out))
@@ -314,12 +316,12 @@ class VideoPipeline:
             self._lat.append(lat)
             cs = self.replacement.compositor.stats
             with self._lock:
-                st = self._stats
-                st.frames_out += 1
-                st.process_ms = ms if st.frames_out == 1 else 0.9 * st.process_ms + 0.1 * ms
-                st.latency_ms = lat if st.frames_out == 1 else 0.9 * st.latency_ms + 0.1 * lat
-                st.render_ms, st.gpu_ms, st.backend = cs.render_ms, cs.gpu_ms, cs.backend
-                st.regions = regions_n
+                ps = self._stats          # (not "st": that is this loop's own state dict)
+                ps.frames_out += 1
+                ps.process_ms = ms if ps.frames_out == 1 else 0.9 * ps.process_ms + 0.1 * ms
+                ps.latency_ms = lat if ps.frames_out == 1 else 0.9 * ps.latency_ms + 0.1 * lat
+                ps.render_ms, ps.gpu_ms, ps.backend = cs.render_ms, cs.gpu_ms, cs.backend
+                ps.regions = regions_n
         except Exception as e:      # never let the output thread die
             log.exception("pipeline iteration failed")
             with self._lock:

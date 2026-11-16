@@ -71,7 +71,7 @@ class Database:
             cur = self._conn.execute(
                 "INSERT INTO sessions(started, app_version, profile) VALUES (?,?,?)",
                 (time.time(), app_version, profile))
-            self.session_id = int(cur.lastrowid)
+            self.session_id = int(cur.lastrowid or 0)
         return self.session_id
 
     def end_session(self) -> None:

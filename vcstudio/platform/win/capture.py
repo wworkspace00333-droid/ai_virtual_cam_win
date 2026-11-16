@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from typing import Any
 
 import cv2
 import numpy as np
@@ -91,7 +92,7 @@ class WindowsCameraSource(CaptureSource):
         self.name = name_hint or unique_id or "?"
         self.selected_format: DeviceFormat | None = None
         self._nominal = (0, 0, 0.0)
-        self._cap = None                    # cv2.VideoCapture (DirectShow) or MfCapture (Media Foundation)
+        self._cap: Any = None               # cv2.VideoCapture (DirectShow) or MfCapture (Media Foundation)
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._on_frame = None
@@ -127,7 +128,7 @@ class WindowsCameraSource(CaptureSource):
         if self.method == "mediafoundation":
             self._start_mf(dev, w, h, fps, chosen, on_frame, on_event)
             return
-        cap = cv2.VideoCapture(dev.index, BACKENDS[self.method])
+        cap = cv2.VideoCapture(dev.index, int(BACKENDS[self.method] or cv2.CAP_ANY))
         if not cap.isOpened():
             cap.release()
             # Windows camera privacy applies to hardware cameras (device path), not to software

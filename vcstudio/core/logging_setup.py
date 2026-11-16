@@ -67,7 +67,7 @@ def setup_logging(log_dir: Path, level: str = "INFO", max_bytes: int = 5_000_000
     ring = RingBufferHandler()
     ring.setFormatter(fmt)
     for h in (fh, sh, ring):
-        h._vcstudio = True  # type: ignore[attr-defined]
+        h._vcstudio = True  # type: ignore[union-attr]  # marks our handlers (replaced on reconfigure)
         root.addHandler(h)
     root.setLevel(getattr(logging, level.upper(), logging.INFO))
     _ring = ring

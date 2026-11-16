@@ -118,7 +118,8 @@ class GlobalHotkeys:
         """Run fn on the hotkey thread (registrations belong to it) and return its result."""
         if not self.available or not self._thread.is_alive():
             raise RuntimeError("hotkey thread not running")
-        done, box = threading.Event(), []
+        done = threading.Event()
+        box: list = []
         self._calls.put((fn, done, box))
         _user32.PostThreadMessageW(self._tid, WM_VCS_CALL, 0, 0)
         if not done.wait(5):

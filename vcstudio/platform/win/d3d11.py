@@ -145,6 +145,7 @@ class D3D11Backend(MetalBackend):
     """Same planning-to-layer code as MetalBackend; Direct3D 11 execution on arrays."""
     name = "d3d11"
     BG_RGBA = False                   # D3D11 textures hold BGRA bytes; the shader works in BGRA order
+    ctx: D3D11Context  # type: ignore[assignment]  # MetalBackend's ctx is a MetalContext
 
     def __init__(self):
         self.ctx = D3D11Context()

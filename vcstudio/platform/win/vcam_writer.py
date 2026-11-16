@@ -56,7 +56,7 @@ def _sid_str(psid) -> str:
     if not _adv.ConvertSidToStringSidW(psid, ctypes.byref(s)):
         raise OSError(ctypes.get_last_error(), "ConvertSidToStringSid")
     try:
-        return s.value
+        return s.value or ""
     finally:
         _k32.LocalFree(s)
 

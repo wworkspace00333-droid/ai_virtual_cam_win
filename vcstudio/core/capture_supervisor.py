@@ -77,7 +77,7 @@ class CaptureSupervisor:
         self._last_arrival = 0.0
         self._lat_ema = 0.0
         self._pending_event: tuple[str, str] | None = None
-        self._sig = None
+        self._sig: int | None = None
         self._sig_since = 0.0
         self._sig_checked_version = -1
         self._listeners: list[Callable[[str], None]] = []

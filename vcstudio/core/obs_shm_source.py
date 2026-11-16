@@ -20,7 +20,7 @@ SHM_NAME = "/vcs-obs-frames"
 STALE_S = 1.0
 
 
-class FrameInfo(ctypes.Structure):
+class FrameInfo(ctypes.Structure):  # pragma: macos
     _fields_ = [("frame", ctypes.c_uint64), ("width", ctypes.c_uint32), ("height", ctypes.c_uint32),
                 ("stride", ctypes.c_uint32), ("format", ctypes.c_uint32), ("timestamp_ns", ctypes.c_uint64),
                 ("fps_num", ctypes.c_uint32), ("fps_den", ctypes.c_uint32), ("writer_pid", ctypes.c_int32),
@@ -30,7 +30,7 @@ class FrameInfo(ctypes.Structure):
 _lib = None
 
 
-def shm_lib():
+def shm_lib():  # pragma: macos
     global _lib
     if _lib is None:
         from vcstudio.core.resources import native_lib
@@ -59,7 +59,7 @@ def shm_lib():
     return _lib
 
 
-def obs_sharing_status(name: str = SHM_NAME) -> dict:
+def obs_sharing_status(name: str = SHM_NAME) -> dict:  # pragma: macos
     """{'available': bool, 'reason': str, ...frame info} without starting capture."""
     lib = shm_lib()
     if lib is None:
@@ -81,7 +81,7 @@ def obs_sharing_status(name: str = SHM_NAME) -> dict:
             "writer_pid": info.writer_pid, "frames": info.frame, "age_s": age}
 
 
-class ObsShmSource(CaptureSource):
+class ObsShmSource(CaptureSource):  # pragma: macos
     kind = "obs_ipc"
 
     def __init__(self, name: str = SHM_NAME):
@@ -176,4 +176,5 @@ class ObsShmSource(CaptureSource):
 from vcstudio.platform import IS_WINDOWS as _IS_WINDOWS  # noqa: E402
 
 if _IS_WINDOWS:
-    from vcstudio.platform.win.obs_shm import SHM_NAME, ObsShmSource, obs_sharing_status  # noqa: F401,F811,E402
+    from vcstudio.platform.win.obs_shm import (SHM_NAME, ObsShmSource,  # type: ignore[assignment]  # noqa: F401,F811,E402
+                                               obs_sharing_status)
