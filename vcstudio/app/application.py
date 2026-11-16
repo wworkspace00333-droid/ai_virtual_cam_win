@@ -110,7 +110,8 @@ class AppContext:
             self.background.load_profile(body)
             # everything of the new scene is loaded (incl. the decoded background image): publish it in one go
             from vcstudio.core.scene import build_state
-            self.pipeline.scene = build_state(self.profiles.active_name, self.rois, self.replacement, self.background)
+            self.pipeline.scene = build_state(self.profiles.active_name, self.rois, self.replacement, self.background,
+                                              body)
             if self.pipeline.running:
                 self.background.sync()
         self.ai.configure(DetectionConfig.from_profile(body), self.settings.get("performance.mode"),

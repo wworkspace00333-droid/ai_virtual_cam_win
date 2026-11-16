@@ -178,7 +178,7 @@ Windows 10/11). Кадры идут из приложения через общ�
 | Scene Manager | MISSING → ✅ P2.2 | Страница «Сцены»: сцена = профиль + клавиша Ctrl+Alt+1…9 + свой вход (необязательно), миниатюры |
 | Atomic Scene State | MISSING → ✅ P2.2 | Неизменяемый снимок сцены публикуется одним присваиванием, кадр рисуется из одной ссылки (`core/scene.py`); тест: ни одного смешанного кадра при 12 переключениях |
 | Multi-Object Replacement | PARTIAL → ✅ P2.3 | Много зон и объектов; «каждому объекту свой ресурс» по очереди, закрепляется за ID трека (	est_multi_object.py) |
-| Auto-Framing | MISSING | — |
+| Auto-Framing | MISSING → ✅ P2.5 | Кадрирование по людям, плавное следование, мёртвая зона с гистерезисом, возврат к полному кадру (	est_framing.py) |
 | AI Privacy Mode | PARTIAL → ✅ P2.4 | Уровни: лица · лица и экраны · всё с фоном; Ctrl+Alt+H; выключение возвращает сцену (	est_privacy_mode.py) |
 | AI Lighting Enhancement | MISSING | Только ручная цветокоррекция зоны |
 | Gesture Control | MISSING | — |

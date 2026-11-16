@@ -23,6 +23,10 @@ Fixes from the 0.5 audit (docs/WINDOWS_AUDIT_0.5.md, P0).
   rate and ratcheted down to the floor; it now scales from the unthrottled rate (D26).
 
 ### Added
+- **Auto-framing** (P2.5, Preview page): the output is cropped to the people in view (with the output's aspect ratio,
+  zoom up to 2×) and follows them smoothly; small movements are ignored (dead zone with hysteresis, so a zoom-out
+  still reaches the full frame); after 2 s without anyone it eases back to the full picture. It is the last step of
+  the output, so regions and replacements stay where they belong.
 - **Privacy mode** (P2.4, Preview page selector, Ctrl+Alt+H): Off · Hide faces · Hide faces and screens (monitors,
   laptops, phones, books — their screens or pages can show private information) · Hide faces, screens and
   background. It adds its own regions to the scene and remembers the background it replaced, so switching it off

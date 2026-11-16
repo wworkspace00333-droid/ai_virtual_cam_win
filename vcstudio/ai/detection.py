@@ -84,8 +84,9 @@ class DetectionConfig:
                     and (r.get("replacement") or {}).get("enabled") and (r.get("replacement") or {}).get("mode") == "object"]
         mask_classes = [] if any(not r.get("classes") for r in obj_rois) else \
             sorted({c for r in obj_rois for c in r.get("classes", [])})
+        framing_on = bool((body.get("framing") or {}).get("enabled"))
         return cls(
-            detector_needed=follows or open_vocab_on,
+            detector_needed=follows or open_vocab_on or framing_on,
             mask_classes=mask_classes,
             enabled=bool(ai.get("enabled", True)),
             detector_model=ai.get("detector_model") or "auto",

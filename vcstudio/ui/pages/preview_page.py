@@ -36,6 +36,9 @@ class PreviewPage:
         self.privacy.setToolTip(tr("Privacy mode (Ctrl+Alt+H): hides faces; screens, laptops, phones and books; and "
                                    "the background — whatever the level includes. Switching it off restores the "
                                    "scene as it was."))
+        self.framing_btn = QPushButton(tr("Auto-framing")); self.framing_btn.setCheckable(True)
+        self.framing_btn.setToolTip(tr("Crop to the people in view and follow them smoothly (zoom up to 2×); back to "
+                                       "the full picture when nobody is there."))
         self.card_btn = QPushButton(tr("Card for a game…"))
         self.card_btn.setToolTip(tr("Put a photo into the frame a browser game or an emulator draws over the camera."))
         self.boxes = QCheckBox(tr("Show detections")); self.boxes.setChecked(True)
@@ -47,7 +50,8 @@ class PreviewPage:
         bar.addWidget(src_btn)
         lay.addLayout(bar)
         bar2 = QHBoxLayout()
-        for b in (self.repl_btn, self.privacy, self.face_btn, self.logo_btn, self.card_btn, self.boxes):
+        for b in (self.repl_btn, self.privacy, self.face_btn, self.logo_btn, self.framing_btn, self.card_btn,
+                  self.boxes):
             bar2.addWidget(b)
         bar2.addStretch()
         lay.addLayout(bar2)
@@ -78,6 +82,8 @@ class PreviewPage:
         self.face_btn.toggled.connect(self._toggle_face)
         self.logo_btn.toggled.connect(self._toggle_logo)
         self.privacy.currentIndexChanged.connect(self._privacy_changed)
+        self.framing_btn.toggled.connect(
+            lambda on: self.ctx.update_active_profile(lambda b: b.setdefault("framing", {}).__setitem__("enabled", on)))
         self.card_btn.clicked.connect(self.open_game_card)
         self._card_dialog = None
         src_btn.clicked.connect(goto_input)
@@ -98,6 +104,9 @@ class PreviewPage:
         on = self._logo_on()
         if self.logo_btn.isChecked() != on:
             self.logo_btn.blockSignals(True); self.logo_btn.setChecked(on); self.logo_btn.blockSignals(False)
+        fon = bool((self.ctx.profiles.active()["body"].get("framing") or {}).get("enabled"))
+        if self.framing_btn.isChecked() != fon:
+            self.framing_btn.blockSignals(True); self.framing_btn.setChecked(fon); self.framing_btn.blockSignals(False)
         from vcstudio.replacement import privacy_mode as pm
         lv = pm.level_of(self.ctx.profiles.active()["body"])
         if self.privacy.currentData() != lv:

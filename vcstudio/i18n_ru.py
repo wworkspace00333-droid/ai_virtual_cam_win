@@ -213,6 +213,10 @@ RU: dict[str, str] = {
     "From the start": "С начала",
     "Scenes": "Сцены",
     "Privacy off": "Приватность выкл.",
+    "Auto-framing": "Автокадрирование",
+    "Crop to the people in view and follow them smoothly (zoom up to 2×); back to the full picture when nobody is "
+    "there.":
+        "Кадрирует по людям в кадре и плавно следует за ними (приближение до 2×); без людей возвращает полный кадр.",
     "Hide faces": "Скрыть лица",
     "Hide faces and screens": "Скрыть лица и экраны",
     "Hide faces, screens and background": "Скрыть лица, экраны и фон",

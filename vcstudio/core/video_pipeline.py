@@ -168,6 +168,8 @@ class VideoPipeline:
         self.override = None              # callable(w, h) -> BGRA array sent instead of the video (calibration)
         self.background = None            # BackgroundService (vcstudio/replacement/background.py), set by the app
         self.scene = None                 # SceneState (vcstudio/core/scene.py): published whole by the app
+        from vcstudio.replacement.framing import AutoFramer
+        self.framer = AutoFramer()        # auto-framing: crop to the people, follow them smoothly
         self._override_cache: tuple | None = None
         self._consecutive_errors = 0
         self._generation = 0
@@ -265,6 +267,27 @@ class VideoPipeline:
                 self._iteration(st)
         self.heartbeat = time.monotonic()
 
+    def _frame_to_people(self, out: Frame, frame: Frame, fcfg) -> Frame:
+        """Auto-framing: crop the finished output to the people and scale it back (vcstudio/replacement/framing.py).
+        Any failure leaves the frame unframed: the camera never waits."""
+        from vcstudio.core.pixelbuffer import pixel_buffer_for
+        try:
+            self.framer.cfg = fcfg
+            rect = self.framer.update(self.ai.tracked_at(frame.pts), frame.width, frame.height, frame.pts)
+            with out.bgra() as a:
+                framed = self.framer.apply(a, rect)
+                if framed is a:
+                    return out
+                framed = np.ascontiguousarray(framed)
+            arr = Frame(out.seq, out.pts, out.arrival, out.width, out.height, array=framed, source=out.source)
+            return Frame(out.seq, out.pts, out.arrival, out.width, out.height, pixel_buffer=pixel_buffer_for(arr),
+                         source=f"{out.source}+framed")
+        except Exception as e:
+            with self._lock:
+                self._stats.last_error = f"framing: {type(e).__name__}: {e}"
+            log.exception("auto-framing failed; frame passed unframed")
+            return out
+
     def _iteration(self, st: dict) -> None:
         from vcstudio.core.pixelbuffer import pixel_buffer_for
         last_ver = st["last_ver"]
@@ -340,6 +363,11 @@ class VideoPipeline:
                 out = rendered if rendered is not None else Frame(
                     frame.seq, frame.pts, frame.arrival, frame.width, frame.height,
                     pixel_buffer=pixel_buffer_for(work), source="passthrough" if work is frame else "background")
+                fcfg = sc.framing if sc is not None else None
+                if fcfg is not None and fcfg.enabled and not self.passthrough:
+                    out = self._frame_to_people(out, frame, fcfg)
+                elif self.framer.rect is not None:
+                    self.framer.reset()
                 if sc is not None:
                     out.meta["scene"] = sc.version
                 self._last_out = out
