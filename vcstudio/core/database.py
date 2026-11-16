@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
 import time
 from pathlib import Path
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -85,11 +88,17 @@ class Database:
     def log_event(self, level: str, component: str, message: str, data: dict | None = None) -> None:
         if self._closed:   # late events during shutdown are dropped, never raised
             return
-        with self._lock:
-            self._conn.execute(
-                "INSERT INTO events(ts, session_id, level, component, message, data) VALUES (?,?,?,?,?,?)",
-                (time.time(), self.session_id, level, component, message,
-                 json.dumps(data) if data is not None else None))
+        try:
+            with self._lock:
+                self._conn.execute(
+                    "INSERT INTO events(ts, session_id, level, component, message, data) VALUES (?,?,?,?,?,?)",
+                    (time.time(), self.session_id, level, component, message,
+                     json.dumps(data) if data is not None else None))
+        except sqlite3.Error as e:
+            # "database or disk is full", a locked file: the event journal is a record, never a reason to fail the
+            # caller (the watchdog, a capture thread, shutdown). The text log still has the message.
+            self.dropped_events = getattr(self, "dropped_events", 0) + 1
+            log.warning("event not recorded (%s): %s %s: %s", e, level, component, message)
 
     def recent_events(self, limit: int = 200) -> list[dict[str, Any]]:
         with self._lock:

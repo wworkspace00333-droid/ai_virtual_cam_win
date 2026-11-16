@@ -209,6 +209,7 @@ RU: dict[str, str] = {
     "Test pattern (diagnostics)": "Тестовая картинка (диагностика)",
     "Screen or window (Windows Graphics Capture)": "Экран или окно (Windows Graphics Capture)",
     "Video file": "Видеофайл",
+    "Low disk space: {mb} MB free": "Мало места на диске: свободно {mb} МБ",
     "Choose a video file…": "Выберите видеофайл…",
     "Choose a video file": "Выберите видеофайл",
     "Choose…": "Выбрать…",
@@ -862,8 +863,8 @@ RU: dict[str, str] = {
     "Allow camera access in Settings > Privacy & security > Camera.":
         "Разрешите доступ к камере в «Параметры > Конфиденциальность и защита > Камера».",
     "Restart Windows to finish.": "Перезагрузите Windows, чтобы завершить.",
-    "On-device object detection with ONNX Runtime (CUDA / DirectML GPU, or CPU). Frames never leave this PC.":
-        "Распознавание объектов на устройстве через ONNX Runtime (видеокарта CUDA / DirectML или CPU). Кадры не "
+    "On-device object detection with ONNX Runtime (DirectML on the graphics card, or CPU). Frames never leave this PC.":
+        "Распознавание объектов на устройстве через ONNX Runtime (DirectML на видеокарте или CPU). Кадры не "
         "покидают этот компьютер.",
     "YuNet face detection (face rectangles only; no identity recognition)":
         "Обнаружение лиц YuNet (только рамки лиц, без распознавания личности)",
@@ -890,7 +891,7 @@ RU: dict[str, str] = {
     "Face regions need YuNet face detection (AI Engine page).":
         "Зонам лиц нужно обнаружение лиц YuNet (страница «ИИ-движок»).",
     "Automatic (GPU if available, else CPU)": "Автоматически (видеокарта, если есть, иначе CPU)",
-    "GPU (CUDA / DirectML)": "Видеокарта (CUDA / DirectML)",
+    "GPU (DirectML)": "Видеокарта (DirectML)",
     "GPU: {gpus} · ONNX Runtime {ver}: {provs}": "Видеокарта: {gpus} · ONNX Runtime {ver}: {provs}",
     "no hardware GPU (CPU inference)": "аппаратной видеокарты нет (распознавание на CPU)",
     "The Windows 11 camera could not start (is camera access allowed in Settings > Privacy & security > Camera?), "

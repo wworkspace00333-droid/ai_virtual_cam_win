@@ -84,6 +84,14 @@ def _cache_file(path: Path, cache_dir: Path, provider: str, opts: dict) -> Path:
                        f"{hashlib.sha256(key.encode()).hexdigest()[:12]}.opt.onnx"
 
 
+def _remove_quietly(p: Path) -> None:
+    """Delete a half-written cache file; a failure here (locked file, odd entry) must not stop the model loading."""
+    try:
+        p.unlink(missing_ok=True)
+    except OSError as e:
+        log.debug("could not remove %s: %s", p, e)
+
+
 def create_session(path: Path, compute_units: str = "all", cache_dir: Path | None = None):
     """InferenceSession on the first provider of the plan that works; returns (session, provider label).
 
@@ -123,15 +131,30 @@ def create_session(path: Path, compute_units: str = "all", cache_dir: Path | Non
             try:
                 sess = ort.InferenceSession(str(path), sess_options=options(True, save), providers=providers)
             except Exception as e:                   # e.g. CUDA libraries missing, no D3D12 device
-                errors.append(f"{name}: {e}")
-                log.warning("ONNX Runtime %s unavailable for %s: %s", name, path.name, e)
                 if save is not None:
-                    save.unlink(missing_ok=True)
-                continue
-            if save is not None and save.exists() and sess.get_providers()[0] == name:
-                save.replace(cached)                 # only a graph built for the provider actually used
+                    _remove_quietly(save)
+                    # Writing the optimised copy can be what failed (disk full, read-only cache folder: ONNX
+                    # Runtime then reports "Protobuf serialization failed"). The model itself may be fine: load it
+                    # once more without the cache before giving up on this provider.
+                    try:
+                        sess = ort.InferenceSession(str(path), sess_options=options(True), providers=providers)
+                        log.warning("Optimised-model cache for %s could not be written (%s); loaded without it",
+                                    path.name, e)
+                        save = None
+                    except Exception as e2:
+                        e = e2
+                if sess is None:
+                    errors.append(f"{name}: {e}")
+                    log.warning("ONNX Runtime %s unavailable for %s: %s", name, path.name, e)
+                    continue
+            if save is not None and save.is_file() and sess.get_providers()[0] == name:
+                try:
+                    save.replace(cached)             # only a graph built for the provider actually used
+                except OSError as e:                 # the cache is an optimisation: never fail the load for it
+                    log.warning("Optimised-model cache %s not saved: %s", cached.name, e)
+                    _remove_quietly(save)
             elif save is not None:
-                save.unlink(missing_ok=True)
+                _remove_quietly(save)
         used = sess.get_providers()[0]
         label = {"CUDAExecutionProvider": "CUDA", "DmlExecutionProvider": "DirectML",
                  "CPUExecutionProvider": "CPU"}.get(used, used)

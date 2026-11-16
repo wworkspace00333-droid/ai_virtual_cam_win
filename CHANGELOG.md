@@ -5,6 +5,23 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html): 
 release may change settings or profiles (they are migrated automatically); 1.0.0 comes after the hardware checklist
 (docs/HARDWARE_CHECKLIST.md) passes on real PCs.
 
+## [Unreleased]
+
+Fixes from the 0.5 audit (docs/WINDOWS_AUDIT_0.5.md, P0).
+
+### Fixed
+- An AI model loads even when its optimised copy cannot be saved (full disk, read-only cache folder); before, ONNX
+  Runtime's "Protobuf serialization failed" left the AI in an error state (D23).
+- The self-check, the diagnostics ZIP and the camera loopback test delete their temporary folders; every self-check
+  used to leave about 270 MB in %TEMP% (D21). The benchmark tool cleans up too.
+- Low disk space (< 500 MB) is shown in the status bar and recorded once; a full event journal no longer breaks the
+  watchdog or shutdown (D22).
+- Texts no longer promise CUDA: the Windows build ships ONNX Runtime with DirectML and CPU only (D19). The 0.4.0 notes
+  below said "CUDA" — that was not accurate.
+
+### Changed
+- The CI installer build uses a pinned FFmpeg (dated BtbN build + SHA-256) instead of the daily "latest" (D3).
+
 ## [0.4.1] — 2026-11-16
 
 ### Added

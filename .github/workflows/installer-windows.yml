@@ -63,8 +63,14 @@ jobs:
       - name: Work folder
         run: New-Item -ItemType Directory -Force $env:VCS_BUILD | Out-Null    # older tags' scripts do not create it
 
+      # Pinned FFmpeg (reproducible builds): a dated BtbN build and the SHA-256 GitHub publishes for it. BtbN removes
+      # old dated builds after a while; then this step fails with a 404 and both values are updated together
+      # (releases API: assets[].digest of the n9.0 win64-lgpl-shared zip).
       - name: PyAV against LGPL-only FFmpeg (no x264 / x265)
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_pyav_lgpl_win.ps1 -Python C:\vcs-env\Scripts\python.exe -Work $env:VCS_BUILD
+        env:
+          FFMPEG_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-11-15-12-40/ffmpeg-n9.0.2-57-gd838f9f9ae-win64-lgpl-shared-9.0.zip
+          FFMPEG_SHA256: 6305750bb1b4e3f80d17a6644fec1cf57eef12106c4f9192ddb05e14a6b522b0
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_pyav_lgpl_win.ps1 -Python C:\vcs-env\Scripts\python.exe -Work $env:VCS_BUILD -FfmpegUrl $env:FFMPEG_URL -FfmpegSha256 $env:FFMPEG_SHA256
 
       - name: Signing certificate from secrets (if configured)
         shell: pwsh

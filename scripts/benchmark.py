@@ -15,7 +15,8 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-os.environ["VCSTUDIO_HOME"] = tempfile.mkdtemp(prefix="vcs-bench-")
+HOME = tempfile.mkdtemp(prefix="vcs-bench-")      # throwaway app data (~270 MB of model cache): removed on exit
+os.environ["VCSTUDIO_HOME"] = HOME
 os.environ.setdefault("VCS_DISABLE_GLOBAL_HOTKEYS", "1")
 import psutil  # noqa: E402
 
@@ -129,6 +130,11 @@ def main():
         for r in (x for x in results if x["scenario"] == scen):
             print("| " + " | ".join(str(r[c]) for c in cols) + " |")
     ctx.shutdown()
+    del ctx
+    import gc
+    import shutil
+    gc.collect()
+    shutil.rmtree(HOME, ignore_errors=True)
 
 
 if __name__ == "__main__":

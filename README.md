@@ -1,7 +1,8 @@
 # AI Virtual Camera Studio for Windows
 
 A studio app for Windows 10 and 11. It takes video from a webcam, OBS or a screen or window. It finds and tracks objects
-on your PC (ONNX Runtime: CUDA, DirectML or CPU). It hides faces, blurs or replaces the background, puts images, video
+on your PC (ONNX Runtime: DirectML on any DirectX 12 graphics card — NVIDIA, AMD, Intel — or the CPU; CUDA / TensorRT
+are not included). It hides faces, blurs or replaces the background, puts images, video
 or a logo over regions (Direct3D 11 or CPU), and sends the result to its own system camera, **AI Virtual Camera**. You
 can then pick that camera in Zoom, Teams, Chrome, Discord, OBS or the Windows Camera app.
 

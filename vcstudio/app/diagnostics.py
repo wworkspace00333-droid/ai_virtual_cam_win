@@ -110,9 +110,10 @@ def write_zip(ctx, out: Path, include_selfcheck: bool = True) -> dict:
                 import tempfile
 
                 from vcstudio.app.selftest import bundle_selfcheck
-                tmp = Path(tempfile.mkdtemp()) / "selfcheck.json"
-                bundle_selfcheck(str(tmp))
-                put("selfcheck.json", tmp.read_text(encoding="utf-8"))
+                with tempfile.TemporaryDirectory(prefix="vcs-diag-") as d:
+                    tmp = Path(d) / "selfcheck.json"
+                    bundle_selfcheck(str(tmp))
+                    put("selfcheck.json", tmp.read_text(encoding="utf-8"))
             except Exception as e:
                 put("selfcheck.json", json.dumps({"error": str(e)}))
         sf = ctx.paths.settings_file

@@ -15,6 +15,7 @@ from __future__ import annotations
 import gc
 import logging
 import os
+import shutil
 import threading
 import time
 from dataclasses import dataclass, field
@@ -35,7 +36,13 @@ class WatchdogStats:
     memory_state: str = "normal"      # normal | warning | critical
     rss_mb: float = 0.0
     load_shed: bool = False
+    disk_free_mb: float = -1.0        # free space where settings, profiles and logs live (-1: not checked yet)
+    disk_low: bool = False
     events: list[str] = field(default_factory=list)
+
+
+LOW_DISK_MB = 500                     # below this, saving settings / logs / model caches may start failing
+DISK_CHECK_S = 10.0
 
 
 class Watchdog:
@@ -54,6 +61,8 @@ class Watchdog:
         from vcstudio.core.performance import phys_footprint
         # physical footprint (Activity Monitor "Memory"); RSS misses IOSurface/GPU allocations
         self.rss_fn = lambda: (phys_footprint() or self._proc.memory_info().rss) / 2**20   # injectable for tests
+        self.disk_free_fn = lambda: shutil.disk_usage(ctx.paths.root).free / 2**20         # injectable for tests
+        self._next_disk = 0.0
 
     def set_thresholds(self, warn_mb: float, critical_mb: float) -> None:
         self.warn_mb, self.critical_mb = warn_mb, critical_mb
@@ -73,8 +82,11 @@ class Watchdog:
 
     def _event(self, level: str, msg: str) -> None:
         getattr(log, level.lower())("Watchdog: %s", msg)
-        self.ctx.db.log_event(level, "watchdog", msg)
         self.stats.events = (self.stats.events + [msg])[-20:]
+        try:
+            self.ctx.db.log_event(level, "watchdog", msg)
+        except Exception as e:            # e.g. "database or disk is full": the watchdog must keep running
+            log.warning("could not record watchdog event: %s", e)
 
     def _run(self) -> None:
         while not self._stop.wait(self.interval):
@@ -117,6 +129,22 @@ class Watchdog:
             self._shed_load()
         elif state == "normal" and self.stats.load_shed:
             self._restore()
+        # ---- disk space (settings, profiles, logs, model caches live in the app data folder)
+        if now >= self._next_disk:
+            self._next_disk = now + DISK_CHECK_S
+            try:
+                free = self.disk_free_fn()
+            except OSError:
+                free = -1.0
+            self.stats.disk_free_mb = free
+            low = 0 <= free < LOW_DISK_MB
+            if low != self.stats.disk_low:
+                self.stats.disk_low = low
+                if low:
+                    self._event("WARNING", f"low disk space: {free:.0f} MB free; settings, logs and model caches "
+                                           "may fail to save")
+                else:
+                    self._event("INFO", f"disk space back to {free:.0f} MB free")
 
     def _shed_load(self) -> None:
         ctx = self.ctx

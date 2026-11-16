@@ -21,7 +21,9 @@ param(
     [string]$PyavVersion = "19.0.2",
     [string]$PyavSha256 = "bebbc52598886480f4d861c575dc2b020785d6c04e1308680ddcc545e1b94c66",
     [string]$FfmpegZip = "",
-    [string]$FfmpegSha256 = ""
+    [string]$FfmpegSha256 = "",
+    # a dated BtbN build (with -FfmpegSha256) makes the build reproducible; "latest" is rebuilt every day
+    [string]$FfmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-lgpl-shared-9.0.zip"
 )
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -35,10 +37,13 @@ $ffRoot = Join-Path $Work "ffmpeg-lgpl"
 if (-not $FfmpegZip) {
     $FfmpegZip = Join-Path $Work "ffmpeg-lgpl.zip"
     if (-not (Test-Path $FfmpegZip)) {
-        Invoke-WebRequest -UseBasicParsing "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-lgpl-shared-9.0.zip" -OutFile $FfmpegZip
+        Invoke-WebRequest -UseBasicParsing $FfmpegUrl -OutFile $FfmpegZip
     }
 }
-if ($FfmpegSha256 -and (Sha $FfmpegZip) -ne $FfmpegSha256.ToLower()) { throw "FFmpeg archive SHA-256 mismatch" }
+if ($FfmpegSha256 -and (Sha $FfmpegZip) -ne $FfmpegSha256.ToLower()) {
+    throw "FFmpeg archive SHA-256 mismatch: expected $FfmpegSha256, got $(Sha $FfmpegZip) ($FfmpegZip)"
+}
+if (-not $FfmpegSha256) { Write-Warning "FFmpeg archive not pinned (no -FfmpegSha256): the build is not reproducible" }
 Write-Host "FFmpeg archive SHA-256: $(Sha $FfmpegZip)"
 if (-not (Test-Path $ffRoot)) { New-Item -ItemType Directory $ffRoot | Out-Null; tar -xf $FfmpegZip -C $ffRoot; Check "unpacking FFmpeg" }
 $ff = (Get-ChildItem $ffRoot -Directory | Select-Object -First 1).FullName

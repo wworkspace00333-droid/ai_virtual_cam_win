@@ -36,7 +36,7 @@ if not _IS_MAC:
     # "cpu_and_ne" (an old macOS profile) keeps working there and means the same as "all".
     COMPUTE_UNITS = {
         "all": "Automatic (GPU if available, else CPU)",
-        "cpu_and_gpu": "GPU (CUDA / DirectML)",
+        "cpu_and_gpu": "GPU (DirectML)",
         "cpu_only": "CPU only",
     }
     COMPUTE_UNITS_HIDDEN = {"cpu_and_ne": "Automatic (GPU if available, else CPU)"}

@@ -181,7 +181,14 @@ class MainWindow(QMainWindow):
         s = self.ctx.monitor.sample()
         self.dashboard.on_sample(s)
         self.performance.on_sample(s)
-        self.status_res.setText(tr("CPU {cpu}% · App {mb} MB", cpu=f"{s.cpu_percent:.0f}", mb=f"{s.process_rss / 2**20:.0f}"))
+        res = tr("CPU {cpu}% · App {mb} MB", cpu=f"{s.cpu_percent:.0f}", mb=f"{s.process_rss / 2**20:.0f}")
+        w = self.ctx.watchdog.stats
+        if w.disk_low:                    # settings, profiles, logs and model caches may fail to save
+            res = tr("Low disk space: {mb} MB free", mb=f"{w.disk_free_mb:.0f}") + "   ·   " + res
+            self.status_res.setStyleSheet("color: #d29922;")
+        else:
+            self.status_res.setStyleSheet("")
+        self.status_res.setText(res)
         self._slow += 1
         if self._slow % 30 == 0:
             self.dashboard.refresh_extension()

@@ -136,7 +136,8 @@ _TEXT = {
     "ai_intro": (
         "On-device object detection with Core ML through Apple Vision (CPU / GPU / Neural Engine). Frames never "
         "leave this Mac.",
-        "On-device object detection with ONNX Runtime (CUDA / DirectML GPU, or CPU). Frames never leave this PC."),
+        "On-device object detection with ONNX Runtime (DirectML on the graphics card, or CPU). Frames never leave "
+        "this PC."),
     "ai_face_checkbox": (
         "Apple Vision face detection (face rectangles only; no identity recognition)",
         "YuNet face detection (face rectangles only; no identity recognition)"),

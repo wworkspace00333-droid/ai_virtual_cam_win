@@ -403,7 +403,9 @@ def bundle_selfcheck(out: str | None = None) -> int:
 
     img = load_bgra(sample(SAMPLE_PHOTO))
     frame = Frame(1, 0, 0, img.shape[1], img.shape[0], array=img)
-    mm = ModelManager(Path(tempfile.mkdtemp(prefix="vcs-selfcheck-")))
+    # a throwaway model folder (its optimised-model cache is ~270 MB): removed again at the end of the check
+    scratch = Path(tempfile.mkdtemp(prefix="vcs-selfcheck-"))
+    mm = ModelManager(scratch)
     infos = mm.available()
 
     def models_present():
@@ -505,6 +507,10 @@ def bundle_selfcheck(out: str | None = None) -> int:
             return p
         check("ffmpeg (optional)", ffmpeg, required=False)
 
+    mm = None                                # drop the model sessions before deleting their cache files
+    import gc
+    gc.collect()
+    shutil.rmtree(scratch, ignore_errors=True)
     failed = [r for r in results if r["required"] and not r["ok"]]
     print(f"{'OK' if not failed else 'FAILED'}: {sum(r['ok'] for r in results)}/{len(results)} checks passed",
           flush=True)
