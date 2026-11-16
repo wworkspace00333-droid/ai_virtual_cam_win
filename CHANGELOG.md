@@ -5,7 +5,7 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html): 
 release may change settings or profiles (they are migrated automatically); 1.0.0 comes after the hardware checklist
 (docs/HARDWARE_CHECKLIST.md) passes on real PCs.
 
-## [Unreleased]
+## [0.4.1] — 2026-11-16
 
 ### Added
 - **Video file as the input** (Input → Method → Video file): any MP4 / MOV / MKV / WebM / AVI clip is processed like
@@ -76,4 +76,5 @@ for real hardware are still to be measured (docs/HARDWARE_CHECKLIST.md).
 
 macOS releases; see the history of the original repository.
 
+[0.4.1]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.1
 [0.4.0]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.0

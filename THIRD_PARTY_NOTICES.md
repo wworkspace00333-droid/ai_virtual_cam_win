@@ -5,7 +5,7 @@ each under its own licence. The full licence texts are installed with the progra
 `<install folder>\_internal\licenses\`. The Windows installer is checked by `scripts/check_licenses.py`: no GPL or
 AGPL component is allowed in it, except the separately licensed OBS plugin, which ships with its source (see the end).
 
-Last reviewed: 2026-11-16, for version 0.4.0. This file is a technical record, not legal advice.
+Last reviewed: 2026-11-16, for version 0.4.1. This file is a technical record, not legal advice.
 
 ## Components that ship in the installer
 
