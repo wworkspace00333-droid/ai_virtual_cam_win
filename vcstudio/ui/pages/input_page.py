@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QFormLayout, QGridLayout, QHBoxLayout, QLabel, QMessageBox,
-                               QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QWidget)
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFormLayout, QGridLayout, QHBoxLayout, QLabel,
+                               QLineEdit, QMessageBox, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QWidget)
 
 from vcstudio import CAMERA_NAME
 from vcstudio.core.config import SettingsError
@@ -50,6 +50,18 @@ class InputPage:
         self.frozen = QSpinBox(); self.frozen.setRange(200, 60000); self.frozen.setSuffix(tr(" ms"))
         f.addRow(tr("Method"), self.method)
         f.addRow(tr("Device"), self.device)
+        # method "video_file": the clip, and whether it starts again at the end
+        self.video_row = QWidget(); vr = QHBoxLayout(self.video_row); vr.setContentsMargins(0, 0, 0, 0)
+        self.video_path = QLineEdit(); self.video_path.setPlaceholderText(tr("Choose a video file…"))
+        self.video_pick = QPushButton(tr("Choose…"))
+        self.video_loop = QCheckBox(tr("Loop"))
+        vr.addWidget(self.video_path, 1); vr.addWidget(self.video_pick); vr.addWidget(self.video_loop)
+        f.addRow(tr("Video file"), self.video_row)
+        self.video_info = QLabel(); self.video_info.setObjectName("muted"); self.video_info.setWordWrap(True)
+        f.addRow("", self.video_info)
+        self._form = f
+        self.video_pick.clicked.connect(self.choose_video)
+        self.video_path.editingFinished.connect(self._video_changed)
         f.addRow(tr("Format"), self.format)
         f.addRow(tr("Frame rate"), self.fps)
         f.addRow(tr(""), self.reconnect)
@@ -128,15 +140,50 @@ class InputPage:
         self.reconnect.setChecked(s.get("input.auto_reconnect"))
         self.missing.setValue(s.get("input.missing_input_timeout_ms"))
         self.frozen.setValue(s.get("input.frozen_frame_timeout_ms"))
+        self.video_path.setText(s.get("input.video_path") or "")
+        self.video_loop.setChecked(bool(s.get("input.video_loop")))
+        self._video_changed()
+
+    # ---------------- video file
+    def choose_video(self, path: str | None = None) -> None:
+        from pathlib import Path
+
+        from vcstudio.core.video_file_source import VIDEO_FILTER
+        if not path:
+            start = self.video_path.text() or str(Path.home() / "Videos")
+            path, _ = QFileDialog.getOpenFileName(self.widget, tr("Choose a video file"), start,
+                                                  tr("Video") + f" ({VIDEO_FILTER})")
+        if path:
+            self.video_path.setText(path)
+            self._video_changed()
+
+    def _video_changed(self) -> None:
+        from pathlib import Path
+        p = Path(self.video_path.text().strip()) if self.video_path.text().strip() else None
+        if p is None:
+            self.video_info.setText("")
+            return
+        from vcstudio.replacement.video import VideoError, probe
+        try:
+            i = probe(p)
+            self.video_info.setText(tr("{w}×{h}, {fps} fps, {s} s, {codec}", w=i.width, h=i.height,
+                                       fps=f"{i.fps:.0f}", s=f"{i.duration:.0f}", codec=i.codec))
+        except VideoError as e:
+            self.video_info.setText(tr(str(e)))
 
     def _method_changed(self, *_):
         m = self.method.currentData()
         is_dev = is_device_method(m)
+        is_file = m == "video_file"
+        self._form.setRowVisible(self.video_row, is_file)
+        self._form.setRowVisible(self.video_info, is_file)
+        self._form.setRowVisible(self.device, not is_file)
+        self._form.setRowVisible(self.format, not is_file)
         if m == "screen" or getattr(self, "_listing_screens", False):
             self.refresh_devices()
         self.device.setEnabled(is_dev or m == "screen")
         self.format.setEnabled(is_dev)
-        self.fps.setEnabled(m != "obs_ipc")          # OBS decides resolution and frame rate
+        self.fps.setEnabled(m not in ("obs_ipc", "video_file"))   # OBS / the file decide size and frame rate
         self.obs_row.setVisible(m == "obs_ipc")
         self._refresh_obs_status()
 
@@ -250,6 +297,8 @@ class InputPage:
                 s.set("input.device_name_hint", name, persist=False)
             elif self.method.currentData() == "screen" and self.device.currentData():
                 s.set("input.screen_target", self.device.currentData(), persist=False)
+            s.set("input.video_path", self.video_path.text().strip(), persist=False)
+            s.set("input.video_loop", self.video_loop.isChecked(), persist=False)
             w, h = self.format.currentData() or (1920, 1080)
             s.set("input.preferred_width", w, persist=False)
             s.set("input.preferred_height", h, persist=False)
@@ -267,6 +316,10 @@ class InputPage:
         if is_device_method(self.method.currentData()) and self.device.currentData() is None:
             QMessageBox.warning(self.widget, tr("Input"), tr("No usable video device selected."))
             return
+        if self.method.currentData() == "video_file" and not self.video_path.text().strip():
+            self.choose_video()
+            if not self.video_path.text().strip():
+                return
         if self.apply_to_settings():
             try:
                 self.ctx.start_capture()

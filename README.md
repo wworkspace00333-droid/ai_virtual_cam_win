@@ -36,7 +36,10 @@ settings, profiles and images stay in `%LOCALAPPDATA%\AIVirtualCameraStudio` unt
 ## What it does (Windows)
 
 - **Inputs:** webcams (Media Foundation or DirectShow), OBS Virtual Camera, direct frame transfer from OBS (plugin),
-  **a screen or a single window** (Windows Graphics Capture, with Desktop Duplication / GDI fallback).
+  **a screen or a single window** (Windows Graphics Capture, with Desktop Duplication / GDI fallback), **a video
+  file** (played in real time, looping).
+- **Output:** the app's own camera, under the name you give it (Virtual Camera page → Rename). To pass the result on
+  as "OBS Virtual Camera", add this camera in OBS as a Video Capture Device and click Start Virtual Camera.
 - **One click on the Preview page:** *Hide face* (YuNet face detection, pixelate or blur), *Logo* (a picture in the
   corner, transparency kept), *Card for a game*.
 - **Background:** blur or replace everything behind people (PP-HumanSeg person segmentation).

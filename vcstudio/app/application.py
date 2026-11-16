@@ -146,6 +146,10 @@ class AppContext:
         if i["method"] == "obs_ipc":
             from vcstudio.core.obs_shm_source import ObsShmSource
             return lambda: ObsShmSource()
+        if i["method"] == "video_file":
+            from vcstudio.core.video_file_source import VideoFileSource
+            path, loop = i.get("video_path") or "", bool(i.get("video_loop", True))
+            return lambda: VideoFileSource(path, loop)
         if i["method"] == "screen":
             from vcstudio.platform.win.screen_capture import ScreenCaptureSource
             target = i.get("screen_target") or "monitor:0"

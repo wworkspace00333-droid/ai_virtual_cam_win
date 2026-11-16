@@ -49,7 +49,8 @@ else:
     DEVICE_METHODS = (("avfoundation", "Camera device (AVFoundation): OBS Virtual Camera"),)
 DEVICE_METHOD_KEYS = frozenset(k for k, _ in DEVICE_METHODS)
 DEFAULT_DEVICE_METHOD = DEVICE_METHODS[0][0]
-INPUT_METHODS = DEVICE_METHODS + (("obs_ipc", "Direct OBS frame transfer (vcstudio-obs plugin)"),)
+INPUT_METHODS = DEVICE_METHODS + (("obs_ipc", "Direct OBS frame transfer (vcstudio-obs plugin)"),
+                                  ("video_file", "Video file"))   # vcstudio/core/video_file_source.py
 if IS_WINDOWS:   # vcstudio/platform/win/screen_capture.py ("input.screen_target": monitor:<n> | window:<title>)
     INPUT_METHODS += (("screen", "Screen or window (Windows Graphics Capture)"),)
 INPUT_METHODS += (("test_pattern", "Test pattern (diagnostics)"),)

@@ -208,6 +208,20 @@ RU: dict[str, str] = {
     "Direct OBS frame transfer (vcstudio-obs plugin)": "Прямая передача кадров из OBS (плагин vcstudio-obs)",
     "Test pattern (diagnostics)": "Тестовая картинка (диагностика)",
     "Screen or window (Windows Graphics Capture)": "Экран или окно (Windows Graphics Capture)",
+    "Video file": "Видеофайл",
+    "Choose a video file…": "Выберите видеофайл…",
+    "Choose a video file": "Выберите видеофайл",
+    "Choose…": "Выбрать…",
+    "Video": "Видео",
+    "{w}×{h}, {fps} fps, {s} s, {codec}": "{w}×{h}, {fps} к/с, {s} с, {codec}",
+    "<b>Need “OBS Virtual Camera” instead?</b> In OBS Studio add Sources → + → Video Capture Device → “{ds}”, "
+    "right-click it → Transform → Fit to screen, then click <b>Start Virtual Camera</b>. Apps that select “OBS "
+    "Virtual Camera” now get this app's processed video. Do not use OBS Virtual Camera as this app's input at the "
+    "same time (it would feed back into itself).":
+        "<b>Нужна именно «OBS Virtual Camera»?</b> В OBS Studio добавьте Источники → + → Устройство захвата видео → "
+        "«{ds}», щёлкните по нему правой кнопкой → Преобразовать → Растянуть на весь экран, затем нажмите "
+        "<b>Запустить виртуальную камеру</b>. Программы, выбравшие «OBS Virtual Camera», получат обработанное "
+        "видео. Не используйте при этом OBS Virtual Camera как вход этой программы (видео пойдёт по кругу).",
     "Screen {n} ({w}×{h})": "Экран {n} ({w}×{h})",
     "Window: {title}": "Окно: {title}",
     "not open now": "сейчас не открыто",

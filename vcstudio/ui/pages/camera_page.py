@@ -131,6 +131,14 @@ class VirtualCameraPage:
                 "Foundation camera.", mf=f"{nm} (Windows Virtual Camera)", ds=nm))
             steps.setWordWrap(True); steps.setTextFormat(Qt.RichText)
             apps.layout_.addWidget(steps)
+            # the app writes only to its own camera on Windows; OBS turns it into OBS Virtual Camera
+            obs_vc = QLabel(tr(
+                "<b>Need “OBS Virtual Camera” instead?</b> In OBS Studio add Sources → + → Video Capture Device → "
+                "“{ds}”, right-click it → Transform → Fit to screen, then click <b>Start Virtual Camera</b>. Apps "
+                "that select “OBS Virtual Camera” now get this app's processed video. Do not use OBS Virtual Camera "
+                "as this app's input at the same time (it would feed back into itself).", ds=nm))
+            obs_vc.setWordWrap(True); obs_vc.setTextFormat(Qt.RichText)
+            apps.layout_.addWidget(obs_vc)
             arow = QHBoxLayout()
             self.browser_btn = QPushButton(tr("Open browser test page"))
             self.wincam_btn = QPushButton(tr("Open the Windows Camera app"))

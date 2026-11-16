@@ -5,6 +5,16 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html): 
 release may change settings or profiles (they are migrated automatically); 1.0.0 comes after the hardware checklist
 (docs/HARDWARE_CHECKLIST.md) passes on real PCs.
 
+## [Unreleased]
+
+### Added
+- **Video file as the input** (Input → Method → Video file): any MP4 / MOV / MKV / WebM / AVI clip is processed like
+  a camera, in real time at the clip's frame rate, looping or holding the last picture, and sent to the output
+  camera. Checked live: a 30 fps clip with face hiding reached the app's camera at 29.7 fps (Media Foundation
+  client through Frame Server) and 30.5 fps (DirectShow client).
+- Virtual Camera page: how to pass the processed video on as "OBS Virtual Camera" (OBS Video Capture Device →
+  this app's camera → Start Virtual Camera).
+
 ## [0.4.0] — 2026-11-16 — first Windows release (preview)
 
 The first release of the Windows port. Developed and tested on Windows Server 2025 without a graphics card; numbers
