@@ -42,6 +42,97 @@ def test_without_loop_holds_the_last_picture():
     assert (frames[-1].array == frames[-2].array).all()
 
 
+def test_pause_seek_and_start_position():
+    """P1.6: pause freezes the picture (frames keep coming, the clip clock stops), seek jumps, start_s is honoured."""
+    from vcstudio.core.video_file_source import VideoFileSource
+    frames, events = [], []
+    src = VideoFileSource(CLIP, loop=True, start_s=1.0)
+    src.start(frames.append, lambda *a: events.append(a))
+    try:
+        time.sleep(0.4)
+        assert src.position >= 1.0                                  # started at 1 s, not at 0
+        src.pause()
+        time.sleep(0.2)
+        held_at, n = src.position, len(frames)
+        time.sleep(0.6)
+        assert src.paused and src.position == held_at               # the clip clock stood still
+        assert len(frames) - n >= 12                                # ...but frames kept coming (~30 fps)
+        assert (frames[-1].array == frames[-2].array).all()
+        src.resume()
+        src.seek(0.2)
+        time.sleep(0.3)
+        assert 0.2 <= src.position < 0.9 and not src.paused         # jumped back
+    finally:
+        src.stop()
+    assert not events
+
+
+def test_seek_leaves_a_held_end_picture():
+    from vcstudio.core.video_file_source import VideoFileSource
+    src = VideoFileSource(CLIP, loop=False)
+    src.start(lambda f: None, lambda *a: None)
+    try:
+        time.sleep(2.4)
+        assert src.ended
+        src.restart()
+        time.sleep(0.4)
+        assert not src.ended and src.position < 1.0
+    finally:
+        src.stop()
+
+
+def test_input_page_playback_controls(qtbot, paths):
+    from vcstudio.app.application import AppContext
+    from vcstudio.ui.main_window import MainWindow
+    ctx = AppContext(paths, configure_logging=False)
+    w = MainWindow(ctx)
+    qtbot.addWidget(w)
+    try:
+        page = w.input_page
+        page.method.setCurrentIndex(page.method.findData("video_file"))
+        page.choose_video(str(CLIP))
+        page.video_start.setValue(0.5)
+        ctx.settings.set("output.camera_enabled", False)
+        page.start()
+        qtbot.waitUntil(lambda: page._running_video() is not None, timeout=5000)
+        assert ctx.settings.get("input.video_start_s") == 0.5
+        page.update_stats()
+        assert page.video_pause.isEnabled() and "/ 0:02" in page.video_pos.text()
+        page.video_pause.setChecked(True)
+        assert page._running_video().paused
+        page.update_stats()
+        assert "paused" in page.video_pos.text()
+        page.video_pause.setChecked(False)
+        assert not page._running_video().paused
+    finally:
+        ctx.stop_capture()
+        ctx.shutdown()
+
+
+def test_settings_page_shows_the_method_and_sends_to_the_input_page(qtbot, paths, monkeypatch):
+    """P1.7: the input method is chosen on the Input page only; Settings shows it and links there."""
+    from vcstudio.app.application import AppContext
+    from vcstudio.ui.main_window import MainWindow
+    boxes = []
+    for kind in ("information", "warning"):
+        monkeypatch.setattr(f"PySide6.QtWidgets.QMessageBox.{kind}", lambda *a, kind=kind, **k: boxes.append((kind, a)))
+    ctx = AppContext(paths, configure_logging=False)
+    w = MainWindow(ctx)
+    qtbot.addWidget(w)
+    try:
+        sp = next(p for p in w.pages if p.key == "settings")
+        assert not hasattr(sp, "method")                              # no second selector
+        ctx.settings.set("input.method", "video_file")
+        assert sp.method_label.text() == "Video file"
+        sp.save()
+        assert ctx.settings.get("input.method") == "video_file"      # saving Settings does not change the method
+        assert not [b for b in boxes if b[0] == "warning"], boxes
+        sp.method_btn.click()
+        assert w.stack.currentWidget() is w.input_page.widget
+    finally:
+        ctx.shutdown()
+
+
 def test_missing_or_unreadable_file_is_reported(tmp_path):
     from vcstudio.core.video_capture import CaptureError
     from vcstudio.core.video_file_source import VideoFileSource

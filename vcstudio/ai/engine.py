@@ -75,6 +75,8 @@ MQ_BUDGET_MS = QUALITY_BUDGET_MS["max_quality"]
 MQ_SAMPLES = 40          # inferences measured before judging a model
 MQ_FAST_SAMPLES = 5      # ...unless the median of the first few is already this many times over budget
 MQ_FAST_FACTOR = 3.0
+STANDBY_FPS = 2.0        # detector rate while no region uses detections (previews still show boxes)
+STANDBY_NOTE = "standby: no region follows detected objects, detector at 2 fps"
 
 
 class AIEngine:
@@ -145,11 +147,17 @@ class AIEngine:
             return self._cfg, self._mode
 
     def target_fps(self) -> float | None:
-        """The detector rate: the profile's fixed rate, or the mode's rate scaled down under overload."""
+        """The detector rate: the profile's fixed rate, or the mode's rate scaled down under overload. When no region
+        uses detections, a standby rate: boxes on the previews still update and the model stays loaded, but the
+        CPU / GPU are left to the video."""
         cfg, mode = self.config()
         if cfg.frequency_mode == "fixed":
-            return max(0.5, cfg.fixed_fps)       # the user's explicit choice is kept
-        return self.adaptive.apply(PERFORMANCE_MODES[mode].ai_fps, self._fps.rate())
+            rate = max(0.5, cfg.fixed_fps)       # the user's explicit choice is kept
+        else:
+            rate = self.adaptive.apply(PERFORMANCE_MODES[mode].ai_fps, self._fps.rate())
+        if not cfg.detector_needed:
+            return min(rate, STANDBY_FPS) if rate else STANDBY_FPS
+        return rate
 
     def _update_adaptive(self) -> None:
         probe = self.load_probe
@@ -473,6 +481,10 @@ class AIEngine:
             self._judge_max_quality(cfg, mode)
             with self._lock:
                 s = self._stats
+                if not cfg.detector_needed:
+                    s.rate_note = STANDBY_NOTE
+                elif s.rate_note == STANDBY_NOTE:
+                    s.rate_note = self.adaptive.reason
                 s.inferences += 1
                 s.detections = len(kept)
                 s.consecutive_errors = 0

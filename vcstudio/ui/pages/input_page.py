@@ -3,8 +3,9 @@ from __future__ import annotations
 import logging
 
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFormLayout, QGridLayout, QHBoxLayout, QLabel,
-                               QLineEdit, QMessageBox, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QWidget)
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGridLayout,
+                               QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox, QTableWidget,
+                               QTableWidgetItem, QWidget)
 
 from vcstudio import CAMERA_NAME
 from vcstudio.core.config import SettingsError
@@ -59,6 +60,18 @@ class InputPage:
         f.addRow(tr("Video file"), self.video_row)
         self.video_info = QLabel(); self.video_info.setObjectName("muted"); self.video_info.setWordWrap(True)
         f.addRow("", self.video_info)
+        # playback: start position (saved) and live controls for the running clip
+        self.video_ctl = QWidget(); vc = QHBoxLayout(self.video_ctl); vc.setContentsMargins(0, 0, 0, 0)
+        self.video_start = QDoubleSpinBox(); self.video_start.setRange(0, 86400); self.video_start.setDecimals(1)
+        self.video_start.setSuffix(tr(" s")); self.video_start.setToolTip(tr("Playback and every loop start here."))
+        self.video_pause = QPushButton(tr("Pause")); self.video_pause.setCheckable(True)
+        self.video_restart = QPushButton(tr("From the start"))
+        self.video_pos = QLabel("—"); self.video_pos.setObjectName("muted")
+        vc.addWidget(QLabel(tr("Start at"))); vc.addWidget(self.video_start); vc.addWidget(self.video_pause)
+        vc.addWidget(self.video_restart); vc.addWidget(self.video_pos, 1)
+        f.addRow("", self.video_ctl)
+        self.video_pause.toggled.connect(self._video_pause)
+        self.video_restart.clicked.connect(self._video_restart)
         self._form = f
         self.video_pick.clicked.connect(self.choose_video)
         self.video_path.editingFinished.connect(self._video_changed)
@@ -142,7 +155,38 @@ class InputPage:
         self.frozen.setValue(s.get("input.frozen_frame_timeout_ms"))
         self.video_path.setText(s.get("input.video_path") or "")
         self.video_loop.setChecked(bool(s.get("input.video_loop")))
+        self.video_start.setValue(float(s.get("input.video_start_s") or 0.0))
         self._video_changed()
+
+    def _running_video(self):
+        from vcstudio.core.video_file_source import VideoFileSource
+        src = self.ctx.capture.source
+        return src if isinstance(src, VideoFileSource) else None
+
+    def _video_pause(self, on: bool) -> None:
+        src = self._running_video()
+        if src is not None:
+            (src.pause if on else src.resume)()
+
+    def _video_restart(self) -> None:
+        src = self._running_video()
+        if src is not None:
+            src.seek(self.video_start.value())
+
+    def _update_video_controls(self) -> None:
+        src = self._running_video()
+        for w in (self.video_pause, self.video_restart):
+            w.setEnabled(src is not None)
+        if src is None:
+            self.video_pos.setText("—")
+            if self.video_pause.isChecked():
+                self.video_pause.blockSignals(True); self.video_pause.setChecked(False); self.video_pause.blockSignals(False)
+            return
+
+        def mmss(t: float) -> str:
+            return f"{int(t) // 60}:{int(t) % 60:02d}"
+        state = tr("paused") if src.paused else (tr("ended") if src.ended else "")
+        self.video_pos.setText(f"{mmss(src.position)} / {mmss(src.duration)}" + (f"  ·  {state}" if state else ""))
 
     # ---------------- video file
     def choose_video(self, path: str | None = None) -> None:
@@ -177,6 +221,7 @@ class InputPage:
         is_file = m == "video_file"
         self._form.setRowVisible(self.video_row, is_file)
         self._form.setRowVisible(self.video_info, is_file)
+        self._form.setRowVisible(self.video_ctl, is_file)
         self._form.setRowVisible(self.device, not is_file)
         self._form.setRowVisible(self.format, not is_file)
         if m == "screen" or getattr(self, "_listing_screens", False):
@@ -299,6 +344,7 @@ class InputPage:
                 s.set("input.screen_target", self.device.currentData(), persist=False)
             s.set("input.video_path", self.video_path.text().strip(), persist=False)
             s.set("input.video_loop", self.video_loop.isChecked(), persist=False)
+            s.set("input.video_start_s", float(self.video_start.value()), persist=False)
             w, h = self.format.currentData() or (1920, 1080)
             s.set("input.preferred_width", w, persist=False)
             s.set("input.preferred_height", h, persist=False)
@@ -330,6 +376,8 @@ class InputPage:
         self._tick_n = getattr(self, "_tick_n", 0) + 1
         if self._tick_n % 8 == 0:
             self._refresh_obs_status()
+        if self.method.currentData() == "video_file":
+            self._update_video_controls()
         s = self.ctx.capture.stats()
         state_level = {"running": "ok", "frozen": "warn", "reconnecting": "warn", "no_signal": "error",
                        "error": "error"}.get(s.state, "idle")

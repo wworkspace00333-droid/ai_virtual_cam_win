@@ -65,6 +65,9 @@ class DetectionConfig:
     # "any object" by text (OWLv2, vcstudio/ai/open_vocab.py): replaces the COCO detector while enabled;
     # detections are labelled with the query text; masks from SAM 2.1 when need_masks
     open_vocab_queries: list[str] = field(default_factory=list)
+    # some enabled region follows detected objects (auto / hybrid, "Hide face", silhouettes, any object by text);
+    # when False only manual regions (or none) use the frame, and the detector runs at a standby rate
+    detector_needed: bool = True
 
     @property
     def open_vocab(self) -> bool:
@@ -73,7 +76,10 @@ class DetectionConfig:
     @classmethod
     def from_profile(cls, body: dict) -> "DetectionConfig":
         ai, det = body.get("ai", {}), body.get("detection", {})
+        open_vocab_on = bool((ai.get("open_vocab") or {}).get("enabled"))
+        follows = any(r.get("enabled", True) and r.get("mode", "manual") != "manual" for r in body.get("rois", []))
         return cls(
+            detector_needed=follows or open_vocab_on,
             enabled=bool(ai.get("enabled", True)),
             detector_model=ai.get("detector_model") or "auto",
             compute_units=ai.get("compute_units", "all"),

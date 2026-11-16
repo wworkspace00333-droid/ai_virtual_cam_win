@@ -175,7 +175,7 @@ def test_last_page_restored(qtbot, paths):
 
 def test_ai_page_accuracy_check_fills_table(win, qtbot):
     from vcstudio.ai.model_manager import REPO_MODELS
-    if not any(REPO_MODELS.glob("*.mlpackage")):
+    if not (any(REPO_MODELS.glob("*.mlpackage")) or (REPO_MODELS / "yolox_nano.onnx").exists()):
         pytest.skip("no models converted")
     page = win.pages[win.page_keys().index("ai")]
     page.start_accuracy()

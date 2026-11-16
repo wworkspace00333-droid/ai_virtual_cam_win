@@ -22,18 +22,22 @@ class SettingsPage:
         s = ctx.settings
         gen = Card("Input defaults")
         f = QFormLayout()
-        self.method = QComboBox()
-        for key, label in INPUT_METHODS:
-            if key != "test_pattern":
-                self.method.addItem(tr(label), key)
-        self.method.setCurrentIndex(self.method.findData(s.get("input.method")))
+        # The input method is chosen on the Input page only: several methods need more than a name (a device, a file,
+        # a screen or window), and a second, partial selector here could pick "Video file" without a file.
+        mrow = QHBoxLayout()
+        self.method_label = QLabel()
+        self.method_btn = QPushButton(tr("Change on the Input page"))
+        self.method_btn.clicked.connect(self._goto_input)
+        mrow.addWidget(self.method_label, 1); mrow.addWidget(self.method_btn)
+        self._show_method(s.get("input.method"))
+        ctx.settings.add_listener(lambda k, v: self._show_method(v) if k == "input.method" else None)
         self.reconnect = QCheckBox(tr("Reconnect automatically"))
         self.reconnect.setChecked(s.get("input.auto_reconnect"))
         self.autostart = QCheckBox(tr("Start capture when the app opens"))
         self.autostart.setChecked(s.get("input.autostart"))
         self.frozen = QSpinBox(); self.frozen.setRange(100, 60000); self.frozen.setSuffix(tr(" ms"))
         self.frozen.setValue(s.get("input.frozen_frame_timeout_ms"))
-        f.addRow(tr("Input method"), self.method)
+        f.addRow(tr("Input method"), mrow)
         f.addRow(tr(""), self.reconnect)
         f.addRow(tr(""), self.autostart)
         f.addRow(tr("Frozen-frame timeout"), self.frozen)
@@ -171,10 +175,17 @@ class SettingsPage:
         except Exception as e:
             self.app_info.setText(tr("Could not save diagnostics: {e}", e=e))
 
+    def _show_method(self, method) -> None:
+        label = dict(INPUT_METHODS).get(method, str(method))
+        self.method_label.setText(tr(label))
+
+    def _goto_input(self) -> None:
+        if self.window is not None and hasattr(self.window, "goto"):
+            self.window.goto("input")
+
     def save(self):
         s = self.ctx.settings
         try:
-            s.set("input.method", self.method.currentData(), persist=False)
             s.set("input.auto_reconnect", self.reconnect.isChecked(), persist=False)
             s.set("input.autostart", self.autostart.isChecked(), persist=False)
             s.set("input.frozen_frame_timeout_ms", self.frozen.value(), persist=False)

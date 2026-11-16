@@ -191,11 +191,20 @@ def test_watchdog_restarts_stalled_pipeline(ctx, monkeypatch):
 
 def test_watchdog_restarts_stalled_ai(ctx, monkeypatch):
     from vcstudio.ai.model_manager import REPO_MODELS
-    if not (REPO_MODELS / "yolo11n.mlpackage").exists():
+    if not ((REPO_MODELS / "yolo11n.mlpackage").exists() or (REPO_MODELS / "yolox_nano.onnx").exists()):
         pytest.skip("no model")
     import vcstudio.core.watchdog as wd
     monkeypatch.setattr(wd, "AI_STALL_S", 0.8)
     ctx.watchdog.interval = 0.1
+    # one fixed model at a fixed 10 fps: "auto" would step down between models (replacing the detector this test
+    # hangs), and a profile without regions runs the detector at the 2 fps standby rate (5 s stall threshold)
+    model = "yolox_nano" if (REPO_MODELS / "yolox_nano.onnx").exists() else "yolo11n"
+
+    def pin(b):
+        b.setdefault("ai", {})["detector_model"] = model
+        b.setdefault("detection", {}).update(frequency_mode="fixed", fixed_fps=10)
+        b["rois"] = [dict(new_rect("people", 0, 0, 1, 1).to_dict(), mode="auto", classes=["person"])]
+    ctx.update_active_profile(pin)
     ctx.start_capture()
     assert wait_for(lambda: ctx.ai.stats().inferences > 3)
     det = ctx.ai._detector
@@ -260,6 +269,7 @@ def test_hotkey_parsing_and_native_registration():
 
 
 @pytest.mark.skipif(os.environ.get("VCS_LIVE") != "1", reason="set VCS_LIVE=1")
+@pytest.mark.skipif(sys.platform != "darwin", reason="CMIO camera (macOS); Windows: tests/test_integration_win.py")
 def test_live_end_to_end_through_cmio_camera(tmp_path):
     """Input -> AI -> tracking -> object replacement -> Metal -> CMIO camera -> client capture (dev app bundle)."""
     from vcstudio.camera import camera_manager as cm

@@ -124,6 +124,11 @@ class CaptureSupervisor:
     def running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
+    @property
+    def source(self) -> CaptureSource | None:
+        """The open capture source (for source-specific controls such as pausing a video file); None when closed."""
+        return self._source
+
     def add_state_listener(self, cb: Callable[[str], None]) -> None:
         self._listeners.append(cb)
 

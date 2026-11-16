@@ -19,8 +19,19 @@ Fixes from the 0.5 audit (docs/WINDOWS_AUDIT_0.5.md, P0).
 - Texts no longer promise CUDA: the Windows build ships ONNX Runtime with DirectML and CPU only (D19). The 0.4.0 notes
   below said "CUDA" — that was not accurate.
 
+- Maximum Quality no longer runs the detector at ~2 fps: under load its rate was scaled from the already throttled
+  rate and ratcheted down to the floor; it now scales from the unthrottled rate (D26).
+
+### Added
+- Video file input: start position, Pause and "From the start" buttons, position readout (P1.6).
+
 ### Changed
 - The CI installer build uses a pinned FFmpeg (dated BtbN build + SHA-256) instead of the daily "latest" (D3).
+- AI on demand: when no region follows detected objects (only manual regions, or none), the detector runs at a
+  2 fps standby rate — previews still show boxes, the model stays loaded, the CPU/GPU go to the video (P1.1, D20).
+- The input method is chosen on the Input page only; Settings shows it with a link (P1.7, D17).
+- Tests: the GUI tests with a detector run on Windows with YOLOX (they waited for a macOS model); macOS-only live
+  tests are skipped on Windows (P1.8, D24).
 
 ## [0.4.1] — 2026-11-16
 

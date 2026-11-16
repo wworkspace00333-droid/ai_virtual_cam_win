@@ -5,6 +5,7 @@ Skipped unless VCS_LIVE=1. Run:  VCS_LIVE=1 .venv/bin/python -m pytest tests/tes
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,9 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "build" / "AI Virtual Camera Studio Dev.app"
 
-pytestmark = pytest.mark.skipif(os.environ.get("VCS_LIVE") != "1", reason="set VCS_LIVE=1 for live capture test")
+pytestmark = [pytest.mark.skipif(os.environ.get("VCS_LIVE") != "1", reason="set VCS_LIVE=1 for live capture test"),
+              # builds and opens the macOS dev .app (Windows live capture: tests/test_capture_win.py)
+              pytest.mark.skipif(sys.platform != "darwin", reason="macOS dev app bundle")]
 
 
 def test_obs_virtual_camera_capture(tmp_path):

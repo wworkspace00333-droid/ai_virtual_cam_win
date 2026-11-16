@@ -5,7 +5,9 @@ from vcstudio.ai.model_manager import REPO_MODELS
 from vcstudio.app.application import AppContext
 from vcstudio.ui.main_window import MainWindow
 
-needs_model = pytest.mark.skipif(not (REPO_MODELS / "yolo11n.mlpackage").exists(), reason="no model")
+# a built-in detector of this platform: Core ML YOLO on macOS, YOLOX (ONNX) on Windows
+needs_model = pytest.mark.skipif(not ((REPO_MODELS / "yolo11n.mlpackage").exists()
+                                      or (REPO_MODELS / "yolox_nano.onnx").exists()), reason="no model")
 
 
 @pytest.fixture
@@ -74,8 +76,9 @@ def test_tracking_settings_roundtrip(win, qtbot):
 def test_preview_overlay_shows_track_ids(win, qtbot, monkeypatch):
     from tests.test_ai import ImageSource
     from vcstudio.ai.testimages import load_bgra
+    from vcstudio.core.resources import sample_photo
     ctx = win.ctx
-    img = load_bgra("tests/data/bus.jpg")
+    img = load_bgra(sample_photo())                  # street.jpg: people and buses (CC0)
     monkeypatch.setattr(ctx, "capture_factory", lambda: (lambda: ImageSource(img, 30)))
     win.goto("preview")
     preview = win.pages[win.page_keys().index("preview")]

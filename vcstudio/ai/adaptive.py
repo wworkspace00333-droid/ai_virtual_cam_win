@@ -34,10 +34,12 @@ class AdaptiveAIRate:
     _last: float = -1e9
     _over_since: float | None = None
     _ok_since: float | None = None
+    _free_fps: float = 0.0      # Maximum Quality: detector rate reached while not throttled
 
     def reset(self) -> None:
         self.scale, self.reason = 1.0, ""
         self._over_since = self._ok_since = None
+        self._free_fps = 0.0
 
     def update(self, now: float, output_fps: float, input_fps: float) -> float:
         """Feed the measured rates; returns the current scale (1.0 = the mode's own detector rate)."""
@@ -69,8 +71,14 @@ class AdaptiveAIRate:
         return self.scale
 
     def apply(self, mode_fps: float | None, achieved_fps: float) -> float | None:
-        """The detector target for a mode rate (None = as fast as possible, Maximum Quality)."""
+        """The detector target for a mode rate (None = as fast as possible, Maximum Quality).
+
+        For None the base is the rate reached while unthrottled, remembered when the throttle starts. Using the
+        rate achieved *under* the throttle would ratchet down every period (target = achieved × scale, the next
+        achieved rate is that target, …) until it reached min_fps: Maximum Quality ran its detector at ~2 fps."""
         if self.scale >= 1.0:
+            if mode_fps is None and achieved_fps > 0:
+                self._free_fps = achieved_fps
             return mode_fps
-        base = mode_fps if mode_fps else max(achieved_fps, self.min_fps / self.scale)
+        base = mode_fps if mode_fps else max(self._free_fps or achieved_fps, self.min_fps / self.scale)
         return max(self.min_fps, base * self.scale)

@@ -149,7 +149,8 @@ class AppContext:
         if i["method"] == "video_file":
             from vcstudio.core.video_file_source import VideoFileSource
             path, loop = i.get("video_path") or "", bool(i.get("video_loop", True))
-            return lambda: VideoFileSource(path, loop)
+            start = float(i.get("video_start_s") or 0.0)
+            return lambda: VideoFileSource(path, loop, start_s=start)
         if i["method"] == "screen":
             from vcstudio.platform.win.screen_capture import ScreenCaptureSource
             target = i.get("screen_target") or "monitor:0"

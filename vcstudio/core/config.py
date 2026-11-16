@@ -71,6 +71,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "screen_target": "monitor:0",      # method "screen" (Windows): monitor:<index> | window:<title text>
         "video_path": "",                  # method "video_file": the clip to process
         "video_loop": True,                # start the clip again at the end (else hold the last picture)
+        "video_start_s": 0.0,              # where playback and every loop begin, seconds
         "preferred_width": 1920,
         "preferred_height": 1080,
         "preferred_fps": 60,

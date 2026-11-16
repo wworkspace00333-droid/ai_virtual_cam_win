@@ -60,6 +60,22 @@ def test_maximum_quality_gets_a_cap_below_what_it_achieves():
     assert a.apply(None, 8.0) == 8.0 * a.scale
 
 
+def test_maximum_quality_does_not_ratchet_down_to_the_floor():
+    """D26 (0.5 audit): the throttled target was achieved × scale, and the next achieved rate was that target, so
+    Maximum Quality fell to min_fps (2.5 fps measured). The base is now the unthrottled rate."""
+    a = AdaptiveAIRate()
+    assert a.apply(None, 14.0) is None                # running free at 14 fps
+    t = run(a, 2.5, 50, 60)                           # one overload step
+    assert a.scale == 0.75
+    achieved = 14.0
+    for _ in range(20):                               # the detector then runs at whatever target it gets
+        target = a.apply(None, achieved)
+        achieved = target
+    assert target == pytest.approx(14.0 * 0.75)       # stays at 10.5 fps, not 2
+    run(a, 60, 60, 60, t)                             # headroom again: back to unthrottled
+    assert a.scale == 1.0 and a.apply(None, 14.0) is None
+
+
 def test_disabled_controller_keeps_the_mode_rate():
     a = AdaptiveAIRate(enabled=False)
     run(a, 30, 10, 60)
