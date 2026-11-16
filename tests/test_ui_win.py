@@ -3,7 +3,6 @@ import ctypes
 import json
 import sys
 import threading
-import time
 
 import pytest
 

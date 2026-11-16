@@ -1,4 +1,3 @@
-import time
 
 from vcstudio.app.application import AppContext
 from vcstudio.ui.main_window import MainWindow

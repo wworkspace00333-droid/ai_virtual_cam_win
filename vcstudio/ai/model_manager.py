@@ -17,9 +17,9 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-log = logging.getLogger(__name__)
-
 from vcstudio.core.resources import models_dir
+
+log = logging.getLogger(__name__)
 
 REPO_MODELS = models_dir()          # bundled models (repository models/ in development)
 

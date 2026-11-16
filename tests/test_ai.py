@@ -1,5 +1,4 @@
 """AI detection tests (Core ML via Vision on macOS, ONNX Runtime on Windows). Skipped if models are not converted yet."""
-import threading
 import time
 from pathlib import Path
 

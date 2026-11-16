@@ -254,7 +254,8 @@ class InputPage:
         self.cards["State"].set(s.state.replace("_", " ").title(), s.source_name or "", state_level)
         live = s.state not in ("stopped", "error")
         if live and s.width:
-            self.cards["Resolution"].set(f"{s.width}×{s.height}", tr("{fmt} · nominal {fps} fps", fmt=s.pixel_format, fps=f"{s.nominal_fps:g}"))
+            self.cards["Resolution"].set(f"{s.width}×{s.height}",
+                                         tr("{fmt} · nominal {fps} fps", fmt=s.pixel_format, fps=f"{s.nominal_fps:g}"))
         else:
             self.cards["Resolution"].set("—", "")
         fps_level = "ok" if live and s.measured_fps >= 0.9 * max(1, s.nominal_fps) else ("warn" if live else "idle")

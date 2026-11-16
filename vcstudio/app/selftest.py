@@ -197,7 +197,6 @@ def pipeline_e2e_selftest(out_path: str, seconds: float = 8.0, out_device: str =
     import numpy as np
     import cv2
     os.environ["VCSTUDIO_HOME"] = tempfile.mkdtemp(prefix="vcs-e2e-")
-    from vcstudio.ai.testimages import load_bgra
     from vcstudio.app.application import AppContext
     from vcstudio.core.capture_supervisor import CaptureSupervisor
     from vcstudio.core.frame import Frame

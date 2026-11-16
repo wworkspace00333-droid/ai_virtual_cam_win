@@ -63,7 +63,8 @@ class DetectionPage:
 
         live = Card("Live detections")
         self.table = QTableWidget(0, 7)
-        self.table.setHorizontalHeaderLabels([tr("ID"), tr("Class"), tr("State"), tr("Confidence"), tr("Box (x0, y0, x1, y1)"), tr("Size"), tr("Age")])
+        self.table.setHorizontalHeaderLabels([tr(h) for h in ("ID", "Class", "State", "Confidence", "Box (x0, y0, x1, y1)",
+                                                              "Size", "Age")])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.table.setMinimumHeight(200)
@@ -79,7 +80,8 @@ class DetectionPage:
         self.trk_buf = QDoubleSpinBox(); self.trk_buf.setRange(0.1, 10); self.trk_buf.setSuffix(tr(" s")); self.trk_buf.setSingleStep(0.5)
         self.trk_hits = QSpinBox(); self.trk_hits.setRange(1, 10)
         self.trk_hits.setToolTip(tr("Higher hides more one-off false detections but shows new objects slightly later."))
-        self.trk_coast = QDoubleSpinBox(); self.trk_coast.setRange(0.0, 3); self.trk_coast.setSuffix(tr(" s")); self.trk_coast.setSingleStep(0.1)
+        self.trk_coast = QDoubleSpinBox(); self.trk_coast.setRange(0.0, 3); self.trk_coast.setSuffix(tr(" s"))
+        self.trk_coast.setSingleStep(0.1)
         self.trk_smooth = QSlider(Qt.Horizontal); self.trk_smooth.setRange(0, 100)
         self.trk_smooth_lbl = QLabel()
         rs = QHBoxLayout(); rs.addWidget(self.trk_smooth); rs.addWidget(self.trk_smooth_lbl)

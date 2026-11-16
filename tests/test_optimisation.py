@@ -137,7 +137,7 @@ def test_model_listing_is_cached(tmp_path, monkeypatch):
 @pytest.mark.skipif(not (REPO_MODELS / "yolo11m.mlpackage").exists(), reason="yolo11m not converted")
 def test_max_quality_steps_down_when_too_slow():
     from vcstudio.ai.detection import DetectionConfig
-    from vcstudio.ai.engine import AIEngine, MQ_SAMPLES
+    from vcstudio.ai.engine import AIEngine
     from vcstudio.core.capture_supervisor import CaptureSupervisor
     from vcstudio.core.video_capture import TestPatternSource
     cap = CaptureSupervisor()

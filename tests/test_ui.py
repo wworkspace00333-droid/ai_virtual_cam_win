@@ -3,7 +3,6 @@ from PySide6.QtGui import QKeySequence
 
 from vcstudio.app.application import AppContext
 from vcstudio.ui.main_window import MainWindow
-from vcstudio.ui.widgets import StagePlaceholder
 
 
 @pytest.fixture

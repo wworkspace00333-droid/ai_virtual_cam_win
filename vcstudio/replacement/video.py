@@ -112,11 +112,12 @@ def probe(path: Path) -> VideoInfo:
         s = j["streams"][0]
         num, den = (int(x) for x in s.get("avg_frame_rate", "30/1").split("/"))
         fps = num / den if den else 30.0
-        alpha = "a" in s.get("pix_fmt", "").replace("yuva", "a").split("p")[0] or s.get("pix_fmt", "").startswith(("yuva", "rgba", "bgra", "argb"))
+        pix = s.get("pix_fmt", "")
+        alpha = "a" in pix.replace("yuva", "a").split("p")[0] or pix.startswith(("yuva", "rgba", "bgra", "argb"))
         return VideoInfo(int(s["width"]), int(s["height"]), fps, float(j["format"].get("duration", 0) or 0),
                          s.get("codec_name", "?"), bool(alpha), "ffmpeg", False)
     except (subprocess.SubprocessError, KeyError, IndexError, ValueError, OSError) as e:
-        raise VideoError(f"{path.name}: cannot probe video ({e})")
+        raise VideoError(f"{path.name}: cannot probe video ({e})") from e
 
 
 def thumbnail(path: Path, max_side: int = 160) -> np.ndarray | None:

@@ -114,7 +114,7 @@ class AssetLibrary:
                 try:
                     info = probe(dest)
                 except VideoError as e:
-                    raise AssetError(str(e))
+                    raise AssetError(str(e)) from e
                 a.width, a.height, a.duration, a.fps = info.width, info.height, info.duration, info.fps
                 a.codec, a.decoder, a.hardware = info.codec, info.decoder, info.hardware
                 if info.duration <= 0:

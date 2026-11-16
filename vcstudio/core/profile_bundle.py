@@ -54,8 +54,8 @@ def import_bundle(ctx, src: Path) -> dict:
     src = Path(src)
     try:
         z = zipfile.ZipFile(src)
-    except zipfile.BadZipFile:
-        raise ProfileError("Not a valid .vcsprofile file")
+    except zipfile.BadZipFile as e:
+        raise ProfileError("Not a valid .vcsprofile file") from e
     with z:
         names = z.namelist()
         if "profile.json" not in names:
@@ -76,8 +76,8 @@ def import_bundle(ctx, src: Path) -> dict:
             raise ProfileError("Bundle too large")
         try:
             doc = json.loads(z.read("profile.json").decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            raise ProfileError("profile.json is not valid JSON")
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise ProfileError("profile.json is not valid JSON") from e
         referenced = {a.get("file") for a in doc.get("body", {}).get("assets", []) if isinstance(a, dict)}
         ctx.assets.dir.mkdir(parents=True, exist_ok=True)
         written = []

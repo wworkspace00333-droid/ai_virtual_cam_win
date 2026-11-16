@@ -190,7 +190,8 @@ class VirtualCameraPage:
         self.cards[self.k_host].set("Installed" if s.host_app else "Not found",
                                     s.host_app or ("vcam-setup.exe" if IS_WINDOWS else "/Applications"),
                                     "ok" if s.host_app else "warn")
-        state = {"activated_enabled": "ok", "installed": "ok"}.get(s.extension_state, "warn" if s.extension_state != "not_installed" else "idle")
+        state = {"activated_enabled": "ok", "installed": "ok"}.get(
+            s.extension_state, "warn" if s.extension_state != "not_installed" else "idle")
         self.cards[self.k_ext].set(s.extension_state.replace("_", " ").title(), s.team_id and tr("team {id}", id=s.team_id), state)
         from vcstudio.core.devices import own_camera_name
         self.cards["Camera device"].set("Visible" if s.device_visible else "Not visible", own_camera_name(),

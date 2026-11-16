@@ -2,7 +2,7 @@
 import math
 
 import pytest
-from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
 
 from vcstudio.app.application import AppContext

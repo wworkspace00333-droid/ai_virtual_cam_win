@@ -2,7 +2,6 @@
 import time
 
 import numpy as np
-import pytest
 
 from vcstudio.ai.detection import Detection
 from vcstudio.ai.tracking import ByteTracker, KalmanXYAH, TrackerConfig, iou_matrix, xyah_to_xyxy, xyxy_to_xyah

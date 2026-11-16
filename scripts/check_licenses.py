@@ -73,8 +73,11 @@ def licence_of(k: str, d: md.Distribution) -> str:
     if k in KNOWN:
         return KNOWN[k]
     m = d.metadata
-    return (m.get("License-Expression") or (m.get("License") or "").splitlines()[0] if (m.get("License-Expression") or m.get("License")) else
-            "; ".join(c.split("::")[-1].strip() for c in (m.get_all("Classifier") or []) if c.startswith("License")))
+    if m.get("License-Expression"):
+        return m["License-Expression"]
+    if m.get("License"):
+        return m["License"].splitlines()[0]
+    return "; ".join(c.split("::")[-1].strip() for c in (m.get_all("Classifier") or []) if c.startswith("License"))
 
 
 def licence_ok(k: str, lic: str) -> tuple[bool, str]:

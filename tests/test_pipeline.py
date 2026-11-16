@@ -6,12 +6,9 @@ import sys
 import time
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 from vcstudio.app.application import AppContext
-from vcstudio.core.frame import Frame
-from vcstudio.core.video_capture import TestPatternSource
 from vcstudio.core.video_pipeline import AUTO_PASSTHROUGH_ERRORS, CameraOutputController
 from vcstudio.replacement.spec import ReplacementSpec
 from vcstudio.roi.model import new_rect
@@ -82,7 +79,6 @@ def test_passthrough_is_zero_copy_without_replacements(ctx):
     assert wait_for(lambda: ctx.pipeline.stats().frames_out > 75)      # steady state (> 1 s)
     src, out = latest_pair(ctx)
     assert out.source == "passthrough"
-    from vcstudio.core.pixelbuffer import pixel_buffer_for
     assert out.pixel_buffer is not None
     s = ctx.pipeline.stats()
     assert s.state == "running" and 50 <= s.output_fps <= 65 and s.latency_ms < 30

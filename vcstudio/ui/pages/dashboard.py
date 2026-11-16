@@ -55,7 +55,8 @@ class DashboardPage:
             self.cards["Camera extension"].set("Installed", e["state"], st)
         else:
             others = ", ".join(e["name"] for e in exts) or tr("none")
-            self.cards["Camera extension"].set("Not installed", tr("See Virtual Camera page. Other camera extensions: {others}", others=others), "idle")
+            self.cards["Camera extension"].set(
+                "Not installed", tr("See Virtual Camera page. Other camera extensions: {others}", others=others), "idle")
 
     def _refresh_camera_windows(self) -> None:
         """Windows: the app's own camera (DirectShow / Media Foundation registration + device list), as on the
@@ -131,10 +132,13 @@ class DashboardPage:
 
     def on_sample(self, s: ResourceSample) -> None:
         cpu_state = "warn" if s.cpu_percent > 85 else "ok"
-        self.cards["CPU"].set(f"{s.cpu_percent:.0f}%", tr("This app: {cpu}% · {n} threads", cpu=f"{s.process_cpu_percent:.0f}", n=s.threads), cpu_state)
+        self.cards["CPU"].set(f"{s.cpu_percent:.0f}%",
+                              tr("This app: {cpu}% · {n} threads", cpu=f"{s.process_cpu_percent:.0f}", n=s.threads),
+                              cpu_state)
         mem_state = {"normal": "ok", "warning": "warn", "critical": "error"}[s.pressure]
         self.cards["Memory"].set(fmt_bytes(s.footprint or s.process_rss),
-                                 tr("footprint · system {p}% of {total}", p=f"{s.mem_percent:.0f}", total=fmt_bytes(s.mem_total)), mem_state)
+                                 tr("footprint · system {p}% of {total}", p=f"{s.mem_percent:.0f}",
+                                    total=fmt_bytes(s.mem_total)), mem_state)
         if s.gpu_percent is None:
             from vcstudio.platform import IS_WINDOWS
             self.cards["GPU"].set("n/a", tr("GPU counters unavailable (no hardware GPU)") if IS_WINDOWS

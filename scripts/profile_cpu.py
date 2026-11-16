@@ -50,7 +50,6 @@ def main(seconds=10.0):
     s = ctx.pipeline.stats(); a = ctx.ai.stats(); c = ctx.capture.stats()
     print(f"capture {c.measured_fps:.1f} fps · pipeline {s.output_fps:.1f} fps, process {s.process_ms:.2f} ms, "
           f"latency {s.latency_ms:.2f} ms · AI {a.model} {a.achieved_fps:.1f} fps {a.inference_ms_avg:.1f} ms")
-    threads = {t.id: t.name for t in yappi.get_thread_stats()}
     for t in yappi.get_thread_stats():
         print(f"\n=== thread {t.name} ({t.id}): CPU {t.ttot:.2f} s over {seconds:.0f} s = {100 * t.ttot / seconds:.0f}% of a core")
         stats = yappi.get_func_stats(filter={"ctx_id": t.id})

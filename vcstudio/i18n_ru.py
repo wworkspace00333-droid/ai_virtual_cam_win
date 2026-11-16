@@ -28,7 +28,7 @@ RU: dict[str, str] = {
     "Refresh": "Обновить", "Start": "Старт", "Stop": "Стоп", "Pause": "Пауза", "Restart": "Перезапуск",
     "Remove": "Удалить", "Delete": "Удалить", "Duplicate": "Дублировать", "Details": "Подробности",
     "Parameters": "Параметры", "Properties": "Свойства", "License": "Лицензия", "Team": "Команда",
-    "Bundle ID": "Bundle ID", "Unique ID": "Уникальный ID", "Frame": "Кадр", "Frames": "Кадры",
+    "Unique ID": "Уникальный ID", "Frame": "Кадр", "Frames": "Кадры",
     "Dropped": "Потеряно", "Latency": "Задержка", "Reconnects": "Переподключения", "Last frame": "Последний кадр",
     "Errors": "Ошибки", "Error": "Ошибка", "Idle": "Ожидание", "Installed": "Установлено",
     "Not installed": "Не установлено", "Not found": "Не найдено", "Visible": "Видна", "Not visible": "Не видна",

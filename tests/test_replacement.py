@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from vcstudio.ai.tracking import TrackedObject
-from vcstudio.replacement.assets import AssetError, AssetLibrary, decode_image
+from vcstudio.replacement.assets import AssetError, AssetLibrary
 from vcstudio.replacement.compositor import Compositor, asset_affine, region_frame
 from vcstudio.replacement.spec import ReplacementSpec
 from vcstudio.roi.model import ROI, new_rect

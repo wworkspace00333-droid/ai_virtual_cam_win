@@ -1,0 +1,70 @@
+# Tool configuration only (the app is not a pip package). See CONTRIBUTING.md.
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["build", "third_party_build", "native"]
+
+[tool.ruff.lint]
+# pyflakes (real errors), pycodestyle errors, bugbear (likely bugs). House style keeps short
+# statements on one line ("a = 1; b = 2"), so E701/E702 are off; import order is not enforced.
+select = ["F", "E", "W", "B"]
+ignore = [
+    "E701", "E702",   # one-line compound statements: house style
+    "E731",           # small lambdas assigned to names
+    "E741",           # l / O names in short maths
+    "B008",           # Path() defaults are evaluated once on purpose
+    "B905",           # zip() over equal-length sequences built together
+]
+
+[tool.ruff.lint.pycodestyle]
+max-line-length = 140      # hard limit for E501; new code aims at line-length (120)
+
+[tool.ruff.lint.per-file-ignores]
+"vcstudio/i18n_ru.py" = ["E501"]          # translation strings are kept on one line
+"vcstudio/ui/theme.py" = ["E501"]         # Qt style sheet: one rule per line
+# scripts and tests pass lambdas to update_active_profile(), which calls them at once inside the loop
+"tests/*" = ["E501", "B011", "B023", "F841"]
+"scripts/*" = ["B023"]
+"packaging/*.spec" = ["F821", "E402"]      # PyInstaller injects Analysis, PYZ, EXE, COLLECT, SPECPATH
+
+[tool.mypy]
+python_version = "3.12"
+files = ["vcstudio/platform", "vcstudio/core"]
+ignore_missing_imports = true
+follow_imports = "silent"
+warn_unused_ignores = false     # "type: ignore" on macOS-only imports (PyObjC) is unused when checking on Windows
+check_untyped_defs = true
+# macOS modules are imported lazily inside functions and need PyObjC; not type-checked on Windows
+exclude = ["vcstudio/core/pyobjc_prewarm\\.py"]
+
+[[tool.mypy.overrides]]
+module = "vcstudio.core.single_instance"
+disable_error_code = ["attr-defined"]   # the POSIX branch (fcntl, os.pread) does not exist in Windows stubs
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["vcstudio"]
+branch = true
+# measured on Windows: macOS-only modules are left out (they are covered by the macOS test run), and so is the
+# GUI (tests/test_ui*.py drive it, but line coverage of widget code says little)
+omit = ["vcstudio/ui/*", "vcstudio/native/*", "vcstudio/ai/coreml_engine.py", "vcstudio/core/pyobjc_prewarm.py",
+        "vcstudio/__main__.py"]
+
+[tool.coverage.report]
+skip_empty = true
+show_missing = false
+# macOS-only branches inside shared modules
+exclude_also = [
+    "# pragma: macos",                  # macOS-only function or class (AVFoundation, CMIO, Core ML, POSIX shm)
+    "if IS_MAC:",
+    "if _IS_MAC:",
+    "if sys\\.platform == .darwin.:",
+    "if not IS_WINDOWS:",
+    "def _.*_mac\\(",
+    "def _.*_posix\\(",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]

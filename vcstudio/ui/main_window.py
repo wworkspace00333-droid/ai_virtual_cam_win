@@ -52,8 +52,10 @@ class MainWindow(QMainWindow):
         self.performance = PerformancePage(ctx)
         self.logs = LogsPage(ctx)
         self.input_page = InputPage(ctx, self.feeder)
-        self.pages = [self.dashboard, self.input_page, PreviewPage(ctx, self.feeder, lambda: self.goto("input"), self.start_processing), AIEnginePage(ctx), DetectionPage(ctx, self.feeder),
-                      ROIPage(ctx, self.feeder), ReplacementPage(ctx), ProfilesPage(ctx, self), VirtualCameraPage(ctx),
+        self.pages = [self.dashboard, self.input_page,
+                      PreviewPage(ctx, self.feeder, lambda: self.goto("input"), self.start_processing),
+                      AIEnginePage(ctx), DetectionPage(ctx, self.feeder), ROIPage(ctx, self.feeder),
+                      ReplacementPage(ctx), ProfilesPage(ctx, self), VirtualCameraPage(ctx),
                       self.performance, self.logs, SettingsPage(ctx, self.actions_, self)]
         central = QWidget()
         h = QHBoxLayout(central)

@@ -122,7 +122,8 @@ class AIEnginePage:
         row.addWidget(self.bench_btn); row.addWidget(self.bench_info); row.addStretch()
         bench.layout_.addLayout(row)
         self.bench = QTableWidget(0, 7)
-        self.bench.setHorizontalHeaderLabels([tr("Model"), tr("Compute units"), tr("Median ms"), tr("p95 ms"), tr("Max FPS"), tr("Load s"), tr("Frame")])
+        self.bench.setHorizontalHeaderLabels([tr(h) for h in ("Model", "Compute units", "Median ms", "p95 ms", "Max FPS",
+                                                              "Load s", "Frame")])
         self.bench.horizontalHeader().setStretchLastSection(True)
         self.bench.setMinimumHeight(220)
         bench.layout_.addWidget(self.bench)
