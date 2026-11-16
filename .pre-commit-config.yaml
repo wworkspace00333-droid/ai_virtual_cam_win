@@ -1,0 +1,28 @@
+# pre-commit hooks (CONTRIBUTING.md): pre-commit install
+# They use the tools already installed in the active venv (requirements-dev-windows.txt): nothing is downloaded.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff (lint)
+        entry: ruff check --force-exclude
+        language: system
+        types: [python]
+      - id: mypy
+        name: mypy (vcstudio/platform, vcstudio/core)
+        entry: mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+        files: ^vcstudio/(platform|core)/
+      - id: licences
+        name: licence gate (models list, notices)
+        entry: python scripts/check_licenses.py --models models
+        language: system
+        pass_filenames: false
+        files: ^(requirements.*\.txt|packaging/|scripts/(fetch_models|check_licenses)\.py|models/.*\.json)$
+      - id: no-large-files
+        name: no files over 1 MB (model weights go to scripts/fetch_models.py)
+        entry: python -c "import sys, os; big=[f for f in sys.argv[1:] if os.path.getsize(f) > 1048576]; print(*big, sep='\n'); sys.exit(1 if big else 0)"
+        language: system
+        exclude: ^tests/data/bus_bgra\.npy$

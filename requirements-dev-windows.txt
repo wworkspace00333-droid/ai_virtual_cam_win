@@ -1,0 +1,9 @@
+# Developer and CI tools for the Windows build (on top of the app's runtime requirements)
+-r requirements-windows.txt
+pytest>=8
+pytest-qt>=4
+pytest-timeout>=2
+pytest-cov>=5
+ruff>=0.6
+mypy>=1.11
+pre-commit>=3.7

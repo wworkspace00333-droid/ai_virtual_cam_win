@@ -9,7 +9,10 @@ param(
     [switch]$SkipNative,
     [string]$Python = "C:\vcs-env\Scripts\python.exe",
     # short folder: PySide6 / Pillow paths inside the app folder exceed the 260-character limit under a deep path
-    [string]$Out = "C:\vcs-build"
+    [string]$Out = "C:\vcs-build",
+    # obs-studio source tree of the installed OBS version (headers for the plugin); without it an existing
+    # build\obs-plugin\win\vcstudio-obs.dll is reused
+    [string]$ObsHeaders = ""
 )
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
@@ -30,7 +33,14 @@ if (-not $SkipNative) {
     Step "native parts"
     & powershell -NoProfile -ExecutionPolicy Bypass -File "$Root\scripts\build_native_win.ps1"; Check "build_native_win.ps1"
     Step "OBS plugin"
-    & powershell -NoProfile -ExecutionPolicy Bypass -File "$Root\scripts\build_obs_plugin_win.ps1"; Check "build_obs_plugin_win.ps1"
+    if ($ObsHeaders) {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File "$Root\scripts\build_obs_plugin_win.ps1" -Headers $ObsHeaders
+        Check "build_obs_plugin_win.ps1"
+    } elseif (Test-Path "$Root\build\obs-plugin\win\vcstudio-obs.dll") {
+        Write-Host "reusing build\obs-plugin\win\vcstudio-obs.dll (pass -ObsHeaders <obs-studio source> to rebuild it)"
+    } else {
+        throw "the OBS plugin is not built: pass -ObsHeaders <obs-studio source tree of the installed OBS version>"
+    }
 }
 
 Step "signing our native binaries"

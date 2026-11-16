@@ -1,0 +1,79 @@
+# Windows CI on every push and pull request: lint, types, native build + native unit test, tests with coverage.
+# ~10 min. The installer is built by installer-windows.yml (manual run and version tags only: Actions minutes).
+#
+# What this runner cannot check (no camera, no GPU, no OBS; windows-2025 = Server 2025): live camera tests, Frame Server,
+# OBS chain, DirectML / CUDA speed. Those tests skip themselves and are listed in docs/HARDWARE_CHECKLIST.md.
+name: ci-windows
+
+on:
+  push:
+    branches: [main, windows-port]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-2025
+    timeout-minutes: 40
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev-windows.txt
+
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements-dev-windows.txt
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Types (mypy, vcstudio/platform + vcstudio/core)
+        run: mypy
+
+      - name: Built-in models (cached; SHA-256 checked)
+        uses: actions/cache@v4
+        with:
+          path: |
+            models/yolox_*.onnx
+          key: models-${{ hashFiles('scripts/fetch_models.py') }}
+      - name: Fetch models
+        run: python scripts/fetch_models.py
+
+      - name: Native build + native unit test (MSVC)
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_native_win.ps1 -Test
+
+      - name: Licence gate (runtime packages; PyPI PyAV is expected to fail here, see note)
+        # The PyPI wheel of PyAV bundles libx264 / libx265; the installer job rebuilds PyAV against LGPL FFmpeg.
+        # Here the gate runs for information only, so a new GPL dependency is still visible in every run.
+        continue-on-error: true
+        run: python scripts/check_licenses.py
+
+      - name: Tests with coverage
+        run: python -m pytest -q -p no:cacheprovider --timeout=600 --cov --cov-report=json:build/coverage.json --cov-report=term
+
+      - name: Coverage gate (core packages)
+        # 80 % is measured on a full local run with the live camera / OBS tests; those skip on this runner.
+        # Raise VCS_COVERAGE_MIN (repository variable) once the CI value is known.
+        run: python scripts/coverage_gate.py build/coverage.json --min ${{ vars.VCS_COVERAGE_MIN || '70' }}
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: build/coverage.json
+          retention-days: 14
