@@ -199,6 +199,16 @@ RU: dict[str, str] = {
     "Camera device (AVFoundation): OBS Virtual Camera": "Камера (AVFoundation): OBS Virtual Camera",
     "Direct OBS frame transfer (vcstudio-obs plugin)": "Прямая передача кадров из OBS (плагин vcstudio-obs)",
     "Test pattern (diagnostics)": "Тестовая картинка (диагностика)",
+    "Screen or window (Windows Graphics Capture)": "Экран или окно (Windows Graphics Capture)",
+    "Screen {n} ({w}×{h})": "Экран {n} ({w}×{h})",
+    "Window: {title}": "Окно: {title}",
+    "not open now": "сейчас не открыто",
+    "Windows Graphics Capture shows GPU-drawn windows (browsers, games in a window) and a window even when others "
+    "cover it. Where it is unavailable the app falls back to Desktop Duplication, then to GDI. Windows may draw a "
+    "border around the captured area.":
+        "Windows Graphics Capture видит окна, которые рисует видеокарта (браузеры, игры в окне), и захватывает окно, "
+        "даже когда его закрывают другие. Где он недоступен, приложение переходит на Desktop Duplication, затем на "
+        "GDI. Windows может рисовать рамку вокруг захватываемой области.",
     "macOS will ask for camera permission when capture starts.": "macOS спросит разрешение на камеру при запуске захвата.",
     "Denied. Enable it in System Settings → Privacy & Security → Camera, then restart the app.":
         "Запрещено. Включите в Системных настройках → Конфиденциальность и безопасность → Камера, затем перезапустите приложение.",

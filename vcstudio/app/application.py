@@ -146,6 +146,10 @@ class AppContext:
         if i["method"] == "obs_ipc":
             from vcstudio.core.obs_shm_source import ObsShmSource
             return lambda: ObsShmSource()
+        if i["method"] == "screen":
+            from vcstudio.platform.win.screen_capture import ScreenCaptureSource
+            target = i.get("screen_target") or "monitor:0"
+            return lambda: ScreenCaptureSource(target, fps)
         method = i["method"]
         return lambda: device_source(method, i["device_unique_id"], i["device_name_hint"], w, h, fps)
 

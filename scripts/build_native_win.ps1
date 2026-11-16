@@ -2,6 +2,8 @@
 Build the Windows native components into build\native\ with MSVC (Visual Studio 2022 / Build Tools, C++ x64):
   vcs_d3d11.dll      Direct3D 11 compositor (native\win\d3d11)
   vcs_mfcap.dll      Media Foundation camera capture (native\win\capture)
+  vcs_wgc.dll        screen / window capture, Windows Graphics Capture (native\win\capture)
+  vcs_dupl.dll       screen capture, DXGI Desktop Duplication (native\win\capture)
   vcam_dshow.dll, vcam_mf.dll, vcam-setup.exe, mf_client_test.exe   the virtual camera (native\win\vcam)
 
   scripts\build_native_win.ps1 [-Config Release|Debug] [-Test] [-Out <folder>]   (-Out: default build\native)
@@ -41,6 +43,16 @@ Write-Host "OK $out\vcs_d3d11.dll"
 $src = Join-Path $root "native\win\capture\vcs_mfcap.cpp"
 Invoke-VS ("cl $common /LD `"$src`" /Fo`"$obj\\`" /link /OUT:`"$out\vcs_mfcap.dll`" /IMPLIB:`"$obj\vcs_mfcap.lib`"")
 Write-Host "OK $out\vcs_mfcap.dll"
+
+# vcs_dupl.dll: screen capture through DXGI Desktop Duplication (GDI misses hardware-accelerated windows)
+$src = Join-Path $root "native\win\capture\vcs_dupl.cpp"
+Invoke-VS ("cl $common /LD `"$src`" /Fo`"$obj\\`" /link /OUT:`"$out\vcs_dupl.dll`" /IMPLIB:`"$obj\vcs_dupl.lib`"")
+Write-Host "OK $out\vcs_dupl.dll"
+
+# vcs_wgc.dll: screen / window capture through Windows Graphics Capture (C++/WinRT from the Windows SDK)
+$src = Join-Path $root "native\win\capture\vcs_wgc.cpp"
+Invoke-VS ("cl $common /await:strict /LD `"$src`" /Fo`"$obj\\`" /link /OUT:`"$out\vcs_wgc.dll`" /IMPLIB:`"$obj\vcs_wgc.lib`"")
+Write-Host "OK $out\vcs_wgc.dll"
 
 # DirectShow BaseClasses (Microsoft sample code, MIT) as a static library; old code: lenient flags
 $bc = Join-Path $root "native\win\third_party\baseclasses"

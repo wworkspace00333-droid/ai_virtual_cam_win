@@ -132,7 +132,9 @@ class InputPage:
     def _method_changed(self, *_):
         m = self.method.currentData()
         is_dev = is_device_method(m)
-        self.device.setEnabled(is_dev)
+        if m == "screen" or getattr(self, "_listing_screens", False):
+            self.refresh_devices()
+        self.device.setEnabled(is_dev or m == "screen")
         self.format.setEnabled(is_dev)
         self.fps.setEnabled(m != "obs_ipc")          # OBS decides resolution and frame rate
         self.obs_row.setVisible(m == "obs_ipc")
@@ -166,7 +168,30 @@ class InputPage:
             QMessageBox.warning(self.widget, tr("OBS plugin"), tr(str(e)))
         self._refresh_obs_status()
 
+    def _list_screens(self):
+        """Method "screen": the device list holds screens and windows (data: the input.screen_target string)."""
+        from vcstudio.platform.win import screen_capture as sc
+        want = self.ctx.settings.get("input.screen_target") or sc.DEFAULT_TARGET
+        self.device.blockSignals(True)
+        self.device.clear()
+        for m in sc.monitors():
+            self.device.addItem(tr("Screen {n} ({w}×{h})", n=m.index + 1, w=m.width, h=m.height), f"monitor:{m.index}")
+        for w in sc.windows():
+            title = w.title if len(w.title) <= 70 else w.title[:67] + "…"
+            self.device.addItem(tr("Window: {title}", title=title), f"window:{w.title}")
+        if want.startswith("window:") and self.device.findData(want) < 0:
+            self.device.addItem(tr("Window: {title}", title=want[7:]) + " (" + tr("not open now") + ")", want)
+        self.device.setCurrentIndex(max(0, self.device.findData(want)))
+        self.device.blockSignals(False)
+        self.perm.setText(tr("Windows Graphics Capture shows GPU-drawn windows (browsers, games in a window) and a "
+                             "window even when others cover it. Where it is unavailable the app falls back to Desktop "
+                             "Duplication, then to GDI. Windows may draw a border around the captured area."))
+
     def refresh_devices(self):
+        self._listing_screens = self.method.currentData() == "screen"
+        if self._listing_screens:
+            self._list_screens()
+            return
         devs = list_video_devices()
         want = self.ctx.settings.get("input.device_unique_id")
         hint = self.ctx.settings.get("input.device_name_hint") or ""
@@ -197,6 +222,8 @@ class InputPage:
         self.perm.setText(tr("Camera permission: {state}.", state=tr(st.replace("_", " "))) + " " + tr(PERMISSION_HINT.get(st, '')))
 
     def _device_changed(self, *_):
+        if self.method.currentData() == "screen":
+            return
         uid = self.device.currentData()
         self.format.clear()
         fmts = formats_for_device_id(uid) if uid else []
@@ -221,6 +248,8 @@ class InputPage:
                 s.set("input.device_unique_id", self.device.currentData(), persist=False)
                 name = self.device.currentText().split("  (")[0]
                 s.set("input.device_name_hint", name, persist=False)
+            elif self.method.currentData() == "screen" and self.device.currentData():
+                s.set("input.screen_target", self.device.currentData(), persist=False)
             w, h = self.format.currentData() or (1920, 1080)
             s.set("input.preferred_width", w, persist=False)
             s.set("input.preferred_height", h, persist=False)

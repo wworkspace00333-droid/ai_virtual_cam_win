@@ -20,7 +20,7 @@ def test_mac_settings_are_repaired_to_windows_defaults(paths):
     assert s.get("input.method") == "directshow"
     assert s.get("processing.compositor") == "auto"
     assert s.get("input.preferred_fps") == 30                 # valid values are kept
-    for m in ("mediafoundation", "directshow", "obs_ipc", "test_pattern"):
+    for m in ("mediafoundation", "directshow", "obs_ipc", "screen", "test_pattern"):
         s.set("input.method", m)
     s.set("processing.compositor", "d3d11")
 

@@ -68,6 +68,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "method": DEFAULT_DEVICE_METHOD,
         "device_unique_id": None,
         "device_name_hint": "OBS Virtual Camera",
+        "screen_target": "monitor:0",      # method "screen" (Windows): monitor:<index> | window:<title text>
         "preferred_width": 1920,
         "preferred_height": 1080,
         "preferred_fps": 60,

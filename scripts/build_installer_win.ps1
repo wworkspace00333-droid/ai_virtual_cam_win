@@ -44,7 +44,7 @@ if (-not $SkipNative) {
 }
 
 Step "signing our native binaries"
-$ownBinaries = @("vcs_d3d11.dll", "vcs_mfcap.dll", "vcam_dshow.dll", "vcam_mf.dll", "vcam-setup.exe", "mf_client_test.exe") |
+$ownBinaries = @("vcs_d3d11.dll", "vcs_mfcap.dll", "vcs_wgc.dll", "vcs_dupl.dll", "vcam_dshow.dll", "vcam_mf.dll", "vcam-setup.exe", "mf_client_test.exe") |
     ForEach-Object { "$Root\build\native\$_" }
 $ownBinaries += "$Root\build\obs-plugin\win\vcstudio-obs.dll"
 Invoke-Sign $ownBinaries
