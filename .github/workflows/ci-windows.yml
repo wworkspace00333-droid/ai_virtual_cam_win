@@ -63,7 +63,11 @@ jobs:
         run: python scripts/check_licenses.py
 
       - name: Tests with coverage
-        run: python -m pytest -q -p no:cacheprovider --timeout=600 --cov --cov-report=json:build/coverage.json --cov-report=term
+        run: python -m pytest -q -p no:cacheprovider --timeout=600 -rfE --junitxml=build/junit.xml --cov --cov-report=json:build/coverage.json --cov-report=term
+
+      - name: Failed tests as annotations (readable on the run page without signing in)
+        if: failure()
+        run: python scripts/junit_annotations.py build/junit.xml
 
       - name: Coverage gate (core packages)
         # 80 % is measured on a full local run with the live camera / OBS tests; those skip on this runner.
@@ -75,5 +79,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage
-          path: build/coverage.json
+          path: |
+            build/coverage.json
+            build/junit.xml
           retention-days: 14
