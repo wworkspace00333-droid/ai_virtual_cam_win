@@ -25,6 +25,10 @@ class PreviewPage:
         self.face_btn = QPushButton(tr("Hide face")); self.face_btn.setCheckable(True)
         self.face_btn.setToolTip(tr("Pixelates every detected face in the camera output (adds a region on the "
                                     "Region Editor page; click again to remove it)."))
+        self.logo_btn = QPushButton(tr("Logo")); self.logo_btn.setCheckable(True)
+        self.logo_btn.setToolTip(tr("Puts a picture (PNG with transparency works best) in the top-right corner of the "
+                                    "camera output. Move or resize it on the Region Editor page; click again to "
+                                    "remove it."))
         self.card_btn = QPushButton(tr("Card for a game…"))
         self.card_btn.setToolTip(tr("Put a photo into the frame a browser game or an emulator draws over the camera."))
         self.boxes = QCheckBox(tr("Show detections")); self.boxes.setChecked(True)
@@ -36,7 +40,7 @@ class PreviewPage:
         bar.addWidget(src_btn)
         lay.addLayout(bar)
         bar2 = QHBoxLayout()
-        for b in (self.repl_btn, self.face_btn, self.card_btn, self.boxes):
+        for b in (self.repl_btn, self.face_btn, self.logo_btn, self.card_btn, self.boxes):
             bar2.addWidget(b)
         bar2.addStretch()
         lay.addLayout(bar2)
@@ -65,6 +69,7 @@ class PreviewPage:
                                       if on != ctx.pipeline.replacement_enabled else None)
         self.boxes.toggled.connect(lambda on: setattr(self.feeder, "show_detections", on))
         self.face_btn.toggled.connect(self._toggle_face)
+        self.logo_btn.toggled.connect(self._toggle_logo)
         self.card_btn.clicked.connect(self.open_game_card)
         self._card_dialog = None
         src_btn.clicked.connect(goto_input)
@@ -82,6 +87,40 @@ class PreviewPage:
         on = self._quick_face_on()
         if self.face_btn.isChecked() != on:
             self.face_btn.blockSignals(True); self.face_btn.setChecked(on); self.face_btn.blockSignals(False)
+        on = self._logo_on()
+        if self.logo_btn.isChecked() != on:
+            self.logo_btn.blockSignals(True); self.logo_btn.setChecked(on); self.logo_btn.blockSignals(False)
+
+    def _logo_on(self) -> bool:
+        from vcstudio.roi.model import QUICK_LOGO_ID
+        return any(r.id == QUICK_LOGO_ID and r.enabled for r in self.ctx.rois.rois())
+
+    def _toggle_logo(self, on: bool, path: str | None = None) -> None:
+        from pathlib import Path
+
+        from vcstudio.replacement.assets import IMAGE_EXTS, AssetError
+        from vcstudio.roi.model import set_quick_logo
+        if not on:
+            self.ctx.update_active_profile(lambda b: set_quick_logo(b, None))
+            return
+        if path is None:
+            from PySide6.QtWidgets import QFileDialog
+            exts = " ".join(f"*{e}" for e in sorted(IMAGE_EXTS))
+            path, _ = QFileDialog.getOpenFileName(self.widget, tr("Choose a logo"), str(Path.home()),
+                                                  tr("Images") + f" ({exts})")
+        if not path:
+            self.logo_btn.blockSignals(True); self.logo_btn.setChecked(False); self.logo_btn.blockSignals(False)
+            return
+        try:
+            asset = self.ctx.assets.import_file(Path(path)).to_dict()
+        except (AssetError, OSError) as e:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self.widget, tr("Logo"), f"{Path(path).name}: {tr(str(e))}")
+            self.logo_btn.blockSignals(True); self.logo_btn.setChecked(False); self.logo_btn.blockSignals(False)
+            return
+        self.ctx.update_active_profile(lambda b: set_quick_logo(b, asset))
+        if not self.ctx.pipeline.replacement_enabled:
+            self.ctx.pipeline.set_replacement_enabled(True)
 
     def _quick_face_on(self) -> bool:
         from vcstudio.roi.model import QUICK_FACE_ID

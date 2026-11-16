@@ -179,5 +179,11 @@ def test_live_screen_grab_when_a_desktop_is_drawn():
         pytest.skip(f"no drawn desktop in this session ({e})")
     m = sc.monitors()[sc.primary_index()]
     assert backend in sc.BACKENDS and img.ndim == 3 and img.shape[2] == 3
-    assert img.shape[0] > 0 and img.shape[1] > 0 and (img.shape[1], img.shape[0]) != (0, 0)
     assert abs(img.shape[1] / img.shape[0] - m.width / m.height) < 0.05
+    # every backend that works here gives a real picture, not the empty first surface (Desktop Duplication once did)
+    for b in sc.BACKENDS:
+        try:
+            pic, _ = sc.grab(f"monitor:{sc.primary_index()}", (b,))
+        except CaptureError:
+            continue
+        assert pic.std() > 1.0, f"{b}: blank picture"

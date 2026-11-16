@@ -123,7 +123,9 @@ extern "C" __declspec(dllexport) int dupl_read(void *h, uint8_t *dst, int dst_by
 	if (hr == DXGI_ERROR_WAIT_TIMEOUT) return 0;
 	if (FAILED(hr)) return -1;                                  // DXGI_ERROR_ACCESS_LOST and friends
 	int rc = 0;
-	if (fi.LastPresentTime.QuadPart != 0 || !d->have_frame) {   // a new image (not only a mouse move)
+	// a new image, not only a mouse move. The first frame after DuplicateOutput can come with LastPresentTime 0 and an
+	// empty (black) surface (seen on Windows Server 2025 over RDP), so it is not taken as a picture either.
+	if (fi.LastPresentTime.QuadPart != 0) {
 		ComPtr<ID3D11Texture2D> tex;
 		if (SUCCEEDED(res.As(&tex))) {
 			d->ctx->CopyResource(d->staging.Get(), tex.Get());

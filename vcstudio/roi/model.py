@@ -184,3 +184,37 @@ def set_quick_face(body: dict, on: bool) -> None:
         body["rois"].append(quick_face_roi().to_dict())
         body.setdefault("ai", {})["face_detection"] = "vision"
         body["ai"]["enabled"] = True
+
+
+QUICK_LOGO_ID = "quicklogo"
+LOGO_CORNERS = ("top_right", "top_left", "bottom_right", "bottom_left")
+
+
+def quick_logo_roi(asset_id: str, asset_w: int, asset_h: int, corner: str = "top_right", width: float = 0.16,
+                   margin: float = 0.03, frame_aspect: float = 16 / 9) -> ROI:
+    """One-click logo: a fixed overlay region in a corner, sized to the picture's aspect ratio (alpha kept).
+
+    `width` is a fraction of the frame width; the height follows the picture for a `frame_aspect` frame."""
+    from vcstudio.replacement.spec import ReplacementSpec
+    corner = corner if corner in LOGO_CORNERS else "top_right"
+    w = min(max(width, 0.02), 0.9)
+    h = min(w * frame_aspect * max(asset_h, 1) / max(asset_w, 1), 0.9)
+    mx, my = margin, margin * frame_aspect
+    cx = 1 - mx - w / 2 if corner.endswith("right") else mx + w / 2
+    cy = my + h / 2 if corner.startswith("top") else 1 - my - h / 2
+    r = ROI(id=QUICK_LOGO_ID, name="Logo", mode="manual", cx=cx, cy=cy, w=w, h=h, priority=200)
+    r.replacement = ReplacementSpec(enabled=True, mode="overlay", asset_id=asset_id, fit="fit").to_dict()
+    return r
+
+
+def set_quick_logo(body: dict, asset: dict | None, corner: str = "top_right") -> None:
+    """Put the logo region (and its asset) into a profile body, or remove it with asset=None. The asset stays in
+    the library; only the region goes."""
+    body["rois"] = [r for r in body.get("rois", []) if r.get("id") != QUICK_LOGO_ID]
+    if asset is None:
+        return
+    assets = body.setdefault("assets", [])
+    if not any(a.get("id") == asset["id"] for a in assets):
+        assets.append(asset)
+    body["rois"].append(quick_logo_roi(asset["id"], int(asset.get("width") or 1), int(asset.get("height") or 1),
+                                       corner).to_dict())

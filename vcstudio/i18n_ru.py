@@ -674,6 +674,13 @@ RU: dict[str, str] = {
     "Hide face": "Скрыть лицо",
     "Pixelates every detected face in the camera output (adds a region on the Region Editor page; click again to remove it).":
         "Пикселизирует каждое найденное лицо на выходе камеры (добавляет зону в «Редакторе зон»; повторное нажатие убирает её).",
+    "Logo": "Логотип",
+    "Puts a picture (PNG with transparency works best) in the top-right corner of the camera output. Move or resize "
+    "it on the Region Editor page; click again to remove it.":
+        "Ставит картинку (лучше всего PNG с прозрачностью) в правый верхний угол выхода камеры. Переместить или изменить "
+        "размер можно в «Редакторе зон»; повторное нажатие убирает её.",
+    "Choose a logo": "Выберите логотип",
+    "Images": "Изображения",
     "Emergency passthrough is on: the camera gets the original video.":
         "Включён аварийный прямой проход: камера получает исходное видео.",
     "Replacement is off: the camera gets the original video.": "Замена выключена: камера получает исходное видео.",
