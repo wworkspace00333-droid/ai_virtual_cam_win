@@ -50,15 +50,21 @@ class BenchSource(TestPatternSource):
                 t0, n = time.perf_counter(), 0
 
 
-def bus_scene(width: int = 1920, height: int = 1080) -> np.ndarray:
+def sample_scene(width: int = 1920, height: int = 1080) -> np.ndarray:
+    """The sample photo (people, buses) scaled to the frame height and centred on a grey background, BGRA."""
     import cv2
     from vcstudio.ai.testimages import load_bgra
-    from vcstudio.core.resources import sample
-    bus = load_bgra(sample("bus.jpg"))
+    from vcstudio.core.resources import sample_photo
+    photo = load_bgra(sample_photo())
+    ph, pw = photo.shape[:2]
     scene = np.zeros((height, width, 4), np.uint8)
     scene[..., 3] = 255
     scene[..., :3] = (60, 70, 80)
-    bw = int(810 * height / 1080)
-    x0 = (width - bw) // 2
-    scene[:, x0:x0 + bw] = cv2.resize(bus, (bw, height))
+    bw = min(width, int(round(pw * height / ph)))
+    bh = int(round(ph * bw / pw))
+    x0, y0 = (width - bw) // 2, (height - bh) // 2
+    scene[y0:y0 + bh, x0:x0 + bw] = cv2.resize(photo, (bw, bh), interpolation=cv2.INTER_AREA)
     return scene
+
+
+bus_scene = sample_scene          # old name (scripts, tests)

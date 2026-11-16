@@ -124,7 +124,7 @@ class DetectionPage:
     def _build_tree(self):
         self._items: dict[str, QTreeWidgetItem] = {}
         self.tree.blockSignals(True)
-        names = list(self.ctx.models.available().get("yolo11n").classes) if self.ctx.models.available().get("yolo11n") else []
+        names = self.ctx.models.builtin_classes()
         allnames = set(names) | {FACE}
         groups: dict[str, list[str]] = {}
         for n in sorted(allnames):

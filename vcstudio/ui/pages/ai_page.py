@@ -133,6 +133,12 @@ class AIEnginePage:
         self.acc_info = QLabel(tr("Runs every installed model on 16 COCO photos with known correct boxes (53 classes) "
                                   "and compares. Columns use the confidence threshold of the active profile."))
         self.acc_info.setObjectName("muted"); self.acc_info.setWordWrap(True)
+        from vcstudio.core.resources import accuracy_data
+        if not (accuracy_data() / "images").is_dir():
+            # the labelled COCO photos have mixed licences and are not shipped with the app (development only)
+            self.acc_btn.setEnabled(False)
+            self.acc_info.setText(tr("The accuracy check needs the labelled test photos, which are not installed with "
+                                     "the app. Run it from the source tree (scripts/eval_accuracy.py)."))
         arow.addWidget(self.acc_btn); arow.addWidget(self.acc_info, 1)
         acc.layout_.addLayout(arow)
         self.acc = QTableWidget(0, 6)
@@ -330,9 +336,9 @@ class AIEnginePage:
                 arr = np.array(a)  # private copy so capture buffers are not held
             return Frame(0, 0, 0, f.width, f.height, array=arr, source=f.source)
         from vcstudio.ai.testimages import load_bgra
-        from vcstudio.core.resources import sample
-        arr = load_bgra(sample("bus.jpg"))
-        return Frame(0, 0, 0, arr.shape[1], arr.shape[0], array=arr, source="bus.jpg")
+        from vcstudio.core.resources import SAMPLE_PHOTO, sample
+        arr = load_bgra(sample(SAMPLE_PHOTO))
+        return Frame(0, 0, 0, arr.shape[1], arr.shape[0], array=arr, source=SAMPLE_PHOTO)
 
     # ---------------- accuracy
     def start_accuracy(self):

@@ -21,6 +21,15 @@ The runtime app loads Core ML packages (`<name>.mlpackage` plus `<name>.json` me
 
 ## Windows (ONNX Runtime)
 
+**Built-in detectors (shipped in the installer): YOLOX** — `yolox_nano` (416 px), `yolox_tiny` (416 px), `yolox_s`
+(640 px), the official ONNX exports of Megvii-BaseDetection/YOLOX 0.1.1rc0, **Apache-2.0** code and weights. Get them
+with `python scripts\fetch_models.py` (downloads and checks SHA-256); the `.json` metadata (`"format": "onnx-yolox"`,
+COCO-80 classes) is in git. Decoding: `OnnxYoloxDetector` in `vcstudio/ai/onnx_engine.py`. Accuracy on
+`tests/data/coco16` (mAP50, CPU, 2026-11-16): yolox_nano 0.377, yolox_tiny 0.511, yolox_s 0.641.
+
+Ultralytics YOLO11 (below) is **not shipped** (AGPL-3.0): a developer's local copies are used by the test suite, and a
+user may add them with "Import model". `scripts/check_licenses.py` keeps them out of the installer.
+
 The Windows build loads `<name>.onnx` plus `<name>.json` from the same folders (`%LOCALAPPDATA%\AIVirtualCameraStudio\models\` for user models). Convert with a separate environment (PyTorch stays out of the app):
 
 ```bat

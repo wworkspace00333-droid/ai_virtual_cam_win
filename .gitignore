@@ -12,6 +12,7 @@ logs/
 .DS_Store
 .venv-convert/
 !models/face_detection_yunet_2023mar.onnx
+!models/yolox_*.json
 .coverage
 .coverage.*
 htmlcov/

@@ -162,6 +162,12 @@ _TEXT = {
         "full 60 fps output runs from the Preview page."),
     "face_regions_need": ("Face regions need Apple Vision face detection (AI Engine page).",
                           "Face regions need YuNet face detection (AI Engine page)."),
+    "no_seg_model": ("No segmentation model installed: run scripts/convert_models.py yolo11n-seg.",
+                     "No segmentation model installed. Object (silhouette) replacement needs one: add a segmentation "
+                     "model with \"Import model\" on the AI Engine page."),
+    "seg_model_runs": ("While enabled, the AI engine runs the segmentation model (yolo11n-seg) instead of the plain "
+                       "detector.",
+                       "While enabled, the AI engine runs the segmentation model instead of the plain detector."),
 }
 
 # Monospace font for logs and code-like text

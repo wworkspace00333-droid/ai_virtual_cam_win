@@ -103,6 +103,14 @@ RU: dict[str, str] = {
     "footprint · system {p}% of {total}": "занято приложением · система {p}% из {total}",
     "n/a": "н/д",
     "IOAccelerator statistics unavailable": "Статистика IOAccelerator недоступна",
+    "GPU counters unavailable (no hardware GPU)": "Счётчики видеокарты недоступны (нет аппаратной видеокарты)",
+    "Checking…": "Проверка…",
+    "Unknown": "Неизвестно",
+    "Visible to other apps. Details: Virtual Camera page.": "Видна другим приложениям. Подробности — на странице «Виртуальная камера».",
+    "See Virtual Camera page.": "См. страницу «Виртуальная камера».",
+    "Camera waiting for video": "Камера ждёт видео",
+    "waiting": "ожидание",
+    "camera {name}: waiting for the first frame": "камера {name}: ждёт первый кадр",
     "System-wide GPU · in use {mem}": "Видеоядро всей системы · занято {mem}",
 
     # ---- input page
@@ -419,6 +427,12 @@ RU: dict[str, str] = {
     "No segmentation model installed: run scripts/convert_models.py yolo11n-seg.": "Модель сегментации не установлена: запустите scripts/convert_models.py yolo11n-seg.",
     "While enabled, the AI engine runs the segmentation model (yolo11n-seg) instead of the plain detector.":
         "Пока включено, ИИ-движок использует модель сегментации (yolo11n-seg) вместо обычного детектора.",
+    "No segmentation model installed. Object (silhouette) replacement needs one: add a segmentation model with \"Import model\" on the AI Engine page.":
+        "Модель сегментации не установлена. Для замены объекта по силуэту она нужна: добавьте модель сегментации кнопкой «Импорт модели» на странице «ИИ-движок».",
+    "The accuracy check needs the labelled test photos, which are not installed with the app. Run it from the source tree (scripts/eval_accuracy.py).":
+        "Для проверки точности нужны размеченные тестовые фото, они не устанавливаются вместе с программой. Запустите её из исходников (scripts/eval_accuracy.py).",
+    "While enabled, the AI engine runs the segmentation model instead of the plain detector.":
+        "Пока включено, ИИ-движок использует модель сегментации вместо обычного детектора.",
     "On object regions the effect follows the segmentation silhouette when masks are available (object replacement elsewhere enables segmentation); otherwise it covers the box.":
         "На зонах объектов эффект следует силуэту, если есть маски (их включает замена объекта в другой зоне); иначе закрывает рамку.",
     "VideoToolbox hardware": "Аппаратный VideoToolbox",

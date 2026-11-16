@@ -297,8 +297,8 @@ def remove(info: ModelInfo) -> None:
 
 def _sample():
     from vcstudio.ai.testimages import load_bgra
-    from vcstudio.core.resources import sample
-    return load_bgra(sample("bus.jpg"))
+    from vcstudio.core.resources import SAMPLE_PHOTO, sample
+    return load_bgra(sample(SAMPLE_PHOTO))
 
 
 def _machine() -> str:

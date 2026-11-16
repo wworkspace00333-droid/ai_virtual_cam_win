@@ -3,7 +3,7 @@
 Packaged (PyInstaller, sys.frozen): everything lives under sys._MEIPASS:
     native/libVCSNative.dylib, native/libVCSShm.dylib
     models/<name>.mlpackage + .json
-    sample_data/bus.jpg, logo_alpha.png, clip_h264.mp4
+    sample_data/street.jpg, logo_alpha.png, clip_h264.mp4
     ../Resources/obs-plugin/vcstudio-obs.plugin   (copied in by scripts/build_app.sh)
     scripts/                      (developer tools runnable with --run-script)
 Development: the same files at their repository locations (build/native, models, tests/data, ...).
@@ -30,6 +30,16 @@ def native_lib(name: str) -> Path:
 
 def models_dir() -> Path:
     return bundle_root() / "models" if frozen() else REPO / "models"
+
+
+# Sample photo with people and buses (self-check, model import trial, benchmark scene). Public domain (CC0):
+# "Moscow, Paveletskaya Square, people at bus stop Sept 2025 02.jpg", Wikimedia Commons, 1280 px rendition
+# (THIRD_PARTY_NOTICES.md). It replaced Ultralytics' bus.jpg, which is AGPL-licensed.
+SAMPLE_PHOTO = "street.jpg"
+
+
+def sample_photo() -> Path:
+    return sample(SAMPLE_PHOTO)
 
 
 def sample(name: str) -> Path:

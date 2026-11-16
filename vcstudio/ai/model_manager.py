@@ -72,6 +72,7 @@ class ModelInfo:
     confidence: float | None = None    # suggested detection threshold for this model
     source_classes: list[str] = field(default_factory=list)   # the model's own names (before class_map)
     benchmark: dict = field(default_factory=dict)
+    format: str = ""                   # output layout, e.g. onnx-raw-detect (YOLO), onnx-yolox (vcstudio/ai/backend.py)
 
     @classmethod
     def from_package(cls, pkg: Path) -> "ModelInfo":
@@ -86,7 +87,7 @@ class ModelInfo:
                    origin="user" if meta.get("origin") == "user" else "builtin",
                    confidence=meta.get("confidence"),
                    source_classes=list(meta.get("source_classes") or classes),
-                   benchmark=dict(meta.get("benchmark") or {}))
+                   benchmark=dict(meta.get("benchmark") or {}), format=str(meta.get("format", "")))
 
     def label_map(self) -> dict[str, str]:
         """The model's own class name -> the name shown and used by regions (identity unless remapped)."""
@@ -151,6 +152,13 @@ class ModelManager:
         """Models of a task from largest (highest quality) to smallest; built-in only unless include_user."""
         return sorted((m for m in self.available().values()
                        if m.task == task and (include_user or m.origin == "builtin")), key=lambda m: -m.size_mb)
+
+    def builtin_classes(self) -> list[str]:
+        """Class names of the built-in detectors (all COCO-80; YOLO11 or YOLOX, whichever is installed)."""
+        for m in sorted(self.available().values(), key=lambda m: m.size_mb):
+            if m.task == "detect" and m.origin == "builtin" and m.classes:
+                return list(m.classes)
+        return []
 
     def invalidate(self) -> None:
         """Forget the directory scan (after a model was imported or removed)."""

@@ -16,6 +16,7 @@ from vcstudio.roi.model import rois_from_profile
 from vcstudio.ui.video_view import VideoView
 from vcstudio.ui.widgets import Card, page_scaffold
 from vcstudio.i18n import region_name, tr
+from vcstudio.platform import text as platform_text
 
 log = logging.getLogger(__name__)
 PREVIEW_FPS = 15
@@ -318,16 +319,15 @@ class ReplacementPage:
             msgs.append("Object replacement needs an Automatic or Hybrid ROI (it follows a tracked object). "
                         "Change the ROI mode on the ROI Editor page.")
         if is_obj and not any(m.task == "segment" for m in self.ctx.models.available().values()):
-            msgs.append("No segmentation model installed: run scripts/convert_models.py yolo11n-seg.")
+            msgs.append(platform_text("no_seg_model"))
         if is_obj and self.enabled.isChecked():
-            msgs.append("While enabled, the AI engine runs the segmentation model (yolo11n-seg) instead of the "
-                        "plain detector.")
+            msgs.append(platform_text("seg_model_runs"))
         if self.enabled.isChecked() and not self.asset.currentData() and not is_effect:
             msgs.append("Choose an asset.")
         if is_effect and d.get("mode") != "manual":
             msgs.append("On object regions the effect follows the segmentation silhouette when masks are "
                         "available (object replacement elsewhere enables segmentation); otherwise it covers the box.")
-        self.warn.setText(" ".join(msgs))
+        self.warn.setText(" ".join(tr(m) for m in msgs))
 
     def _save(self, *_):
         if self._loading:

@@ -180,6 +180,70 @@ class OnnxDetector(_OnnxModel):
         return dets, (time.perf_counter() - t0) * 1000
 
 
+class OnnxYoloxDetector(_OnnxModel):
+    """YOLOX (Megvii, Apache-2.0 code and weights) exported with its decoder outside the graph.
+
+    Input: BGR, 0..255 float (no normalisation, the 0.1.1rc0+ exports), resized with the aspect ratio kept and
+    padded with 114 at the right / bottom (YOLOX's own pre-processing, not the centred Ultralytics letterbox).
+    Output (1, anchors, 5 + nc): per anchor of the 8 / 16 / 32 grids cx, cy (cell offsets), log w, log h,
+    objectness, class scores; decoded here: xy = (o + grid) * stride, wh = exp(o) * stride, score = obj * cls."""
+    max_det = 300
+    STRIDES = (8, 16, 32)
+
+    def __init__(self, loaded):
+        super().__init__(loaded)
+        grids, strides = [], []
+        for s in self.STRIDES:
+            n = self.size // s
+            yv, xv = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
+            grids.append(np.stack((xv, yv), 2).reshape(-1, 2))
+            strides.append(np.full((n * n, 1), s))
+        self._grid = np.concatenate(grids).astype(np.float32)
+        self._stride = np.concatenate(strides).astype(np.float32)
+
+    def _blob(self, img_bgra: np.ndarray):
+        h, w = img_bgra.shape[:2]
+        r = min(self.size / w, self.size / h)
+        nw, nh = int(w * r), int(h * r)
+        c = self._canvas
+        c[...] = PAD_VALUE
+        c[:nh, :nw] = cv2.resize(img_bgra[..., :3], (nw, nh), interpolation=cv2.INTER_LINEAR)
+        return cv2.dnn.blobFromImage(c), r          # NCHW float32, BGR, 0..255
+
+    def detect(self, frame, conf: float = 0.25, iou: float = 0.5) -> tuple[list[Detection], float]:
+        t0 = time.perf_counter()
+        with frame.bgra() as img:
+            blob, r = self._blob(img)
+        if self.half:
+            blob = blob.astype(np.float16)
+        out = np.asarray(self.sess.run(None, {self.input_name: blob})[0][0], dtype=np.float32)
+        if out.shape[0] != len(self._grid):
+            raise ValueError(f"{self.name}: {out.shape[0]} anchors, expected {len(self._grid)} for {self.size} px input")
+        cs = out[:, 5:] * out[:, 4:5]
+        cls = cs.argmax(1)
+        score = cs[np.arange(len(cs)), cls]
+        m = score >= conf
+        if not m.any():
+            return [], (time.perf_counter() - t0) * 1000
+        xy = (out[m, :2] + self._grid[m]) * self._stride[m]
+        wh = np.exp(np.minimum(out[m, 2:4], 20.0)) * self._stride[m]
+        boxes = np.concatenate((xy - wh / 2, xy + wh / 2), 1)
+        scores, cls = score[m], cls[m]
+        keep = nms(boxes + cls[:, None] * 4096.0, scores, iou)[: self.max_det]
+        W, H = frame.width, frame.height
+        index = {n: i for i, n in enumerate(self.class_names)}
+        dets = []
+        for i in keep:
+            b = boxes[i] / r
+            x0, y0 = float(np.clip(b[0], 0, W)), float(np.clip(b[1], 0, H))
+            x1, y1 = float(np.clip(b[2], 0, W)), float(np.clip(b[3], 0, H))
+            if x1 - x0 < 1 or y1 - y0 < 1:
+                continue
+            label = self._label(int(cls[i]))
+            dets.append(Detection(label, float(scores[i]), x0, y0, x1, y1, index.get(label, int(cls[i])), "yolox"))
+        return dets, (time.perf_counter() - t0) * 1000
+
+
 class OnnxSegmentationDetector(_OnnxModel):
     """YOLO-seg: outputs (1, 4 + nc + nm, N) and (1, nm, mh, mw); post-processing shared with Core ML."""
     max_det = SegmentationDetector.max_det

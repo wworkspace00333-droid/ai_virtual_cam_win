@@ -13,7 +13,7 @@ for mp in sorted((ROOT / "models").glob("*.mlpackage")):
     datas.append((str(mp), f"models/{mp.name}"))
     if mp.with_suffix(".json").exists():
         datas.append((str(mp.with_suffix(".json")), "models"))
-for name in ("bus.jpg", "logo_alpha.png", "clip_h264.mp4"):
+for name in ("street.jpg", "logo_alpha.png", "clip_h264.mp4"):   # the app reads the sample photo as street.jpg
     datas.append((str(ROOT / "tests" / "data" / name), "sample_data"))
 for sub in ("images", "labels"):            # accuracy check data (AI Engine page)
     datas.append((str(ROOT / "tests" / "data" / "coco16" / sub), f"sample_data/coco16/{sub}"))

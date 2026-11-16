@@ -16,8 +16,10 @@ def is_onnx(info) -> bool:
 def make_detector(loaded):
     """Detector (or segmentation detector) for a LoadedModel; picks the class from task and format."""
     if is_onnx(loaded.info):
-        from vcstudio.ai.onnx_engine import OnnxDetector, OnnxSegmentationDetector
-        return OnnxSegmentationDetector(loaded) if loaded.info.task == "segment" else OnnxDetector(loaded)
+        from vcstudio.ai.onnx_engine import OnnxDetector, OnnxSegmentationDetector, OnnxYoloxDetector
+        if loaded.info.task == "segment":
+            return OnnxSegmentationDetector(loaded)
+        return OnnxYoloxDetector(loaded) if loaded.info.format == "onnx-yolox" else OnnxDetector(loaded)
     from vcstudio.ai.coreml_engine import CoreMLDetector
     from vcstudio.ai.segmentation import SegmentationDetector
     return SegmentationDetector(loaded) if loaded.info.task == "segment" else CoreMLDetector(loaded)

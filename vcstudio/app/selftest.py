@@ -213,10 +213,9 @@ def pipeline_e2e_selftest(out_path: str, seconds: float = 8.0, out_device: str =
     try:
         result["permission"] = request_camera_access(timeout=120)
         ctx = AppContext(configure_logging=False)
-        from vcstudio.core.resources import sample
-        bus = load_bgra(sample("bus.jpg"))
-        scene = np.zeros((H, W, 4), np.uint8); scene[..., 3] = 255
-        scene[:, 555:555 + 810] = cv2.resize(bus, (810, 1080))
+        from vcstudio.core.bench_source import sample_scene
+        scene = sample_scene(W, H)
+        person_box = [None]       # (x0, y0, x1, y1) of the largest detected person, set after warm-up
 
         class BarCodedScene(TestPatternSource):
             def _run(self, on_frame):
@@ -279,6 +278,15 @@ def pipeline_e2e_selftest(out_path: str, seconds: float = 8.0, out_device: str =
                     break
             time.sleep(0.2)
         result["warmup_s"] = round(time.perf_counter() - t_warm, 1)
+        if not obs_in and not in_device:
+            # where the client must see magenta: the middle of the largest person the AI found in the scene
+            res = ctx.ai.results.peek()[0]
+            ppl = [d for d in (res.detections if res else []) if d.label == "person"]
+            if ppl:
+                d = max(ppl, key=lambda d: (d.x1 - d.x0) * (d.y1 - d.y0))
+                bw, bh = d.x1 - d.x0, d.y1 - d.y0
+                person_box[0] = (int(d.x0 + .35 * bw), int(d.y0 + .3 * bh), int(d.x1 - .35 * bw), int(d.y0 + .6 * bh))
+            result["person_box"] = person_box[0]
         # ---- third-party client: capture the output camera
         client = CaptureSupervisor(missing_timeout_ms=3000)
         client.start(lambda: AVFoundationSource(None, out_device, W, H, 60, allow_own_output=True))
@@ -298,8 +306,11 @@ def pipeline_e2e_selftest(out_path: str, seconds: float = 8.0, out_device: str =
                     if obs_in:      # centre of the marker region, scaled to the client's frame size
                         hh, ww = img.shape[:2]
                         person = img[int(hh * .1):int(hh * .2), int(ww * .1):int(ww * .2), :3].reshape(-1, 3).astype(int)
+                    elif person_box[0] is not None:     # torso of the largest person (the scene's own frame size)
+                        x0, y0, x1, y1 = person_box[0]
+                        person = img[y0:y1, x0:x1, :3].reshape(-1, 3).astype(int)
                     else:
-                        person = img[620:860, 650:800, :3].reshape(-1, 3).astype(int)  # left person's torso (bus scene)
+                        person = np.zeros((1, 3), int)  # no person found during warm-up: counts as not replaced
                     magenta = float(((person[:, 0] > 200) & (person[:, 1] < 60) & (person[:, 2] > 200)).mean())
                 got.append((idx, host_time_s(), magenta))
         th = threading.Thread(target=watch, daemon=True); th.start()
@@ -363,7 +374,7 @@ def bundle_selfcheck(out: str | None = None) -> int:
     from vcstudio.ai.testimages import load_bgra
     from vcstudio.core.frame import Frame
     from vcstudio.core.pyobjc_prewarm import prewarm
-    from vcstudio.core.resources import bundle_root, frozen, models_dir, sample
+    from vcstudio.core.resources import SAMPLE_PHOTO, bundle_root, frozen, models_dir, sample
 
     prewarm()
     results: list[dict] = []
@@ -384,13 +395,14 @@ def bundle_selfcheck(out: str | None = None) -> int:
           f"resources: {bundle_root()}", flush=True)
 
     def samples():
-        missing = [n for n in ("bus.jpg", "logo_alpha.png", "clip_h264.mp4") if not sample(n).exists()]
+        names = (SAMPLE_PHOTO, "logo_alpha.png", "clip_h264.mp4")
+        missing = [n for n in names if not sample(n).exists()]
         if missing:
             raise FileNotFoundError(", ".join(missing))
-        return "bus.jpg, logo_alpha.png, clip_h264.mp4"
+        return ", ".join(names)
     check("sample data", samples)
 
-    img = load_bgra(sample("bus.jpg"))
+    img = load_bgra(sample(SAMPLE_PHOTO))
     frame = Frame(1, 0, 0, img.shape[1], img.shape[0], array=img)
     mm = ModelManager(Path(tempfile.mkdtemp(prefix="vcs-selfcheck-")))
     infos = mm.available()
@@ -409,7 +421,7 @@ def bundle_selfcheck(out: str | None = None) -> int:
             dets, ms = det.detect(frame)
             people = sum(d.label == "person" for d in dets)
             if people < 3:
-                raise AssertionError(f"expected >= 3 people in bus.jpg, got {people} ({len(dets)} objects)")
+                raise AssertionError(f"expected >= 3 people in {SAMPLE_PHOTO}, got {people} ({len(dets)} objects)")
             mm.unload(info.name)
             return f"{len(dets)} objects, {people} people, {ms:.1f} ms/frame"
         check(f"model {name}", run)

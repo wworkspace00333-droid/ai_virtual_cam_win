@@ -393,7 +393,8 @@ class ROIPage:
                 msgs.append("AI is disabled in this profile: this region will stay empty.")
             det = body["detection"]
             inc, exc = set(det.get("include_classes", [])), set(det.get("exclude_classes", []))
-            known = set(self.ctx.models.available().get("yolo11n").classes) | {"face"} if self.ctx.models.available().get("yolo11n") else set()
+            builtin = self.ctx.models.builtin_classes()
+            known = set(builtin) | {"face"} if builtin else set()
             for c in r.classes:
                 if known and c not in known:
                     msgs.append(tr("'{c}' is not a class of the detector.", c=tr(c)))
