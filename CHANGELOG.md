@@ -23,6 +23,11 @@ Fixes from the 0.5 audit (docs/WINDOWS_AUDIT_0.5.md, P0).
   rate and ratcheted down to the floor; it now scales from the unthrottled rate (D26).
 
 ### Added
+- **Privacy mode** (P2.4, Preview page selector, Ctrl+Alt+H): Off · Hide faces · Hide faces and screens (monitors,
+  laptops, phones, books — their screens or pages can show private information) · Hide faces, screens and
+  background. It adds its own regions to the scene and remembers the background it replaced, so switching it off
+  restores the scene as it was; the user's regions are untouched. Checked on COCO photos: a booklet, books and a
+  monitor pixelated.
 - **A different picture for each object** (P2.3): on an Automatic / Hybrid region, "A different asset for each
   object (in turn)" gives the 1st tracked object the main asset, the 2nd the first checked extra, and so on, wrapping
   round; an object keeps its asset while it is tracked, a new scene hands them out afresh.

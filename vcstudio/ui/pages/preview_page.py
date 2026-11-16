@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QPushButton
+from PySide6.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QLabel, QPushButton
 
 from vcstudio.ui.video_view import BLACK_INPUT_HINT, STATE_OVERLAY, VideoView, frame_is_black, frame_to_qimage
 from vcstudio.ui.widgets import page_scaffold
@@ -29,6 +29,13 @@ class PreviewPage:
         self.logo_btn.setToolTip(tr("Puts a picture (PNG with transparency works best) in the top-right corner of the "
                                     "camera output. Move or resize it on the Region Editor page; click again to "
                                     "remove it."))
+        from vcstudio.replacement import privacy_mode as pm
+        self.privacy = QComboBox()
+        for lv in pm.LEVELS:
+            self.privacy.addItem(tr(pm.LABELS[lv]), lv)
+        self.privacy.setToolTip(tr("Privacy mode (Ctrl+Alt+H): hides faces; screens, laptops, phones and books; and "
+                                   "the background — whatever the level includes. Switching it off restores the "
+                                   "scene as it was."))
         self.card_btn = QPushButton(tr("Card for a game…"))
         self.card_btn.setToolTip(tr("Put a photo into the frame a browser game or an emulator draws over the camera."))
         self.boxes = QCheckBox(tr("Show detections")); self.boxes.setChecked(True)
@@ -40,7 +47,7 @@ class PreviewPage:
         bar.addWidget(src_btn)
         lay.addLayout(bar)
         bar2 = QHBoxLayout()
-        for b in (self.repl_btn, self.face_btn, self.logo_btn, self.card_btn, self.boxes):
+        for b in (self.repl_btn, self.privacy, self.face_btn, self.logo_btn, self.card_btn, self.boxes):
             bar2.addWidget(b)
         bar2.addStretch()
         lay.addLayout(bar2)
@@ -70,6 +77,7 @@ class PreviewPage:
         self.boxes.toggled.connect(lambda on: setattr(self.feeder, "show_detections", on))
         self.face_btn.toggled.connect(self._toggle_face)
         self.logo_btn.toggled.connect(self._toggle_logo)
+        self.privacy.currentIndexChanged.connect(self._privacy_changed)
         self.card_btn.clicked.connect(self.open_game_card)
         self._card_dialog = None
         src_btn.clicked.connect(goto_input)
@@ -90,6 +98,18 @@ class PreviewPage:
         on = self._logo_on()
         if self.logo_btn.isChecked() != on:
             self.logo_btn.blockSignals(True); self.logo_btn.setChecked(on); self.logo_btn.blockSignals(False)
+        from vcstudio.replacement import privacy_mode as pm
+        lv = pm.level_of(self.ctx.profiles.active()["body"])
+        if self.privacy.currentData() != lv:
+            self.privacy.blockSignals(True); self.privacy.setCurrentIndex(self.privacy.findData(lv))
+            self.privacy.blockSignals(False)
+
+    def _privacy_changed(self, *_):
+        from vcstudio.replacement import privacy_mode as pm
+        lv = self.privacy.currentData()
+        self.ctx.update_active_profile(lambda b: pm.set_level(b, lv))
+        if lv != "off" and not self.ctx.pipeline.replacement_enabled:
+            self.ctx.pipeline.set_replacement_enabled(True)
 
     def _logo_on(self) -> bool:
         from vcstudio.roi.model import QUICK_LOGO_ID

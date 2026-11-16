@@ -179,7 +179,7 @@ Windows 10/11). Кадры идут из приложения через общ�
 | Atomic Scene State | MISSING → ✅ P2.2 | Неизменяемый снимок сцены публикуется одним присваиванием, кадр рисуется из одной ссылки (`core/scene.py`); тест: ни одного смешанного кадра при 12 переключениях |
 | Multi-Object Replacement | PARTIAL → ✅ P2.3 | Много зон и объектов; «каждому объекту свой ресурс» по очереди, закрепляется за ID трека (	est_multi_object.py) |
 | Auto-Framing | MISSING | — |
-| AI Privacy Mode | PARTIAL | «Скрыть лицо» (пикселизация/размытие лиц) и размытие фона; нет единого режима приватности |
+| AI Privacy Mode | PARTIAL → ✅ P2.4 | Уровни: лица · лица и экраны · всё с фоном; Ctrl+Alt+H; выключение возвращает сцену (	est_privacy_mode.py) |
 | AI Lighting Enhancement | MISSING | Только ручная цветокоррекция зоны |
 | Gesture Control | MISSING | — |
 | Recording | MISSING | — |

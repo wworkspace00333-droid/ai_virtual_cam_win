@@ -72,7 +72,7 @@ def region_name(name: str) -> str:
     """Display name of a region: the app's own regions ("Hide face", "Game card 2") are stored in English in
     profiles and shown in the interface language; names the user typed are shown as they are."""
     import re
-    if name in ("Hide face", "Logo"):
+    if name in ("Hide face", "Logo", "Hide screens"):
         return tr(name)
     m = re.fullmatch(r"Game card (\d+)", name)
     if m:

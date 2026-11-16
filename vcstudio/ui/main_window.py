@@ -217,6 +217,13 @@ class MainWindow(QMainWindow):
                 self.ctx.profiles.switch(self.ctx.profiles.next_name())
             except ProfileError as e:
                 log.error("switch profile failed: %s", e)
+        elif aid == "privacy_toggle":
+            from vcstudio.replacement import privacy_mode as pm
+            holder = {}
+            self.ctx.update_active_profile(lambda b: holder.__setitem__("level", pm.toggle(b)))
+            if holder.get("level", "off") != "off" and not pipe.replacement_enabled:
+                pipe.set_replacement_enabled(True)
+            log.info("Privacy: %s", holder.get("level"))
         elif aid.startswith("scene_"):
             try:
                 name = self.ctx.scenes.switch_slot(int(aid.split("_", 1)[1]))

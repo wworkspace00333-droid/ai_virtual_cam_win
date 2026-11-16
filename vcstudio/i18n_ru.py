@@ -212,6 +212,16 @@ RU: dict[str, str] = {
     "Low disk space: {mb} MB free": "Мало места на диске: свободно {mb} МБ",
     "From the start": "С начала",
     "Scenes": "Сцены",
+    "Privacy off": "Приватность выкл.",
+    "Hide faces": "Скрыть лица",
+    "Hide faces and screens": "Скрыть лица и экраны",
+    "Hide faces, screens and background": "Скрыть лица, экраны и фон",
+    "Hide screens": "Скрыть экраны",
+    "Privacy mode on / off": "Режим приватности вкл. / выкл.",
+    "Privacy mode (Ctrl+Alt+H): hides faces; screens, laptops, phones and books; and the background — whatever the "
+    "level includes. Switching it off restores the scene as it was.":
+        "Режим приватности (Ctrl+Alt+H): скрывает лица; экраны, ноутбуки, телефоны и книги; и фон — в зависимости "
+        "от уровня. При выключении сцена возвращается к прежнему виду.",
     "A different asset for each object (in turn)": "Каждому объекту — свой ресурс (по очереди)",
     "On an Automatic or Hybrid region: the 1st object gets the asset above, the 2nd the first checked extra, and so "
     "on, wrapping round. An object keeps its asset while it is tracked.":
