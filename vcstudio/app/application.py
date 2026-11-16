@@ -149,6 +149,8 @@ class AppContext:
         self.profiles.update_body(name, body)
 
     def _on_profile_event(self, event: str, name: str) -> None:
+        if event == "switched" and hasattr(self, "replacement"):
+            self.replacement.compositor.reset_assignments()   # a new scene hands out its assets afresh
         if event in ("switched", "updated", "renamed") and hasattr(self, "ai"):
             self.apply_ai_config()
         if event in ("switched", "renamed") and self.profiles.active_name:

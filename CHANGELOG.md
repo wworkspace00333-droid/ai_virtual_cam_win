@@ -23,6 +23,9 @@ Fixes from the 0.5 audit (docs/WINDOWS_AUDIT_0.5.md, P0).
   rate and ratcheted down to the floor; it now scales from the unthrottled rate (D26).
 
 ### Added
+- **A different picture for each object** (P2.3): on an Automatic / Hybrid region, "A different asset for each
+  object (in turn)" gives the 1st tracked object the main asset, the 2nd the first checked extra, and so on, wrapping
+  round; an object keeps its asset while it is tracked, a new scene hands them out afresh.
 - **Scenes** (P2.2, `vcstudio/core/scene.py`, new "Scenes" page): a scene is a profile (regions, replacements,
   background, AI) plus a hotkey slot (Ctrl+Alt+1…9; without explicit slots, list order) and, optionally, its own input
   (a camera, a file or a screen). **Atomic scene state:** the app builds one immutable snapshot of everything a frame

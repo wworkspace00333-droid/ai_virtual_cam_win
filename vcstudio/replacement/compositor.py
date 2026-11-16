@@ -320,7 +320,31 @@ class Compositor:
         self.backend_error = ""
         self.active = self.cpu
         self._lock = threading.RLock()     # one GPU context / caches: serialise renders across threads
+        # multi-object: per region, tracked object id -> position in its asset pool (assigned in turn, kept)
+        self._obj_assign: dict[str, dict[int, int]] = {}
+        self._obj_next: dict[str, int] = {}
         self.set_backend(backend)
+
+    MAX_ASSIGNED = 512                     # per region; older track ids are forgotten beyond this
+
+    def _pick_asset(self, region, spec: ReplacementSpec, assets) -> str:
+        """The asset this region shows: the spec's own, or for multi-object regions the one assigned to this tracked
+        object (first object -> 1st asset, second -> 2nd, ... wrapping round; an object keeps its asset)."""
+        tid = getattr(region, "track_id", None)
+        if not spec.per_object_assets or not spec.extra_assets or tid is None:
+            return spec.asset_id
+        pool = [a for a in spec.asset_pool() if a in assets]
+        if not pool:
+            return spec.asset_id
+        rid = region.roi_id
+        m = self._obj_assign.setdefault(rid, {})
+        if tid not in m:
+            m[tid] = self._obj_next.get(rid, 0)
+            self._obj_next[rid] = m[tid] + 1
+            if len(m) > self.MAX_ASSIGNED:                      # long sessions: forget the oldest ids
+                for k in sorted(m)[: len(m) // 2]:
+                    del m[k]
+        return pool[m[tid] % len(pool)]
 
     # ------------------------------------------------------------------ backend
     def set_backend(self, which: str) -> str:
@@ -356,6 +380,11 @@ class Compositor:
     def reset_failures(self) -> None:
         self._failed.clear()
         self.stats.failed_rois = {}
+
+    def reset_assignments(self) -> None:
+        """Forget which tracked object got which asset (a new scene / a reset tracker)."""
+        self._obj_assign.clear()
+        self._obj_next.clear()
 
     def release_resources(self) -> None:
         """Called when processing stops: return GPU and cache memory to the system."""
@@ -499,7 +528,7 @@ class Compositor:
             return DrawOp(region.roi_id, "effect", box, spec.opacity, mask=mask, mask_key=mkey, mask_rect=mrect,
                           effect=spec.effect, params=params)
 
-        asset = assets.get(spec.asset_id)
+        asset = assets.get(self._pick_asset(region, spec, assets))
         if asset is None:
             return None
         img, skey = self._source(asset, region, spec, t)

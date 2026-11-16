@@ -212,6 +212,16 @@ RU: dict[str, str] = {
     "Low disk space: {mb} MB free": "Мало места на диске: свободно {mb} МБ",
     "From the start": "С начала",
     "Scenes": "Сцены",
+    "A different asset for each object (in turn)": "Каждому объекту — свой ресурс (по очереди)",
+    "On an Automatic or Hybrid region: the 1st object gets the asset above, the 2nd the first checked extra, and so "
+    "on, wrapping round. An object keeps its asset while it is tracked.":
+        "В автоматической или гибридной зоне: 1-й объект получает ресурс выше, 2-й — первый отмеченный "
+        "дополнительный и так далее по кругу. Объект сохраняет свой ресурс, пока его отслеживают.",
+    "More assets": "Ещё ресурсы",
+    "Silhouettes come from SAM 2.1 on the detector's boxes (no segmentation model installed); on a PC without a "
+    "graphics card that takes seconds per frame.":
+        "Силуэты строит SAM 2.1 по рамкам детектора (модели сегментации нет); на компьютере без видеокарты это "
+        "занимает секунды на кадр.",
     "A scene is a complete look — regions, replacements, background, AI settings and, if you want, its own input. "
     "Switching is instant and whole: the camera never shows half of one scene and half of another. Create, rename or "
     "export scenes on the Profiles page.":

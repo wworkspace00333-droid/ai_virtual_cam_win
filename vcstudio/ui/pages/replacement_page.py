@@ -82,7 +82,14 @@ class ReplacementPage:
         r_crop = QHBoxLayout()
         for sp in self.crop:
             r_crop.addWidget(sp)
+        # multi-object: each tracked object gets its own asset from [Asset] + the checked extras, in turn
+        self.per_object = QCheckBox(tr("A different asset for each object (in turn)"))
+        self.per_object.setToolTip(tr("On an Automatic or Hybrid region: the 1st object gets the asset above, the 2nd "
+                                      "the first checked extra, and so on, wrapping round. An object keeps its asset "
+                                      "while it is tracked."))
+        self.extras = QListWidget(); self.extras.setMaximumHeight(90)
         f.addRow(tr("ROI"), self.roi); f.addRow(tr(""), self.enabled); f.addRow(tr("Mode"), self.mode); f.addRow(tr("Asset"), self.asset)
+        f.addRow(tr(""), self.per_object); f.addRow(tr("More assets"), self.extras)
         f.addRow(tr("Fit"), self.fit); f.addRow(tr("Scale"), self.scale); f.addRow(tr("Offset x, y (× region)"), r_off)
         f.addRow(tr("Rotation"), self.rot); f.addRow(tr("Opacity"), self.opacity)
         f.addRow(tr("Crop x0, y0, x1, y1"), r_crop); f.addRow(tr("Edge feather"), self.feather)
@@ -176,7 +183,11 @@ class ReplacementPage:
         self._controls = [self.enabled, self.mode, self.asset, self.fit, self.scale, self.offx, self.offy, self.rot,
                           self.opacity, *self.crop, self.feather, self.thresh, self.refine, self.fallback,
                           self.v_loop, self.v_end, self.v_off, self.v_rate, self.v_interp, self.v_sync, self.v_max,
-                          self.effect, self.sigma, self.pix, self.bright, self.contrast, self.sat]
+                          self.effect, self.sigma, self.pix, self.bright, self.contrast, self.sat,
+                          self.per_object, self.extras]
+        self.per_object.toggled.connect(self._save)
+        self.extras.itemChanged.connect(self._save)
+        self.asset.currentIndexChanged.connect(lambda *_: self._fill_extras(self._checked_extras()))
         self.add_btn.clicked.connect(lambda: self.add_assets())   # clicked(bool) must not reach `paths`
         self.rm_btn.clicked.connect(self.remove_asset)
         self.assets.currentItemChanged.connect(self._asset_selected)
@@ -321,6 +332,8 @@ class ReplacementPage:
         self.enabled.setChecked(s.enabled)
         self.mode.setCurrentIndex(self.mode.findData(s.mode))
         self.asset.setCurrentIndex(max(0, self.asset.findData(s.asset_id)))
+        self.per_object.setChecked(s.per_object_assets)
+        self._fill_extras(s.extra_assets)
         self.fit.setCurrentIndex(self.fit.findData(s.fit))
         self.scale.setValue(s.scale); self.offx.setValue(s.offset_x); self.offy.setValue(s.offset_y)
         self.rot.setValue(s.rotation); self.opacity.setValue(int(round(s.opacity * 100)))
@@ -342,6 +355,25 @@ class ReplacementPage:
         self._loading = False
         self._update_bg_button()
         self._update_enabled_state(d)
+
+    def _fill_extras(self, checked: list[str]) -> None:
+        """Library assets other than the main one, as checkable items (checked = given to further objects)."""
+        main = self.asset.currentData() or ""
+        self.extras.blockSignals(True)
+        self.extras.clear()
+        for a in assets_from_profile(self._body()).values():
+            if a.id == main:
+                continue
+            it = QListWidgetItem(a.name)
+            it.setData(Qt.UserRole, a.id)
+            it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
+            it.setCheckState(Qt.Checked if a.id in checked else Qt.Unchecked)
+            self.extras.addItem(it)
+        self.extras.blockSignals(False)
+
+    def _checked_extras(self) -> list[str]:
+        return [self.extras.item(i).data(Qt.UserRole) for i in range(self.extras.count())
+                if self.extras.item(i).checkState() == Qt.Checked]
 
     def _update_bg_button(self):
         b, g, r, a = self._bg
@@ -385,13 +417,21 @@ class ReplacementPage:
         is_obj = mode == "object"
         for w in (self.thresh, self.refine, self.fallback):
             w.setEnabled(is_obj)
+        follows = d.get("mode") in ("auto", "hybrid")              # multi-object needs tracked objects
+        self.per_object.setEnabled(follows and not is_effect)
+        self.extras.setEnabled(follows and not is_effect and self.per_object.isChecked())
         self.bg_btn.setEnabled(mode in ("rect", "object"))
         msgs = []
         if is_obj and d.get("mode") == "manual":
             msgs.append("Object replacement needs an Automatic or Hybrid ROI (it follows a tracked object). "
                         "Change the ROI mode on the ROI Editor page.")
-        if is_obj and not any(m.task == "segment" for m in self.ctx.models.available().values()):
+        from vcstudio.ai.open_vocab import sam_available
+        has_seg = any(m.task == "segment" for m in self.ctx.models.available().values())
+        if is_obj and not has_seg and not sam_available():
             msgs.append(platform_text("no_seg_model"))
+        elif is_obj and not has_seg:
+            msgs.append("Silhouettes come from SAM 2.1 on the detector's boxes (no segmentation model installed); "
+                        "on a PC without a graphics card that takes seconds per frame.")
         if is_obj and self.enabled.isChecked():
             msgs.append(platform_text("seg_model_runs"))
         if self.enabled.isChecked() and not self.asset.currentData() and not is_effect:
@@ -409,6 +449,7 @@ class ReplacementPage:
             return
         spec = ReplacementSpec.from_dict({
             "enabled": self.enabled.isChecked(), "mode": self.mode.currentData(), "asset_id": self.asset.currentData() or "",
+            "per_object_assets": self.per_object.isChecked(), "extra_assets": self._checked_extras(),
             "fit": self.fit.currentData(), "scale": self.scale.value(), "offset_x": self.offx.value(),
             "offset_y": self.offy.value(), "rotation": self.rot.value(), "opacity": self.opacity.value() / 100,
             "crop": [sp.value() for sp in self.crop], "feather_px": self.feather.value(), "background": self._bg,

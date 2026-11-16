@@ -16,6 +16,10 @@ class ReplacementSpec:
     enabled: bool = False
     mode: str = "rect"                 # rect | object | overlay
     asset_id: str = ""
+    # Multi-object: on an Automatic / Hybrid region, give each tracked object its own asset from
+    # [asset_id] + extra_assets, in turn as objects appear; an object keeps its asset while it is tracked.
+    per_object_assets: bool = False
+    extra_assets: list[str] = field(default_factory=list)
     fit: str = "fill"
     scale: float = 1.0
     offset_x: float = 0.0              # fraction of region width
@@ -78,7 +82,14 @@ class ReplacementSpec:
             s.video_end_action = "hold"
         if s.video_interpolation not in ("nearest", "blend"):
             s.video_interpolation = "nearest"
+        extra = s.extra_assets if isinstance(s.extra_assets, list) else []
+        s.extra_assets = list(dict.fromkeys(str(a) for a in extra if a and str(a) != s.asset_id))[:16]
+        s.per_object_assets = bool(s.per_object_assets)
         return s
+
+    def asset_pool(self) -> list[str]:
+        """Assets the region can show: the main one, then the extras (multi-object)."""
+        return [a for a in [self.asset_id, *self.extra_assets] if a]
 
     def playback(self):
         from vcstudio.replacement.video import PlaybackSettings
