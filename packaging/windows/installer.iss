@@ -43,6 +43,12 @@ WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no
 SetupLogging=yes
+LicenseFile=..\..\LICENSE
+#ifdef SIGN
+; the uninstaller is signed with the "vcssign" command that build_installer_win.ps1 passes as /Svcssign=...
+SignTool=vcssign
+SignedUninstaller=yes
+#endif
 
 [Languages]
 Name: "en"; MessagesFile: "compiler:Default.isl"
@@ -68,11 +74,20 @@ Name: "camera\dshowtoo"; Description: "{cm:DShowToo}"; Check: IsWindows11
 Name: "obsplugin"; Description: "{cm:ObsPlugin}"; Check: ObsInstalled
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
+[InstallDelete]
+; an update must not keep files the new version no longer ships (models, libraries with other licences): clear the
+; previous app folder first. The camera DLLs in _internal\native may still be loaded; those deletes fail quietly and
+; the new copies replace them (restartreplace) below.
+Type: filesandordirs; Name: "{app}\_internal"
+
 [Files]
 ; the camera DLLs may be loaded by Frame Server / client apps during an update: replace them after a restart then
 Source: "{#SourceDir}\_internal\native\*"; DestDir: "{#Native}"; Flags: ignoreversion restartreplace uninsrestartdelete
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "_internal\native\*"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#SourceDir}\_internal\obs-plugin\vcstudio-obs.dll"; DestDir: "{#ObsPluginDir}\bin\64bit"; Tasks: obsplugin; Flags: ignoreversion restartreplace uninsrestartdelete
+; licence texts next to the program (the app bundles them too, for the About dialog)
+Source: "..\..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
+Source: "..\..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"

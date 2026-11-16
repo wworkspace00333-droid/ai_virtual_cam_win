@@ -10,5 +10,7 @@ pyinstaller>=6.10              # build only: scripts\build_installer_win.ps1 (+ 
 psutil>=5.9
 onnxruntime-directml>=1.20     # AI on any DirectX 12 GPU (NVIDIA / AMD / Intel) + CPU fallback.
                                # For CUDA instead: pip uninstall onnxruntime-directml; pip install onnxruntime-gpu
-av>=14                         # PyAV: video asset decoding (bundled FFmpeg)
+av>=14                         # PyAV: video asset decoding. The PyPI wheel bundles libx264/libx265 (GPL): for an
+                               # installer build, replace it with scripts\build_pyav_lgpl_win.ps1 (LGPL-only FFmpeg);
+                               # scripts\check_licenses.py fails the build otherwise
 Pillow>=10                     # GIF / animated and other image formats OpenCV does not read

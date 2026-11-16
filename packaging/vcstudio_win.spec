@@ -1,9 +1,11 @@
 # PyInstaller spec: AI Virtual Camera Studio for Windows (built by scripts/build_installer_win.ps1).
 # One-folder build: dist\AI Virtual Camera Studio\vcstudio.exe + _internal\ (sys._MEIPASS):
 #   native\      vcs_d3d11.dll, vcs_mfcap.dll, vcam_dshow.dll, vcam_mf.dll, vcam-setup.exe, mf_client_test.exe
-#   models\      *.onnx + *.json (YOLO11 detection / segmentation, YuNet faces)
+#   models\      YOLOX detectors (Apache-2.0) + YuNet faces (MIT); only the models listed in SHIPPED_MODELS:
+#                Ultralytics YOLO (AGPL-3.0) in a developer's models\ folder is never bundled
 #   obs-plugin\  vcstudio-obs.dll
-#   sample_data\ sample photo, logo, clip, coco16 accuracy set
+#   sample_data\ public-domain sample photo, own logo and clip (no COCO photos: mixed licences)
+#   LICENSE.txt, THIRD_PARTY_NOTICES.md
 #   scripts\     developer tools (--run-script)
 # The installer (packaging/windows/installer.iss) puts the folder in Program Files and registers the camera
 # from there with native\vcam-setup.exe.
@@ -15,15 +17,40 @@ ROOT = Path(SPECPATH).parent
 VERSION = os.environ.get("VCS_VERSION", "0.3.2")
 NATIVE = ROOT / "build" / "native"
 
+SHIPPED_MODELS = ["yolox_nano", "yolox_tiny", "yolox_s", "face_detection_yunet_2023mar"]   # see scripts/fetch_models.py
 datas = []
-for mp in sorted((ROOT / "models").glob("*.onnx")):
+for stem in SHIPPED_MODELS:
+    mp = ROOT / "models" / f"{stem}.onnx"
+    if not mp.exists():
+        raise SystemExit(f"missing model {mp}: run scripts/fetch_models.py")
     datas.append((str(mp), "models"))
     if mp.with_suffix(".json").exists():
         datas.append((str(mp.with_suffix(".json")), "models"))
-for name in ("bus.jpg", "logo_alpha.png", "clip_h264.mp4"):
+for name in ("street.jpg", "logo_alpha.png", "clip_h264.mp4"):
     datas.append((str(ROOT / "tests" / "data" / name), "sample_data"))
-for sub in ("images", "labels"):
-    datas.append((str(ROOT / "tests" / "data" / "coco16" / sub), f"sample_data/coco16/{sub}"))
+for name in ("LICENSE", "THIRD_PARTY_NOTICES.md"):
+    datas.append((str(ROOT / name), "."))
+# licence texts of everything that ships: packaging/licenses (GPL/LGPL texts, YOLOX, YuNet), DirectShow BaseClasses,
+# and the licence files of every runtime Python package (their dist-info), ONNX Runtime's notices, PyAV's FFmpeg.
+for f in (ROOT / "packaging" / "licenses").glob("*.txt"):
+    datas.append((str(f), "licenses"))
+datas.append((str(ROOT / "native" / "win" / "third_party" / "baseclasses" / "LICENSE"), "licenses/directshow-baseclasses"))
+import importlib.metadata as _md  # noqa: E402
+import sys as _sys  # noqa: E402
+_sys.path.insert(0, str(ROOT / "scripts"))
+from check_licenses import closure  # noqa: E402
+for _k, _d in closure().items():
+    for _f in _d.files or []:
+        _s = str(_f)
+        if ".dist-info" in _s and any(x in Path(_s).name.upper() for x in ("LICENSE", "COPYING", "NOTICE")):
+            datas.append((str(_d.locate_file(_f)), f"licenses/{_k}"))
+_ort = Path(_md.distribution("onnxruntime-directml").locate_file("onnxruntime"))
+for _n in ("LICENSE", "ThirdPartyNotices.txt"):
+    if (_ort / _n).exists():
+        datas.append((str(_ort / _n), "licenses/onnxruntime"))
+_avd = Path(_md.distribution("av").locate_file("av"))
+if (_avd / "FFMPEG_LICENSE.txt").exists():
+    datas.append((str(_avd / "FFMPEG_LICENSE.txt"), "licenses/ffmpeg"))
 for py in glob.glob(str(ROOT / "scripts" / "*.py")):
     datas.append((py, "scripts"))
 
@@ -55,6 +82,14 @@ a = Analysis(
               "PySide6.QtQml", "PySide6.QtPdf", "PySide6.QtMultimedia", "PySide6.QtCharts"],
     noarchive=False,
 )
+# GPL-only Qt modules (open-source Qt licence) must not ship in a proprietary app. PyInstaller's PySide6 hook adds
+# the virtual keyboard input-context plugin (and with it Qt6VirtualKeyboard*.dll) on its own; the app uses none of
+# these. scripts/check_licenses.py --app verifies the result.
+import re  # noqa: E402
+_GPL_QT = re.compile(r"Qt6(Charts|DataVisualization|Graphs|VirtualKeyboard|Quick3D|Lottie|NetworkAuth|Coap|Mqtt|OpcUa|"
+                     r"HttpServer|WaylandCompositor)|qtvirtualkeyboard", re.I)
+a.binaries = [b for b in a.binaries if not _GPL_QT.search(b[0]) and not _GPL_QT.search(b[1])]
+a.datas = [d for d in a.datas if not _GPL_QT.search(d[0]) and not _GPL_QT.search(d[1])]
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="vcstudio", debug=False, strip=False, upx=False,
           console=False, icon=str(ROOT / "packaging" / "AppIcon.ico"),
