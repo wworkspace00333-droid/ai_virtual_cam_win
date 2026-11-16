@@ -88,16 +88,6 @@ jobs:
         shell: pwsh
         run: Remove-Item (Join-Path $env:RUNNER_TEMP "sign.pfx") -ErrorAction SilentlyContinue
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: installer
-          path: |
-            C:\vcs-build\AIVirtualCameraStudio-Setup-*.exe
-            C:\vcs-build\AIVirtualCameraStudio-Setup-*.exe.sha256
-            build\licences.json
-            build\selfcheck.json
-          retention-days: 30
-
       - name: Attach the installer to the tag's release (draft pre-release if it does not exist)
         if: github.ref_type == 'tag' || inputs.tag != ''
         shell: pwsh
@@ -133,3 +123,19 @@ jobs:
           gh release upload $env:TAG $exe.FullName $sha.FullName --clobber --repo $env:GITHUB_REPOSITORY
           if ($LASTEXITCODE -ne 0) { throw "gh release upload failed" }
           gh release view $env:TAG --repo $env:GITHUB_REPOSITORY --json assets --jq ".assets[] | .name + ""  "" + (.size|tostring)"
+
+      # upload-artifact needs one common root: the reports are copied next to the installer (repo is on D:, build on C:)
+      - name: Collect the reports next to the installer
+        if: always()
+        run: Copy-Item build\licences.json, build\selfcheck.json $env:VCS_BUILD -ErrorAction SilentlyContinue
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installer
+          path: |
+            C:\vcs-build\AIVirtualCameraStudio-Setup-*.exe
+            C:\vcs-build\AIVirtualCameraStudio-Setup-*.exe.sha256
+            C:\vcs-build\licences.json
+            C:\vcs-build\selfcheck.json
+          retention-days: 30
