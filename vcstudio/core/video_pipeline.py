@@ -49,7 +49,7 @@ class PipelineStats:
     regions: int = 0
     passthrough_reason: str = ""
     render_errors: int = 0
-    camera_state: str = "disabled"    # disabled | not_installed | connected | error
+    camera_state: str = "disabled"    # disabled | waiting (no frame sent yet) | not_installed | connected | error
     camera_device: str = ""
     camera_sent: int = 0
     camera_dropped: int = 0
@@ -75,7 +75,7 @@ class CameraOutputController:
         self._next_try = 0.0
         self._lock = threading.RLock()
         self._shut = False
-        self.state = "disabled" if not enabled else "not_installed"
+        self.state = "disabled" if not enabled else "waiting"
         self.error = ""
 
     def configure(self, device: str, sink: str, enabled: bool, pixel_format: str | None = None) -> None:
@@ -85,7 +85,7 @@ class CameraOutputController:
                 self.close()
                 self.device, self.sink, self.enabled, self.pixel_format = device, sink, enabled, pixel_format
                 self._next_try = 0.0
-                self.state = "disabled" if not enabled else "not_installed"
+                self.state = "disabled" if not enabled else "waiting"
 
     def shutdown(self) -> None:
         """Close and refuse sends until resume() (pipeline stopped)."""

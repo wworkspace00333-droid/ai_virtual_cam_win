@@ -166,6 +166,7 @@ class PreviewPage:
         cam = {"connected": tr("camera {name} connected (sent {s}, dropped {d})", name=p.camera_device,
                                s=p.camera_sent, d=p.camera_dropped),
                "not_installed": tr("camera {name} not available: output visible here only", name=p.camera_device),
+               "waiting": tr("camera {name}: waiting for the first frame", name=p.camera_device),
                "disabled": tr("camera output disabled"),
                "error": tr("camera error: {e}", e=p.camera_error)}.get(p.camera_state, p.camera_state)
         self.stats.setText(tr("Pipeline {state} · latency {lat} ms (p95 {p95}) · processing {proc} ms ({backend} render "

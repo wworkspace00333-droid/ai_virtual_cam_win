@@ -43,6 +43,10 @@ class DashboardPage:
         self.cards["Mode"].set(mode.label, mode.description)
 
     def refresh_extension(self) -> None:
+        from vcstudio.platform import IS_WINDOWS
+        if IS_WINDOWS:
+            self._refresh_camera_windows()
+            return
         exts = camera_extensions()
         ours = [e for e in exts if OUR_BUNDLE_HINT in e["bundle_id"]]
         if ours:
@@ -52,6 +56,41 @@ class DashboardPage:
         else:
             others = ", ".join(e["name"] for e in exts) or tr("none")
             self.cards["Camera extension"].set("Not installed", tr("See Virtual Camera page. Other camera extensions: {others}", others=others), "idle")
+
+    def _refresh_camera_windows(self) -> None:
+        """Windows: the app's own camera (DirectShow / Media Foundation registration + device list), as on the
+        Virtual Camera page. Listing devices can take a moment, so it runs off the GUI thread."""
+        import threading
+        from PySide6.QtCore import QObject, Signal
+
+        class _Sig(QObject):
+            done = Signal(object)
+        if not hasattr(self, "_cam_sig"):
+            self._cam_sig = _Sig()
+            self._cam_sig.done.connect(self._show_camera_status)
+        card = self.cards["Camera extension"]
+        card._label.setText(tr("Virtual camera"))         # "Camera extension" is the macOS term
+        card.set("Checking…", "", "idle")
+
+        def work():
+            from vcstudio.camera import camera_manager
+            try:
+                st = camera_manager.status()
+            except Exception as e:                    # never let a status probe break the dashboard
+                st = e
+            self._cam_sig.done.emit(st)
+        threading.Thread(target=work, name="dashboard-camera-status", daemon=True).start()
+
+    def _show_camera_status(self, st) -> None:
+        card = self.cards["Camera extension"]
+        if isinstance(st, Exception):
+            card.set("Unknown", str(st), "warn")
+        elif st.ready:
+            card.set("Installed", tr("Visible to other apps. Details: Virtual Camera page."), "ok")
+        elif st.extension_enabled:
+            card.set("Installed", tr(st.message), "warn")
+        else:
+            card.set("Not installed", tr("See Virtual Camera page."), "idle")
 
     def on_capture(self, c) -> None:
         level = {"running": "ok", "frozen": "warn", "reconnecting": "warn", "no_signal": "error",
@@ -68,7 +107,9 @@ class DashboardPage:
             self.cards["Output FPS"].set("—", "No pipeline running")
             return
         cam = {"connected": ("Camera connected", "ok"), "not_installed": ("Camera not installed", "warn"),
-               "disabled": ("Camera output off", "idle"), "error": ("Camera error", "error")}[p.camera_state]
+               "waiting": ("Camera waiting for video", "idle"),
+               "disabled": ("Camera output off", "idle"), "error": ("Camera error", "error")}.get(
+            p.camera_state, (p.camera_state, "idle"))
         level = {"running": cam[1], "paused": "warn", "passthrough": "error"}.get(p.state, "idle")
         self.cards["Output"].set(p.state.title(), tr(cam[0]) + " · " + tr("sent {n}", n=p.camera_sent) +
                                  (f" · {p.passthrough_reason}" if p.passthrough_reason else ""), level)
@@ -95,6 +136,8 @@ class DashboardPage:
         self.cards["Memory"].set(fmt_bytes(s.footprint or s.process_rss),
                                  tr("footprint · system {p}% of {total}", p=f"{s.mem_percent:.0f}", total=fmt_bytes(s.mem_total)), mem_state)
         if s.gpu_percent is None:
-            self.cards["GPU"].set("n/a", "IOAccelerator statistics unavailable")
+            from vcstudio.platform import IS_WINDOWS
+            self.cards["GPU"].set("n/a", tr("GPU counters unavailable (no hardware GPU)") if IS_WINDOWS
+                                  else "IOAccelerator statistics unavailable")
         else:
             self.cards["GPU"].set(f"{s.gpu_percent:.0f}%", tr("System-wide GPU · in use {mem}", mem=fmt_bytes(s.gpu_mem)), "ok")

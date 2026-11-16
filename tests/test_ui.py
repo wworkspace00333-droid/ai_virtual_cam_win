@@ -32,6 +32,24 @@ def test_camera_page_reports_not_installed_honestly(win):
         assert "Not" in page.cards["Camera device"].value.text()
 
 
+@pytest.mark.skipif(__import__("sys").platform != "win32", reason="Windows camera status on the dashboard")
+def test_dashboard_camera_card_matches_the_camera_status(win, qtbot):
+    """The dashboard showed the macOS camera-extension status on Windows ("Not installed" with the camera installed)."""
+    from vcstudio.camera import camera_manager
+    card = win.pages[win.page_keys().index("dashboard")].cards["Camera extension"]
+    qtbot.waitUntil(lambda: card.value.text() not in ("Checking…", "Проверка…", "—"), timeout=30000)
+    st = camera_manager.status()
+    installed = card.value.text() in ("Installed", "Установлено", "Установлена")
+    assert installed == st.extension_enabled, (card.value.text(), st)
+    assert "IOAccelerator" not in win.pages[win.page_keys().index("dashboard")].cards["GPU"].detail.text()
+
+
+def test_camera_output_waits_before_the_first_frame():
+    from vcstudio.core.video_pipeline import CameraOutputController
+    assert CameraOutputController("AI Virtual Camera", "", True).state == "waiting"
+    assert CameraOutputController("AI Virtual Camera", "", False).state == "disabled"
+
+
 @pytest.mark.skipif(__import__("sys").platform != "darwin", reason="OBS camera-extension output target is macOS only")
 def test_camera_page_output_target_switch(win):
     from vcstudio.camera.output import OUTPUT_TARGETS, target_for
