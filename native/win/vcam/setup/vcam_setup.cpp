@@ -4,6 +4,7 @@
 //   vcam-setup --install [--dshow-only | --mf-only | --both]   register the camera(s)
 //   vcam-setup --uninstall                            remove both
 //   vcam-setup --rename "<name>"                      rename the camera(s): re-registers what is installed
+//   vcam-setup --reinstall                            remove both, then register the same set again (repair)
 //   vcam-setup --status                               print what is registered and the camera name
 //
 // DirectShow camera (vcam_dshow.dll): Windows 10 and 11, loaded by DirectShow apps in-process.
@@ -186,13 +187,37 @@ int wmain(int argc, wchar_t **argv) {
 		rc = call_export(L"vcam_dshow.dll", "DllUnregisterServer");
 	} else if (cmd == L"--rename") {
 		rc = rename_camera(opt);
+	} else if (cmd == L"--reinstall") {
+		// Repair: a camera that stopped working (moved files, a failed update, a Frame Server that kept a stale
+		// registration) is removed completely and registered again, the same devices as before.
+		const bool ds = registered(kDShowClsid), mf = registered(kMfClsid);
+		printf("reinstall: directshow %s, media foundation %s\n", ds ? "yes" : "no", mf ? "yes" : "no");
+		uninstall_mf();
+		if (ds) call_export(L"vcam_dshow.dll", "DllUnregisterServer");
+		if (ds && mf) {
+			rc = call_export(L"vcam_dshow.dll", "DllRegisterServer");
+			if (rc == 0 && install_mf() != 0) rc = 3;
+		} else if (ds) {
+			rc = call_export(L"vcam_dshow.dll", "DllRegisterServer");
+		} else if (mf) {
+			rc = install_mf();
+			if (rc != 0) { rc = call_export(L"vcam_dshow.dll", "DllRegisterServer"); if (rc == 0) rc = 3; }
+		} else {                                // nothing was registered: a normal install
+			if (create_vc() && install_mf() == 0) {
+				printf("installed: media foundation camera\n");
+			} else {
+				rc = call_export(L"vcam_dshow.dll", "DllRegisterServer");
+				if (rc == 0 && create_vc()) rc = 3;
+			}
+		}
 	} else if (cmd == L"--status") {
 		printf("name: %ls\n", vcam::camera_name().c_str());
 		printf("directshow: %s\n", registered(kDShowClsid) ? "registered" : "not registered");
 		printf("media foundation: %s%s\n", registered(kMfClsid) ? "registered" : "not registered",
 		       create_vc() ? "" : " (MFCreateVirtualCamera unavailable on this Windows)");
 	} else {
-		fwprintf(stderr, L"usage: vcam-setup --install [--dshow-only|--mf-only|--both] | --uninstall | --rename <name> | --status\n");
+		fwprintf(stderr, L"usage: vcam-setup --install [--dshow-only|--mf-only|--both] | --uninstall | --reinstall | "
+		                 L"--rename <name> | --status\n");
 		rc = 1;
 	}
 	MFShutdown();

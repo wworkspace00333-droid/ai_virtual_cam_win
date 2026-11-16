@@ -57,6 +57,9 @@ def _load():
         lib.vcs_flush.argtypes = [ctypes.c_void_p, ctypes.c_int]
         lib.vcs_is_warp.argtypes = [ctypes.c_void_p]
         lib.vcs_is_warp.restype = ctypes.c_int
+        if hasattr(lib, "vcs_device_status"):          # older builds of the DLL lack it
+            lib.vcs_device_status.argtypes = [ctypes.c_void_p]
+            lib.vcs_device_status.restype = ctypes.c_long
         _lib = lib
         log.info("Loaded Direct3D 11 compositor %s", p)
         return _lib
@@ -69,6 +72,18 @@ def available() -> bool:
 def load_error() -> str:
     _load()
     return _lib_error
+
+
+class DeviceLost(RuntimeError):
+    """The Direct3D device was removed or reset (driver update / crash, GPU switch); a new context is needed."""
+
+    def __init__(self, reason: int, msg: str):
+        super().__init__(msg)
+        self.reason = reason
+
+
+DEVICE_LOST_NAMES = {0x887A0005: "DXGI_ERROR_DEVICE_REMOVED", 0x887A0007: "DXGI_ERROR_DEVICE_RESET",
+                     0x887A0006: "DXGI_ERROR_DEVICE_HUNG", 0x887A0020: "DXGI_ERROR_DRIVER_INTERNAL_ERROR"}
 
 
 class D3D11Context:
@@ -95,6 +110,19 @@ class D3D11Context:
         self._lib.vcs_last_error(self._h, buf, 512)
         return buf.value.decode("utf-8", "replace")
 
+    def device_status(self) -> int:
+        """0 while the device works, else the removal reason (HRESULT as unsigned 32-bit)."""
+        if not self._h or not hasattr(self._lib, "vcs_device_status"):
+            return 0
+        return self._lib.vcs_device_status(self._h) & 0xFFFFFFFF
+
+    def _fail(self, what: str, rc: int):
+        reason = self.device_status()
+        if reason:
+            name = DEVICE_LOST_NAMES.get(reason, f"0x{reason:08X}")
+            raise DeviceLost(reason, f"Direct3D 11 device lost during {what} ({name}): {self.error()}")
+        raise RuntimeError(f"Direct3D 11 {what} failed ({rc}): {self.error()}")
+
     def upload(self, slot: int, arr: np.ndarray) -> None:
         a = np.ascontiguousarray(arr)
         if a.dtype != np.uint8:
@@ -107,7 +135,7 @@ class D3D11Context:
             raise ValueError("upload expects (H, W) uint8 masks or (H, W, 4) BGRA")
         rc = self._lib.vcs_upload(self._h, slot, a.ctypes.data, a.shape[1], a.shape[0], stride, fmt)
         if rc != 0:
-            raise RuntimeError(f"texture upload failed ({rc}): {self.error()}")
+            self._fail("texture upload", rc)
 
     def release(self, slot: int) -> None:
         self._lib.vcs_release_slot(self._h, slot)
@@ -123,7 +151,7 @@ class D3D11Context:
         rc = self._lib.vcs_render(self._h, src.ctypes.data, w, h, src.strides[0], dst.ctypes.data, dst.strides[0],
                                   layers.ctypes.data if n else None, slots.ctypes.data if n else None, n, timing)
         if rc != 0:
-            raise RuntimeError(f"Direct3D 11 render failed ({rc}): {self.error()}")
+            self._fail("render", rc)
         self.last_cpu_ms, self.last_gpu_ms = timing[0], timing[1]
 
     def flush(self, drop_slots: bool = False) -> None:
@@ -176,17 +204,41 @@ class D3D11Backend(MetalBackend):
         return DrawOp(op.roi_id, "composite", op.bbox, op.opacity, mask=op.mask, mask_rect=op.mask_rect,
                       mask_key=op.mask_key, src=patch, src_key=("blurcpu", op.roi_id), inv=inv)
 
+    device_resets = 0                 # times a lost device was replaced (shown in logs; tests)
+
+    def _recreate(self, err: DeviceLost) -> None:
+        """A lost device (driver update or TDR, GPU switch, remote-session reconnect) never recovers: drop it and its
+        textures and create a new one; textures are uploaded again by build_layers on the next frame."""
+        log.warning("%s - creating a new Direct3D 11 device", err)
+        try:
+            self.ctx.close()
+        except Exception:
+            pass
+        self.ctx = D3D11Context()
+        self.name = "d3d11-warp" if self.ctx.software else "d3d11"
+        self._slots.clear(); self._slot_use.clear(); self._free.clear(); self._next = 0
+        self.device_resets += 1
+        log.info("Direct3D 11 compositor recovered on %s", self.ctx.device_name)
+
     def execute_pb(self, src_pb, w: int, h: int, ops: list[DrawOp]) -> np.ndarray:
         src = np.ascontiguousarray(src_pb)
         dst = self._out.get(h, w)
         if self.ctx.software:
             ops = [self._cpu_blur_as_layer(src, op) if op.kind == "effect" and op.effect == "blur" else op
                    for op in ops]
-        layers, slots, transient = self.build_layers(ops)
-        try:
-            self.ctx.render(src, dst, layers, slots)
-        finally:
-            self._free.extend(transient)
+        for attempt in (1, 2):        # one retry on a fresh device; a second loss goes to the compositor's CPU fallback
+            transient: list[int] = []
+            try:
+                layers, slots, transient = self.build_layers(ops)
+                self.ctx.render(src, dst, layers, slots)
+                return dst
+            except DeviceLost as e:
+                if attempt == 2:
+                    raise
+                self._recreate(e)
+                transient = []
+            finally:
+                self._free.extend(transient)
         return dst
 
     def execute(self, frame: np.ndarray, ops: list[DrawOp]) -> np.ndarray:

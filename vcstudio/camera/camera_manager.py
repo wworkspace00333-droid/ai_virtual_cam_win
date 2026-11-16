@@ -66,7 +66,7 @@ def _status_windows() -> CameraStatus:
         st.message = (f"Not installed. The {name} components (native/win) are built and registered by the "
                       "Windows installer; they are not present in this build yet.")
     else:
-        st.message = "Camera components found but not registered: click Install (administrator rights needed)."
+        st.message = "Not installed: the camera components are here but not registered. Click Install (administrator rights needed)."
     return st
 
 
@@ -152,6 +152,15 @@ def activate() -> tuple[int, str]:
     if IS_WINDOWS:
         return _run_setup_elevated("--install")
     return _run_host("--activate-camera")
+
+
+def reinstall() -> tuple[int, str]:
+    """Windows: repair the camera: remove both devices and register the same set again (one UAC prompt).
+    Exit codes as for install: 0 ok, 3 the DirectShow camera replaced a Media Foundation camera that would not start."""
+    from vcstudio.platform import IS_WINDOWS
+    if not IS_WINDOWS:
+        return 1, "Reinstalling the camera this way is available on Windows."
+    return _run_setup_elevated("--reinstall", timeout=180)
 
 
 def rename(name: str) -> tuple[int, str]:

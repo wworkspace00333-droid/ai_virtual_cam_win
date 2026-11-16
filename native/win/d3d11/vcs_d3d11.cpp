@@ -353,6 +353,15 @@ __declspec(dllexport) void vcs_device_name(void *h, char *buf, int n) {
     snprintf(buf, n, "%s", c ? c->name.c_str() : "");
 }
 
+// S_OK while the device works; otherwise why it was lost (DXGI_ERROR_DEVICE_REMOVED / _RESET / _HUNG, ...): a
+// driver update or crash (TDR), a laptop switching GPUs, a remote session reconnect. A lost device never comes back:
+// the caller creates a new context (and uploads its textures again).
+__declspec(dllexport) long vcs_device_status(void *h) {
+    Ctx *c = (Ctx *)h;
+    if (!c || !c->dev) return (long)E_POINTER;
+    return (long)c->dev->GetDeviceRemovedReason();
+}
+
 __declspec(dllexport) void vcs_last_error(void *h, char *buf, int n) {
     Ctx *c = (Ctx *)h;
     snprintf(buf, n, "%s", c ? c->error.c_str() : "");

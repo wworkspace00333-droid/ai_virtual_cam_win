@@ -46,6 +46,11 @@ def sample(name: str) -> Path:
     return bundle_root() / "sample_data" / name if frozen() else REPO / "tests" / "data" / name
 
 
+def camera_test_page() -> Path:
+    """Local browser page for checking the virtual camera (Virtual Camera page, Windows)."""
+    return bundle_root() / "vcstudio" / "camera" / "camera_test.html"
+
+
 def accuracy_data() -> Path:
     """16 labelled COCO images used by the accuracy check (tests/data/coco16)."""
     return bundle_root() / "sample_data" / "coco16" if frozen() else REPO / "tests" / "data" / "coco16"

@@ -51,6 +51,7 @@ for _n in ("LICENSE", "ThirdPartyNotices.txt"):
 _avd = Path(_md.distribution("av").locate_file("av"))
 if (_avd / "FFMPEG_LICENSE.txt").exists():
     datas.append((str(_avd / "FFMPEG_LICENSE.txt"), "licenses/ffmpeg"))
+datas.append((str(ROOT / "vcstudio" / "camera" / "camera_test.html"), "vcstudio/camera"))   # Virtual Camera page
 for py in glob.glob(str(ROOT / "scripts" / "*.py")):
     datas.append((py, "scripts"))
 

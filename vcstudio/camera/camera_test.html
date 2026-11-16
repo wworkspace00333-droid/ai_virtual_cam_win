@@ -1,0 +1,83 @@
+<!doctype html>
+<!-- Local camera test page (no network): opened from the app's Virtual Camera page in the default browser. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Camera test</title>
+<style>
+  :root { --bg: #111418; --panel: #1b2027; --text: #e6e9ee; --muted: #9aa4b2; --ok: #3fb950; --err: #f85149; --accent: #4c8dff; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 20px 16px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p { color: var(--muted); margin: 0 0 14px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  select, button { background: var(--panel); color: var(--text); border: 1px solid #2b323c; border-radius: 6px; padding: 8px 10px; font: inherit; }
+  button { background: var(--accent); border-color: var(--accent); cursor: pointer; }
+  video { width: 100%; background: #000; border-radius: 8px; aspect-ratio: 16 / 9; }
+  #status { margin-top: 10px; }
+  .ok { color: var(--ok); } .err { color: var(--err); }
+  ul { color: var(--muted); padding-left: 20px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Camera test</h1>
+  <p>Pick “AI Virtual Camera” (or “AI Virtual Camera (Windows Virtual Camera)”) and press Start. This is what a
+     browser-based call (Google Meet, Teams on the web, Zoom in the browser) receives. Nothing leaves this computer.</p>
+  <div class="row">
+    <button id="start">Start</button>
+    <select id="cams" aria-label="Camera"></select>
+    <span id="info"></span>
+  </div>
+  <video id="v" autoplay playsinline muted></video>
+  <div id="status"></div>
+  <ul>
+    <li>The browser asks for camera permission the first time; allow it.</li>
+    <li>Only one app can control a Media Foundation camera at a time. If the camera is in use elsewhere, use the
+        DirectShow camera (“AI Virtual Camera” without the suffix) or close the other app.</li>
+    <li>A dark “Waiting for AI Virtual Camera Studio…” card means the camera works but the app is not sending video:
+        start processing in the app.</li>
+  </ul>
+</main>
+<script>
+const sel = document.getElementById("cams"), v = document.getElementById("v");
+const info = document.getElementById("info"), status = document.getElementById("status");
+let stream = null;
+function say(msg, cls) { status.textContent = msg; status.className = cls || ""; }
+async function listCams() {
+  const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+  const keep = sel.value;
+  sel.innerHTML = "";
+  for (const d of devs) {
+    const o = document.createElement("option");
+    o.value = d.deviceId; o.textContent = d.label || "Camera (label after permission)";
+    if (/AI Virtual Camera/i.test(d.label)) o.textContent += "  ←";
+    sel.appendChild(o);
+  }
+  if (keep) sel.value = keep;
+  const ours = devs.filter(d => /AI Virtual Camera/i.test(d.label)).length;
+  say(devs.length ? `${devs.length} camera(s); AI Virtual Camera found: ${ours ? "yes (" + ours + ")" : (devs[0].label ? "no" : "allow access to see names")}`
+                  : "No cameras visible to the browser.", ours ? "ok" : "");
+}
+async function start() {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: sel.value ? { deviceId: { exact: sel.value },
+      width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } } : true });
+    v.srcObject = stream;
+    const s = stream.getVideoTracks()[0].getSettings();
+    info.textContent = `${s.width}×${s.height} @ ${Math.round(s.frameRate || 0)} fps`;
+    await listCams();
+    say("Receiving video from: " + stream.getVideoTracks()[0].label, "ok");
+  } catch (e) {
+    say(`Could not open the camera: ${e.name}${e.message ? " — " + e.message : ""}`, "err");
+  }
+}
+document.getElementById("start").onclick = start;
+sel.onchange = () => { if (stream) start(); };
+navigator.mediaDevices.addEventListener("devicechange", listCams);
+listCams();
+</script>
+</body>
+</html>

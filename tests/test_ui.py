@@ -43,6 +43,30 @@ def test_dashboard_camera_card_matches_the_camera_status(win, qtbot):
     assert "IOAccelerator" not in win.pages[win.page_keys().index("dashboard")].cards["GPU"].detail.text()
 
 
+@pytest.mark.skipif(__import__("sys").platform != "win32", reason="Windows camera page")
+def test_camera_page_offers_reinstall_and_app_checks(win, monkeypatch):
+    import re
+    from pathlib import Path
+    page = win.pages[win.page_keys().index("camera")]
+    assert not page.reinstall_btn.isHidden() and not page.browser_btn.isHidden()
+    html = (Path(__file__).resolve().parents[1] / "vcstudio" / "camera" / "camera_test.html").read_text(encoding="utf-8")
+    assert "getUserMedia" in html and not re.search(r"(src|href)=[\"']https?://", html)   # no network resources
+    opened = []
+    monkeypatch.setattr("PySide6.QtGui.QDesktopServices.openUrl", lambda url: opened.append(url.toLocalFile()))
+    page._open_test_page()
+    assert opened and Path(opened[0]).name == "camera_test.html" and Path(opened[0]).exists()
+    calls = []
+    import vcstudio.camera.camera_manager as cmm
+    monkeypatch.setattr(cmm, "reinstall", lambda: (calls.append("reinstall"), (0, ""))[1])
+    page.reinstall_btn.setEnabled(True)
+    page.reinstall_btn.click()                       # the button starts the (mocked) elevated reinstall
+    import time
+    t = time.monotonic()
+    while not calls and time.monotonic() - t < 3:
+        time.sleep(0.05)
+    assert calls == ["reinstall"]
+
+
 def test_camera_output_waits_before_the_first_frame():
     from vcstudio.core.video_pipeline import CameraOutputController
     assert CameraOutputController("AI Virtual Camera", "", True).state == "waiting"

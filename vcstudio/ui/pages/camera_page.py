@@ -56,7 +56,11 @@ class VirtualCameraPage:
         self.uninstall_btn = QPushButton(tr("Uninstall")); self.uninstall_btn.setObjectName("danger")
         self.approve_btn = QPushButton(tr("Open camera privacy settings" if IS_WINDOWS else "Open approval settings"))
         self.refresh_btn = QPushButton(tr("Refresh"))
-        for b in (self.install_btn, self.uninstall_btn, self.approve_btn, self.refresh_btn):
+        self.reinstall_btn = QPushButton(tr("Reinstall camera"))
+        self.reinstall_btn.setToolTip(tr("Removes both camera devices and registers them again (administrator rights). "
+                                         "Use it when other apps stopped seeing the camera."))
+        self.reinstall_btn.setVisible(IS_WINDOWS)
+        for b in (self.install_btn, self.reinstall_btn, self.uninstall_btn, self.approve_btn, self.refresh_btn):
             row.addWidget(b)
         row.addStretch()
         st.layout_.addLayout(row)
@@ -111,6 +115,31 @@ class VirtualCameraPage:
         test.layout_.addWidget(self.test_info)
         lay.addWidget(test)
 
+        if IS_WINDOWS:          # where to pick the camera in common apps, and a browser test page (no network)
+            apps = Card("Check in other apps")
+            from vcstudio.core.devices import own_camera_name
+            nm = own_camera_name()
+            steps = QLabel(tr(
+                "<b>Windows Camera app</b>: open it and switch cameras until “{mf}” appears.<br>"
+                "<b>Browser</b> (Chrome, Edge — and browser calls in Meet, Teams, Zoom): “Open browser test page” below.<br>"
+                "<b>Zoom</b>: Settings → Video → Camera → “{mf}” or “{ds}”.<br>"
+                "<b>Microsoft Teams</b>: Settings → Devices → Camera → “{mf}”.<br>"
+                "<b>Discord</b>: User Settings → Voice &amp; Video → Camera → “{ds}”.<br>"
+                "<b>OBS Studio</b>: Sources → + → Video Capture Device → “{ds}”.<br>"
+                "Windows 11 shows the Media Foundation camera as “{mf}” to every app; the DirectShow camera “{ds}” "
+                "(if installed) can be used by several apps at once. Only one app at a time can use the Media "
+                "Foundation camera.", mf=f"{nm} (Windows Virtual Camera)", ds=nm))
+            steps.setWordWrap(True); steps.setTextFormat(Qt.RichText)
+            apps.layout_.addWidget(steps)
+            arow = QHBoxLayout()
+            self.browser_btn = QPushButton(tr("Open browser test page"))
+            self.wincam_btn = QPushButton(tr("Open the Windows Camera app"))
+            arow.addWidget(self.browser_btn); arow.addWidget(self.wincam_btn); arow.addStretch()
+            apps.layout_.addLayout(arow)
+            lay.addWidget(apps)
+            self.browser_btn.clicked.connect(self._open_test_page)
+            self.wincam_btn.clicked.connect(lambda: __import__("os").startfile("microsoft.windows.camera:"))
+
         ext = Card("Registered camera components" if IS_WINDOWS else "Installed camera extensions (systemextensionsctl)")
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels([tr("Name"), tr("File") if IS_WINDOWS else tr("Bundle ID"),
@@ -124,6 +153,7 @@ class VirtualCameraPage:
         self._sig = _Sig(); self._sig.done.connect(self._done)
         self.sender = None
         self.install_btn.clicked.connect(lambda: self._async("install", cm.activate))
+        self.reinstall_btn.clicked.connect(lambda: self._async("reinstall", cm.reinstall))
         self.uninstall_btn.clicked.connect(self._uninstall)
         self.approve_btn.clicked.connect(cm.open_approval_settings)
         self.refresh_btn.clicked.connect(self.refresh)
@@ -198,6 +228,7 @@ class VirtualCameraPage:
                                         "ok" if s.device_visible else "idle")
         self.msg.setText(tr(s.message))
         self.install_btn.setEnabled(s.host_app is not None)
+        self.reinstall_btn.setEnabled(s.host_app is not None)
         self.uninstall_btn.setEnabled(s.extension_state != "not_installed")
         visible = self.selected_device_visible()
         dev, _ = self.output_device()
@@ -246,7 +277,7 @@ class VirtualCameraPage:
     def _done(self, kind, payload):
         rc, _, out = payload.partition("|")
         self.refresh()
-        if kind in ("install", "uninstall"):
+        if kind in ("install", "uninstall", "reinstall"):
             extra = {"2": text("camera_needs_approval"),
                      "3": text("camera_fallback") if IS_WINDOWS else text("camera_needs_restart")}.get(rc, "")
             self.msg.setText((f"{tr(kind.title())}: " + tr("exit {rc}.", rc=rc) + f" {out} {tr(extra)}").strip())
@@ -319,6 +350,17 @@ class VirtualCameraPage:
         self.chain_info.setStyleSheet("color: #3fb950;" if ok else "color: #f85149;")
         self.chain_info.setText("\n".join(lines))
         self.last_chain = results
+
+    def _open_test_page(self):
+        """Copy the local test page into the data folder (a plain path the browser can open) and open it."""
+        import shutil
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        from vcstudio.core.resources import camera_test_page
+        src = camera_test_page()
+        dst = self.ctx.paths.root / "camera_test.html"
+        shutil.copyfile(src, dst)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(dst)))
 
     def _open_reports(self):
         from PySide6.QtCore import QUrl

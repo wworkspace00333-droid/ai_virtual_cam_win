@@ -245,6 +245,46 @@ def test_fallback_to_cpu_when_metal_fails(comps, scene, monkeypatch):
     assert diff(out, cpu.render(scene, regs, spec, {a.id: a}))[0] == 0
 
 
+@pytest.mark.skipif(not IS_WINDOWS, reason="Direct3D device loss")
+def test_lost_d3d11_device_is_replaced_and_the_frame_still_rendered_on_the_gpu(comps, scene, monkeypatch):
+    """A driver update / TDR removes the device: the backend creates a new one, uploads the textures again and keeps
+    rendering on the GPU (no CPU fallback). The loss is simulated on the old device only."""
+    from vcstudio.platform.win.d3d11 import D3D11Context, DeviceLost
+    lib, cpu, gpu = comps
+    a = lib.import_file(DATA / "logo_alpha.png")
+    roi = new_rect("R", 0.1, 0.1, 0.5, 0.5)
+    regs = resolve([roi], [], 1280, 720)
+    spec = {roi.id: ReplacementSpec(enabled=True, asset_id=a.id)}
+    gpu.render(scene, regs, spec, {a.id: a})                          # textures uploaded to the first device
+    backend = gpu.metal
+    old = backend.ctx
+
+    def removed(*args, **kw):
+        raise DeviceLost(0x887A0005, "Direct3D 11 device lost during render (DXGI_ERROR_DEVICE_REMOVED): simulated")
+    monkeypatch.setattr(old, "render", removed)
+    out = gpu.render(scene, regs, spec, {a.id: a})
+    assert backend.ctx is not old and isinstance(backend.ctx, D3D11Context)
+    assert backend.device_resets == 1 and gpu.active.name.startswith("d3d11"), gpu.backend_error
+    assert diff(out, cpu.render(scene, regs, spec, {a.id: a}))[0] <= 3      # same picture as before the loss
+
+
+@pytest.mark.skipif(not IS_WINDOWS, reason="Direct3D device loss")
+def test_d3d11_device_lost_again_on_the_new_device_falls_back_to_cpu(comps, scene, monkeypatch):
+    from vcstudio.platform.win import d3d11 as d
+    lib, cpu, gpu = comps
+    a = lib.import_file(DATA / "logo_alpha.png")
+    roi = new_rect("R", 0.1, 0.1, 0.5, 0.5)
+    regs = resolve([roi], [], 1280, 720)
+    spec = {roi.id: ReplacementSpec(enabled=True, asset_id=a.id)}
+
+    def removed(self, *args, **kw):
+        raise d.DeviceLost(0x887A0005, "simulated: every device is lost")
+    monkeypatch.setattr(d.D3D11Context, "render", removed)
+    out = gpu.render(scene, regs, spec, {a.id: a})
+    assert gpu.active.name == "cpu" and "every device is lost" in gpu.backend_error
+    assert diff(out, cpu.render(scene, regs, spec, {a.id: a}))[0] == 0
+
+
 def test_concurrent_renders_are_serialised(comps, scene):
     import threading
     lib, cpu, gpu = comps

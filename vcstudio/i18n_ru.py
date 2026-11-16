@@ -109,6 +109,15 @@ RU: dict[str, str] = {
     "Visible to other apps. Details: Virtual Camera page.": "Видна другим приложениям. Подробности — на странице «Виртуальная камера».",
     "See Virtual Camera page.": "См. страницу «Виртуальная камера».",
     "Camera waiting for video": "Камера ждёт видео",
+    "Reinstall camera": "Переустановить камеру",
+    "Reinstall": "Переустановка",
+    "Removes both camera devices and registers them again (administrator rights). Use it when other apps stopped seeing the camera.":
+        "Удаляет обе камеры и регистрирует их заново (нужны права администратора). Помогает, если другие приложения перестали видеть камеру.",
+    "Check in other apps": "Проверка в других приложениях",
+    "Open browser test page": "Открыть тестовую страницу в браузере",
+    "Open the Windows Camera app": "Открыть приложение «Камера» Windows",
+    "<b>Windows Camera app</b>: open it and switch cameras until “{mf}” appears.<br><b>Browser</b> (Chrome, Edge — and browser calls in Meet, Teams, Zoom): “Open browser test page” below.<br><b>Zoom</b>: Settings → Video → Camera → “{mf}” or “{ds}”.<br><b>Microsoft Teams</b>: Settings → Devices → Camera → “{mf}”.<br><b>Discord</b>: User Settings → Voice &amp; Video → Camera → “{ds}”.<br><b>OBS Studio</b>: Sources → + → Video Capture Device → “{ds}”.<br>Windows 11 shows the Media Foundation camera as “{mf}” to every app; the DirectShow camera “{ds}” (if installed) can be used by several apps at once. Only one app at a time can use the Media Foundation camera.":
+        "<b>Приложение «Камера» Windows</b>: откройте и переключайте камеры, пока не появится «{mf}».<br><b>Браузер</b> (Chrome, Edge — и звонки в браузере: Meet, Teams, Zoom): кнопка «Открыть тестовую страницу» ниже.<br><b>Zoom</b>: Настройки → Видео → Камера → «{mf}» или «{ds}».<br><b>Microsoft Teams</b>: Настройки → Устройства → Камера → «{mf}».<br><b>Discord</b>: Настройки пользователя → Голос и видео → Камера → «{ds}».<br><b>OBS Studio</b>: Источники → + → Устройство захвата видео → «{ds}».<br>Windows 11 показывает Media Foundation-камеру всем приложениям как «{mf}»; DirectShow-камерой «{ds}» (если установлена) могут пользоваться несколько приложений сразу. Media Foundation-камерой одновременно может пользоваться только одно приложение.",
     "waiting": "ожидание",
     "camera {name}: waiting for the first frame": "камера {name}: ждёт первый кадр",
     "System-wide GPU · in use {mem}": "Видеоядро всей системы · занято {mem}",
@@ -796,8 +805,8 @@ RU: dict[str, str] = {
     "installer; they are not present in this build yet.":
         "Не установлена. Компоненты AI Virtual Camera (native/win) собирает и регистрирует установщик Windows; в "
         "этой сборке их пока нет.",
-    "Camera components found but not registered: click Install (administrator rights needed).":
-        "Компоненты камеры найдены, но не зарегистрированы: нажмите «Установить» (нужны права администратора).",
+    "Not installed: the camera components are here but not registered. Click Install (administrator rights needed).":
+        "Не установлена: компоненты камеры есть, но не зарегистрированы. Нажмите «Установить» (нужны права администратора).",
     # camera name (Windows)
     "Camera name": "Имя камеры",
     "Name other apps show": "Имя, которое видят приложения",
