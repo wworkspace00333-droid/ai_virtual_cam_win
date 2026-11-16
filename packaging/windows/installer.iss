@@ -5,7 +5,7 @@
 ; (%LOCALAPPDATA%\AIVirtualCameraStudio: settings, profiles, imported assets) is kept on uninstall.
 
 #ifndef AppVersion
-  #define AppVersion "0.3.2"
+  #define AppVersion "0.4.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\..\dist\AI Virtual Camera Studio"

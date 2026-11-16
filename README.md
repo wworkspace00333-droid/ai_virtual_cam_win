@@ -1,11 +1,101 @@
-# AI Virtual Camera Studio
+# AI Virtual Camera Studio for Windows
 
-> **Windows port (this repository).** A port of AI Virtual Camera Studio to Windows 10/11, with its own Windows virtual camera: a Media Foundation camera on Windows 11 and a DirectShow camera on Windows 10. It also uses ONNX Runtime (CUDA / DirectML / CPU), Direct3D 11 compositing and the OBS plugin for Windows. The macOS code is kept unchanged alongside it. The original macOS repository is [ai-virtual-camera-studio](https://github.com/wworkspace00333-droid/ai-virtual-camera-studio).
-> Status, audit, migration matrix, build steps and known limitations (in Russian): **[docs/WINDOWS_PORT_RU.md](docs/WINDOWS_PORT_RU.md)**. All 11 porting stages are done: live end-to-end with OBS and the Windows 11 camera, a 4-hour soak with fault injection, and an installer (scripts\build_installer_win.ps1). The camera can be renamed from the app. Measured on a development server without a GPU; real-hardware numbers come from scripts\windows_pc_report.py.
+A studio app for Windows 10 and 11. It takes video from a webcam, OBS or a screen or window. It finds and tracks objects
+on your PC (ONNX Runtime: CUDA, DirectML or CPU). It hides faces, blurs or replaces the background, puts images, video
+or a logo over regions (Direct3D 11 or CPU), and sends the result to its own system camera, **AI Virtual Camera**. You
+can then pick that camera in Zoom, Teams, Chrome, Discord, OBS or the Windows Camera app.
+
+Everything runs locally. The app sends nothing anywhere. Its only network access is the optional "Download models"
+button for "any object by text" (about 220 MB from huggingface.co, SHA-256 checked); `VCS_NO_NETWORK=1` turns it off.
+There is no telemetry and no auto-update.
+
+**Status: 0.4.0, a preview release.** Developed and tested on a server without a GPU (Windows Server 2025, software
+Direct3D). Speed on real graphics cards, compatibility with every video app and colour in each of them still have
+to be checked on real PCs: [docs/HARDWARE_CHECKLIST.md](docs/HARDWARE_CHECKLIST.md). Changes:
+[CHANGELOG.md](CHANGELOG.md).
+
+## Install
+
+1. Download `AIVirtualCameraStudio-Setup-0.4.0.exe` from [Releases](../../releases) and check it:
+   `Get-FileHash .\AIVirtualCameraStudio-Setup-0.4.0.exe -Algorithm SHA256` must equal the value in the `.sha256` file
+   next to it.
+2. Run it. The installer is not code-signed yet, so SmartScreen shows "Windows protected your PC": click
+   **More info → Run anyway**. Windows asks for administrator rights once to register the camera.
+3. On Windows 11 both cameras are installed (Media Foundation for modern apps, DirectShow for older ones). On
+   Windows 10 the DirectShow camera is installed.
+4. The first-run wizard asks for the language (English / Russian), checks the system, and lets you choose the
+   source and the speed mode.
+
+Requirements: 64-bit Windows 10 version 1809 or later, or Windows 11 (the installer checks this). A DirectX 12
+GPU is recommended for real-time AI (DirectML). Without one the app runs on the CPU in a lower speed mode. Screen and
+window capture through Windows Graphics Capture needs Windows 10 version 1903 or later; older systems fall back to GDI.
+
+Uninstall from *Settings → Apps*: the cameras, the autostart entry and the program folder are removed; your
+settings, profiles and images stay in `%LOCALAPPDATA%\AIVirtualCameraStudio` until you delete that folder.
+
+## What it does (Windows)
+
+- **Inputs:** webcams (Media Foundation or DirectShow), OBS Virtual Camera, direct frame transfer from OBS (plugin),
+  **a screen or a single window** (Windows Graphics Capture, with Desktop Duplication / GDI fallback).
+- **One click on the Preview page:** *Hide face* (YuNet face detection, pixelate or blur), *Logo* (a picture in the
+  corner, transparency kept), *Card for a game*.
+- **Background:** blur or replace everything behind people (PP-HumanSeg person segmentation).
+- **Regions:** draw regions or let them follow detected objects (80 COCO classes with YOLOX, faces, or any object
+  described in words with the optional OWLv2 + SAM 2.1 models); replace them with images or video, blur, pixelate or
+  colour-correct them.
+- **Speed:** the mode is chosen automatically on first start from a short measurement; the AI rate adapts when the PC
+  cannot keep up, so the camera output stays smooth.
+- **Everyday use:** tray icon (closing the window keeps the camera running), start with Windows, global hotkeys,
+  profiles, a diagnostics ZIP without personal data (*Settings*), English and Russian interface.
+
+Documentation in Russian: porting notes, migration matrix and build steps — [docs/WINDOWS_PORT_RU.md](docs/WINDOWS_PORT_RU.md);
+release audit — [docs/AUDIT_WIN.md](docs/AUDIT_WIN.md); model accuracy — [docs/ACCURACY.md](docs/ACCURACY.md).
+
+## Build from source (Windows)
+
+Python 3.12, Visual Studio 2022 Build Tools (C++ x64, Windows SDK), Inno Setup 6 for the installer.
+
+```bash
+python -m venv C:\vcs-env
+```
+
+```bash
+C:\vcs-env\Scripts\pip install -r requirements-windows.txt -r requirements-dev-windows.txt
+```
+
+```bash
+C:\vcs-env\Scripts\python scripts\fetch_models.py
+```
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts\build_native_win.ps1
+```
+
+```bash
+C:\vcs-env\Scripts\python -m vcstudio.app.main
+```
+
+Tests: `C:\vcs-env\Scripts\python -m pytest`; installer: `scripts\build_installer_win.ps1` (licence check, optional
+Authenticode signing through `VCS_SIGN_*` variables, SHA-256 file). See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Licence
+
+Free to install and use; the source code is published for reference and is not open source ([LICENSE](LICENSE)).
+The OBS plugin in `native/obs-plugin` is GPL-2.0-or-later. Third-party components and their licences:
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Do not use the app to deceive identity checks or to impersonate
+other people.
+
+---
+
+# macOS version (original)
+
+The macOS code is kept unchanged in this repository; the original repository is
+[ai-virtual-camera-studio](https://github.com/wworkspace00333-droid/ai-virtual-camera-studio). The rest of this file
+describes the macOS app.
 
 A native macOS (Apple Silicon) studio app. It takes live video from OBS, detects and tracks objects on-device with Core ML / Vision, replaces or overlays regions with images or video using Metal, and publishes the result as a system camera called **AI Virtual Camera** (a CoreMediaIO Camera Extension).
 
-All processing runs locally. The app contains no network code.
+All processing runs locally. The macOS app contains no network code.
 
 > **Status: Stages 1–8 and 10–12 are complete: capture (OBS Virtual Camera and the direct OBS plugin), on-device AI detection and tracking, the ROI editor, image and video replacement, the Metal compositor, the real-time pipeline with watchdogs, M5 optimisation, and the 2-hour soak. Stage 13a is also complete: a self-contained `.app` and DMG. Stage 9 (virtual camera) is code-complete. Stage 9 and Stage 13b (embedded extension, Developer ID signing, notarization) wait on Xcode and an Apple Developer team.** See [docs/ROADMAP.md](docs/ROADMAP.md).
 

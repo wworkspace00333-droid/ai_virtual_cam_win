@@ -1,9 +1,22 @@
 AI Virtual Camera Studio
 Copyright (c) 2025-2026 the AI Virtual Camera Studio authors. All rights reserved.
 
-This software and its source code are proprietary and confidential. No licence is granted to use, copy,
-modify, merge, publish, distribute, sublicense or sell copies of this software, in whole or in part,
-except with the prior written permission of the copyright holders.
+This is proprietary software. The source code is published for reference only; it is not open source.
+
+1. Use of the application. You may download, install and use the application as published by the copyright
+   holders (for example the installer attached to an official GitHub Release of this repository) on any number
+   of your own computers, free of charge, for personal or commercial purposes.
+
+2. What is not permitted without prior written permission of the copyright holders:
+   a. copying, modifying, translating or creating derivative works of the source code or the application;
+   b. redistributing, selling, renting, sublicensing or publishing the application or its source code, in whole
+      or in part, including modified or repackaged builds;
+   c. removing or altering copyright, licence or attribution notices.
+   Running the application from this repository's source code for your own evaluation is allowed; distributing
+   anything built from it is not.
+
+3. Your responsibility. You are responsible for how you use the camera output. Do not use the application to
+   deceive identity checks or to impersonate other people.
 
 The OBS Studio plugin in native/obs-plugin (vcstudio-obs) is not covered by this notice: it is free software
 under the GNU General Public License, version 2 or later (native/obs-plugin/COPYING), and its source is shipped

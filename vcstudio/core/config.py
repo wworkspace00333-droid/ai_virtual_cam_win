@@ -106,6 +106,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "start_minimized": False,    # with Windows sign-in autostart: start in the tray
     },
     "processing": {"compositor": "auto"},     # auto (GPU if available) | metal (macOS) / d3d11 (Windows) | cpu
+    # the only network access: optional models fetched on the user's click (vcstudio/ai/model_download.py);
+    # false (or VCS_NO_NETWORK=1) hides the button. Nothing is ever sent or checked in the background.
+    "privacy": {"allow_downloads": True},
     "hotkeys": dict(DEFAULT_HOTKEYS),
     "logging": {"level": "INFO", "max_bytes": 5_000_000, "backup_count": 5},
 }

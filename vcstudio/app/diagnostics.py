@@ -20,7 +20,6 @@ import json
 import os
 import platform
 import re
-import socket
 import zipfile
 from pathlib import Path
 
@@ -39,7 +38,7 @@ class Redactor:
                          (home.replace("\\", "\\\\"), "<home>")):
             if raw and len(raw) > 3:
                 pairs.append((raw, tag))
-        for raw, tag in ((self._safe(getpass.getuser), "<user>"), (self._safe(socket.gethostname), "<computer>"),
+        for raw, tag in ((self._safe(getpass.getuser), "<user>"), (self._safe(platform.node), "<computer>"),
                          (os.environ.get("COMPUTERNAME", ""), "<computer>"), (os.environ.get("USERNAME", ""), "<user>")):
             if raw and len(raw) > 1:
                 pairs.append((raw, tag))

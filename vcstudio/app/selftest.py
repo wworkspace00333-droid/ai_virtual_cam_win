@@ -458,6 +458,13 @@ def bundle_selfcheck(out: str | None = None) -> int:
             regs = [f"{c.name}: {'registered' if c.registered else 'not registered'}" for c in components()]
             return "; ".join(regs)
         check("virtual camera components", camera)
+
+        def screen():
+            # optional: without a drawn desktop (locked, disconnected remote session) every method fails
+            from vcstudio.platform.win import screen_capture as sc
+            img, backend = sc.grab(f"monitor:{sc.primary_index()}")
+            return f"{backend}, {img.shape[1]}×{img.shape[0]}" + ("" if img.std() > 1 else " (blank picture)")
+        check("screen capture", screen, required=False)
     else:
         def metal():
             from vcstudio.native import metal as m

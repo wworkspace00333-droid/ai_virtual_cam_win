@@ -28,6 +28,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("VCS_DISABLE_GLOBAL_HOTKEYS", "1")
+FROZEN = bool(getattr(sys, "frozen", False))      # run from the installed app: vcstudio.exe --run-script ...
+
+
+def tool(script: str, *args: str) -> list[str]:
+    """Command line for another developer tool: python scripts/<script> from a checkout, or the installed app's
+    vcstudio.exe --run-script <script> (there sys.executable is vcstudio.exe, not a Python interpreter)."""
+    if FROZEN:
+        return [sys.executable, "--run-script", script, *args]
+    return [sys.executable, str(ROOT / "scripts" / script), *args]
+
+
+def app(*args: str) -> list[str]:
+    return [sys.executable, *args] if FROZEN else [sys.executable, "-m", "vcstudio.app.main", *args]
 
 
 def hardware() -> dict:
@@ -45,8 +58,8 @@ def ai_by_provider(runs: int) -> list[dict]:
     from vcstudio.ai.model_manager import REPO_MODELS
     from vcstudio.ai.onnx_engine import _best_dml_device, cpu_threads, letterbox_blob
     from vcstudio.ai.testimages import load_bgra
-    from vcstudio.core.resources import sample
-    img = load_bgra(sample("bus.jpg"))
+    from vcstudio.core.resources import sample_photo
+    img = load_bgra(sample_photo())
     avail = ort.get_available_providers()
     plans = []
     if "CUDAExecutionProvider" in avail:
@@ -57,7 +70,9 @@ def ai_by_provider(runs: int) -> list[dict]:
             plans.append((f"DirectML ({name})", "DmlExecutionProvider", {"device_id": idx}))
     plans.append(("CPU", "CPUExecutionProvider", {}))
     out = []
-    for model in sorted(REPO_MODELS.glob("yolo11*.onnx")):
+    # the shipped detectors (YOLOX), plus Ultralytics YOLO where a developer has it locally (never shipped)
+    models = sorted(REPO_MODELS.glob("yolox_*.onnx")) + sorted(REPO_MODELS.glob("yolo11*.onnx"))
+    for model in models:
         for label, prov, opts in plans:
             row = {"model": model.stem, "provider": label}
             try:
@@ -91,8 +106,8 @@ def ai_by_provider(runs: int) -> list[dict]:
 
 def pipeline(seconds: float, modes: str, out_dir: Path) -> dict | None:
     out = out_dir / "benchmark.json"
-    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "benchmark.py"), "--seconds", str(seconds),
-                        "--modes", modes, "--out", str(out)], cwd=str(ROOT), capture_output=True, text=True)
+    r = subprocess.run(tool("benchmark.py", "--seconds", str(seconds), "--modes", modes, "--out", str(out)),
+                       cwd=str(ROOT), capture_output=True, text=True)
     (out_dir / "benchmark.log").write_text(r.stdout + r.stderr, encoding="utf-8")
     return json.loads(out.read_text(encoding="utf-8")) if out.exists() else {"error": r.stderr[-2000:]}
 
@@ -148,10 +163,9 @@ def camera_modes() -> dict:
 
 def soak(minutes: float, out_dir: Path) -> dict:
     d = out_dir / "soak"
-    subprocess.run([sys.executable, "-m", "vcstudio.app.main", "--soak", str(d), "--minutes", str(minutes)],
-                   cwd=str(ROOT), env=dict(os.environ, PYTHONPATH=str(ROOT)))
-    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "analyse_soak.py"), str(d)], capture_output=True,
-                       text=True)
+    subprocess.run(app("--soak", str(d), "--minutes", str(minutes)), cwd=str(ROOT),
+                   env=dict(os.environ, PYTHONPATH=str(ROOT)))
+    r = subprocess.run(tool("analyse_soak.py", str(d)), capture_output=True, text=True)
     return json.loads(r.stdout) if r.returncode == 0 else {"error": r.stderr[-2000:]}
 
 

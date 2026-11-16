@@ -1,11 +1,11 @@
 # Third-party notices — AI Virtual Camera Studio for Windows
 
-AI Virtual Camera Studio is proprietary software (see `LICENSE`). It includes the open-source components listed below,
+AI Virtual Camera Studio is proprietary software, free to install and use (see `LICENSE`). It includes the open-source components listed below,
 each under its own licence. The full licence texts are installed with the program in
 `<install folder>\_internal\licenses\`. The Windows installer is checked by `scripts/check_licenses.py`: no GPL or
 AGPL component is allowed in it, except the separately licensed OBS plugin, which ships with its source (see the end).
 
-Last reviewed: 2026-11-16, for version 0.3.2. This file is a technical record, not legal advice.
+Last reviewed: 2026-11-16, for version 0.4.0. This file is a technical record, not legal advice.
 
 ## Components that ship in the installer
 
@@ -38,7 +38,10 @@ Last reviewed: 2026-11-16, for version 0.3.2. This file is a technical record, n
 
 The face detector finds face rectangles only; the program does no identity recognition.
 
-Optional models for "any object" (downloaded with `scripts/fetch_models.py --open-vocab`; not in the installer yet):
+Optional models for "any object". They are not in the installer; the app downloads them from huggingface.co only
+when the user clicks "Download models" on the Detection page, and checks each file's SHA-256 (values in
+`vcstudio/ai/model_download.py`). This is the program's only network access. `VCS_NO_NETWORK=1` or the setting
+`privacy.allow_downloads: false` turns it off. Developers can use `scripts/fetch_models.py --open-vocab` instead.
 
 | Item | Licence | Source |
 |---|---|---|

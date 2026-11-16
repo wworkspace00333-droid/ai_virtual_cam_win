@@ -43,9 +43,18 @@ SAM_STD = np.array([0.229, 0.224, 0.225], np.float32)
 MAX_TOKENS = 16
 
 
+def user_models_dir() -> Path:
+    """Where the in-app download puts the models (vcstudio/ai/model_download.py): the app's data folder."""
+    from vcstudio.core.paths import AppPaths
+    return AppPaths.default().models_dir
+
+
 def models_dir() -> Path:
+    """The bundled models folder when it has the set (developer checkout, or a build that ships them), otherwise
+    the app's data folder, where "Download models" saves them."""
     from vcstudio.core.resources import models_dir as md
-    return md()
+    bundled = md()
+    return bundled if (bundled / OWL_FILE).exists() else user_models_dir()
 
 
 def available() -> bool:

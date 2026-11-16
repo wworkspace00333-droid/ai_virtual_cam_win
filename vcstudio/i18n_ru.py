@@ -165,7 +165,15 @@ RU: dict[str, str] = {
         "Опишите, что искать, через запятую — например: red cup, cat, laptop. Пока включено, это заменяет 80 встроенных классов; зоны выбирают предметы по этим словам. Для реального времени нужна видеокарта (на процессоре — секунды на кадр).",
     "Find objects by description": "Искать предметы по описанию",
     "red cup, cat, laptop": "red cup, cat, laptop",
-    "The open-vocabulary model is not installed (scripts/fetch_models.py --open-vocab).": "Модель поиска по описанию не установлена (scripts/fetch_models.py --open-vocab).",
+    "The “any object” models are not installed yet.": "Модели поиска «любых предметов» ещё не установлены.",
+    "Download models (about {mb} MB)": "Скачать модели (около {mb} МБ)",
+    "OWLv2 (Google) and SAM 2.1 (Meta), Apache-2.0, from huggingface.co. Each file is checked against its SHA-256 "
+    "before use. Nothing else is downloaded or sent.":
+        "OWLv2 (Google) и SAM 2.1 (Meta), лицензия Apache-2.0, с huggingface.co. Каждый файл сверяется с SHA-256 "
+        "перед использованием. Больше ничего не скачивается и не отправляется.",
+    "Download failed: {e}. Nothing incomplete was kept; try again later.":
+        "Скачать не удалось: {e}. Недокачанные файлы удалены; попробуйте позже.",
+    "Download cancelled. Nothing incomplete was kept.": "Загрузка отменена. Недокачанные файлы удалены.",
     "Running: {model} on {backend}, {ms} ms per frame.": "Работает: {model} на {backend}, {ms} мс на кадр.",
     "Starts with capture.": "Запустится вместе с захватом.",
     "Type at least one description.": "Введите хотя бы одно описание.",

@@ -1,14 +1,22 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QTimer
+import threading
+
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import (QButtonGroup, QHeaderView, QCheckBox, QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
-                               QPushButton, QRadioButton, QSlider, QSpinBox, QTableWidget, QTableWidgetItem, QTreeWidget,
-                               QTreeWidgetItem)
+                               QProgressBar, QPushButton, QRadioButton, QSlider, QSpinBox, QTableWidget, QTableWidgetItem,
+                               QTreeWidget, QTreeWidgetItem)
 
 from vcstudio.ai.labels import FACE, GROUPS, group_of
+from vcstudio.ai.model_download import APPROX_MB
 from vcstudio.core.config import PERFORMANCE_MODES
 from vcstudio.ui.widgets import Card, page_scaffold
 from vcstudio.i18n import tr
+
+
+class _DownloadSignals(QObject):
+    progress = Signal(str, int, int)        # file, bytes, total
+    finished = Signal(str, str)             # status (ok | cancelled | error), message
 
 
 class DetectionPage:
@@ -75,6 +83,23 @@ class DetectionPage:
         ovc.layout_.addLayout(orow)
         self.ov_info = QLabel(); self.ov_info.setObjectName("muted"); self.ov_info.setWordWrap(True)
         ovc.layout_.addWidget(self.ov_info)
+        # optional models: downloaded only on this click (vcstudio/ai/model_download.py)
+        drow = QHBoxLayout()
+        self.dl_btn = QPushButton(tr("Download models (about {mb} MB)", mb=APPROX_MB))
+        self.dl_cancel = QPushButton(tr("Cancel")); self.dl_cancel.hide()
+        self.dl_bar = QProgressBar(); self.dl_bar.setRange(0, 1000); self.dl_bar.hide()
+        drow.addWidget(self.dl_btn); drow.addWidget(self.dl_bar, 1); drow.addWidget(self.dl_cancel); drow.addStretch()
+        ovc.layout_.addLayout(drow)
+        self.dl_note = QLabel(tr("OWLv2 (Google) and SAM 2.1 (Meta), Apache-2.0, from huggingface.co. Each file is checked "
+                                 "against its SHA-256 before use. Nothing else is downloaded or sent."))
+        self.dl_note.setObjectName("muted"); self.dl_note.setWordWrap(True)
+        ovc.layout_.addWidget(self.dl_note)
+        self._dl_sig = _DownloadSignals()
+        self._dl_sig.progress.connect(self._dl_progress)
+        self._dl_sig.finished.connect(self._dl_finished)
+        self._dl_cancel_evt = None
+        self.dl_btn.clicked.connect(self.start_download)
+        self.dl_cancel.clicked.connect(lambda: self._dl_cancel_evt is not None and self._dl_cancel_evt.set())
         lay.addWidget(ovc)
         self.ov_on.toggled.connect(self._save_open_vocab)
         self.ov_text.editingFinished.connect(self._save_open_vocab)
@@ -174,11 +199,58 @@ class DetectionPage:
             w.blockSignals(False)
         self._open_vocab_info()
 
+    # ---------------- optional model download
+    def _download_state(self) -> None:
+        from vcstudio.ai import model_download as md
+        from vcstudio.ai import open_vocab
+        busy = self._dl_cancel_evt is not None
+        need = bool(md.missing(open_vocab.user_models_dir())) and not (open_vocab.available() and
+                                                                       open_vocab.sam_available())
+        allowed = md.network_allowed(self.ctx.settings)
+        for w in (self.dl_btn, self.dl_note):
+            w.setVisible(need and allowed and not busy)
+        self.dl_bar.setVisible(busy); self.dl_cancel.setVisible(busy)
+
+    def start_download(self, opener=None) -> None:
+        from vcstudio.ai import model_download as md
+        from vcstudio.ai import open_vocab
+        if self._dl_cancel_evt is not None or not md.network_allowed(self.ctx.settings):
+            return
+        cancel = threading.Event()
+        self._dl_cancel_evt = cancel
+        self.dl_bar.setValue(0)
+        self._download_state()
+        dest, sig = open_vocab.user_models_dir(), self._dl_sig
+
+        def run():
+            try:
+                got = md.download(dest, lambda n, d, t: sig.progress.emit(n, d, t), cancel, opener=opener)
+                sig.finished.emit("ok", str(len(got)))
+            except md.Cancelled:
+                sig.finished.emit("cancelled", "")
+            except md.DownloadError as e:
+                sig.finished.emit("error", str(e))
+        threading.Thread(target=run, name="model-download", daemon=True).start()
+
+    def _dl_progress(self, name: str, done: int, total: int) -> None:
+        self.dl_bar.setFormat(f"{name.split('/')[-1]}  {done / 1e6:.0f}" + (f" / {total / 1e6:.0f} MB" if total else " MB"))
+        self.dl_bar.setValue(int(1000 * done / total) if total else 0)
+
+    def _dl_finished(self, status: str, msg: str) -> None:
+        self._dl_cancel_evt = None
+        self.ctx.db.log_event("INFO" if status == "ok" else "WARNING", "models", f"open-vocabulary download: {status} {msg}")
+        self._open_vocab_info()
+        if status == "error":
+            self.ov_info.setText(tr("Download failed: {e}. Nothing incomplete was kept; try again later.", e=msg))
+        elif status == "cancelled":
+            self.ov_info.setText(tr("Download cancelled. Nothing incomplete was kept."))
+
     def _open_vocab_info(self) -> None:
         from vcstudio.ai import open_vocab
+        self._download_state()
         if not open_vocab.available():
             self.ov_on.setEnabled(False)
-            self.ov_info.setText(tr("The open-vocabulary model is not installed (scripts/fetch_models.py --open-vocab)."))
+            self.ov_info.setText(tr("The “any object” models are not installed yet."))
             return
         self.ov_on.setEnabled(True)
         a = self.ctx.ai.stats()
