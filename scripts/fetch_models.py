@@ -38,6 +38,30 @@ MODELS = {
 }
 
 
+HF = "https://huggingface.co/"
+OWL_REV = "Xenova/owlv2-base-patch16-ensemble/resolve/3e255bc9bf304b3358a8c1945c0a9514eefe7f10/"
+SAM_REV = "onnx-community/sam2.1-hiera-tiny-ONNX/resolve/814a066640debee5a91e70aa401fb8e17e030503/"
+# optional, --open-vocab: "any object" by text (OWLv2, Google, Apache-2.0) and promptable masks (SAM 2.1, Meta,
+# Apache-2.0); 8-bit ONNX exports pinned to a commit. ~220 MB, not shipped in the installer yet.
+OPEN_VOCAB = {
+    "owlv2_base_ensemble_int8.onnx": (HF + OWL_REV + "onnx/model_quantized.onnx",
+                                      "af8d6a041e4114b06eafabb03047350c7b8f136670a3f8afc7e73c5a74c2b24b", "Apache-2.0"),
+    "owlv2_tokenizer.json": (HF + OWL_REV + "tokenizer.json",
+                             "bbce3185c27ac4daf41ea2dfc864785bdcd1a42815e7646324af20edd671a578", "Apache-2.0"),
+    "sam2.1_tiny/vision_encoder_int8.onnx": (HF + SAM_REV + "onnx/vision_encoder_int8.onnx",
+                                             "d848e08b747ba44ee59b31246988528d5ecc67d1e1c0a2f5c08395c86d92176f", "Apache-2.0"),
+    "sam2.1_tiny/vision_encoder_int8.onnx_data": (HF + SAM_REV + "onnx/vision_encoder_int8.onnx_data",
+                                                  "4359d45f8aafcbc69f945e714af7fb06b74b24c753b5af86b6a230ecd0e737bc",
+                                                  "Apache-2.0"),
+    "sam2.1_tiny/prompt_encoder_mask_decoder_int8.onnx": (
+        HF + SAM_REV + "onnx/prompt_encoder_mask_decoder_int8.onnx",
+        "e53727dc441a3c8716dd4a606d5bbf920e33e7545d1a6ff843c9fb804c7d19b6", "Apache-2.0"),
+    "sam2.1_tiny/prompt_encoder_mask_decoder_int8.onnx_data": (
+        HF + SAM_REV + "onnx/prompt_encoder_mask_decoder_int8.onnx_data",
+        "fdb3179a32388267a944a416c0f992c77a138b69a4bfd94f0bbf7089430d7489", "Apache-2.0"),
+}
+
+
 def sha256(p: Path) -> str:
     h = hashlib.sha256()
     with p.open("rb") as f:
@@ -50,10 +74,13 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", type=Path, default=ROOT / "models")
     ap.add_argument("--check", action="store_true", help="verify only, download nothing")
+    ap.add_argument("--open-vocab", action="store_true", help="also the optional OWLv2 + SAM 2.1 models (~220 MB)")
     a = ap.parse_args()
     bad = 0
-    for name, (url, digest, lic) in MODELS.items():
+    todo = dict(MODELS, **(OPEN_VOCAB if a.open_vocab else {}))
+    for name, (url, digest, lic) in todo.items():
         dst = a.dir / name
+        dst.parent.mkdir(parents=True, exist_ok=True)
         if dst.exists() and sha256(dst) == digest:
             print(f"ok       {name} ({lic})")
             continue

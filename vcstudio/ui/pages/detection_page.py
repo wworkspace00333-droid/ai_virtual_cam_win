@@ -61,6 +61,24 @@ class DetectionPage:
         top.addWidget(classes, 2)
         lay.addLayout(top)
 
+        # "any object" by a text description (OWLv2; masks by SAM 2.1 when an ROI replaces silhouettes)
+        ovc = Card("Any object (by text)")
+        oh = QLabel(tr("Describe what to find, separated by commas — for example: red cup, cat, laptop. While on, this "
+                       "replaces the 80 built-in classes; regions select objects by these words. Needs a GPU for real "
+                       "time (seconds per frame on a CPU)."))
+        oh.setObjectName("muted"); oh.setWordWrap(True)
+        ovc.layout_.addWidget(oh)
+        orow = QHBoxLayout()
+        self.ov_on = QCheckBox(tr("Find objects by description"))
+        self.ov_text = QLineEdit(); self.ov_text.setPlaceholderText(tr("red cup, cat, laptop"))
+        orow.addWidget(self.ov_on); orow.addWidget(self.ov_text, 1)
+        ovc.layout_.addLayout(orow)
+        self.ov_info = QLabel(); self.ov_info.setObjectName("muted"); self.ov_info.setWordWrap(True)
+        ovc.layout_.addWidget(self.ov_info)
+        lay.addWidget(ovc)
+        self.ov_on.toggled.connect(self._save_open_vocab)
+        self.ov_text.editingFinished.connect(self._save_open_vocab)
+
         live = Card("Live detections")
         self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels([tr(h) for h in ("ID", "Class", "State", "Confidence", "Box (x0, y0, x1, y1)",
@@ -146,8 +164,44 @@ class DetectionPage:
                 self._items[n] = it
         self.tree.blockSignals(False)
 
+    def _load_open_vocab(self, body: dict) -> None:
+        ov = (body.get("ai") or {}).get("open_vocab") or {}
+        for w in (self.ov_on, self.ov_text):
+            w.blockSignals(True)
+        self.ov_on.setChecked(bool(ov.get("enabled")))
+        self.ov_text.setText(", ".join(ov.get("queries", [])))
+        for w in (self.ov_on, self.ov_text):
+            w.blockSignals(False)
+        self._open_vocab_info()
+
+    def _open_vocab_info(self) -> None:
+        from vcstudio.ai import open_vocab
+        if not open_vocab.available():
+            self.ov_on.setEnabled(False)
+            self.ov_info.setText(tr("The open-vocabulary model is not installed (scripts/fetch_models.py --open-vocab)."))
+            return
+        self.ov_on.setEnabled(True)
+        a = self.ctx.ai.stats()
+        if self.ov_on.isChecked() and a.model.startswith("owlv2"):
+            self.ov_info.setText(tr("Running: {model} on {backend}, {ms} ms per frame.", model=a.model,
+                                    backend=a.backend, ms=f"{a.inference_ms_avg:.0f}"))
+        elif self.ov_on.isChecked():
+            self.ov_info.setText(tr("Starts with capture."))
+        else:
+            self.ov_info.setText("")
+
+    def _save_open_vocab(self, *_):
+        words = [w.strip() for w in self.ov_text.text().replace(";", ",").split(",") if w.strip()]
+        on = self.ov_on.isChecked() and bool(words)
+        if self.ov_on.isChecked() and not words:
+            self.ov_info.setText(tr("Type at least one description."))
+        self.ctx.update_active_profile(lambda b: b.setdefault("ai", {}).__setitem__(
+            "open_vocab", {"enabled": on, "queries": words}))
+        self._open_vocab_info()
+
     def _load(self):
         body = self.ctx.profiles.active()["body"]
+        self._load_open_vocab(body)
         det, trk = body["detection"], body["tracking"]
         widgets = (self.conf, self.iou, self.fixed, self.freq_auto, self.freq_fixed, self.cls_all, self.cls_only, self.tree,
                    self.trk_on, self.trk_low, self.trk_buf, self.trk_coast, self.trk_smooth, self.trk_class, self.trk_hits)

@@ -34,6 +34,8 @@ def default_profile_body() -> dict[str, Any]:
             "segmentation_model": None,         # optional, loaded only if a ROI needs masks
             "compute_units": "all",             # all | cpu_and_ne | cpu_and_gpu | cpu_only
             "enabled": True,
+            # "any object" by text description (OWLv2 + SAM 2.1); replaces the COCO detector while enabled
+            "open_vocab": {"enabled": False, "queries": []},
         },
         "detection": {
             "confidence": 0.45,          # measured on COCO128 with yolo11s: precision 0.88 / recall 0.51 (0.35: 0.84 / 0.56)

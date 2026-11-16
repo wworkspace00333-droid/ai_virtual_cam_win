@@ -394,6 +394,9 @@ class ROIPage:
             det = body["detection"]
             inc, exc = set(det.get("include_classes", [])), set(det.get("exclude_classes", []))
             builtin = self.ctx.models.builtin_classes()
+            ov = (body.get("ai") or {}).get("open_vocab") or {}
+            if ov.get("enabled"):                    # "any object" mode: the descriptions are the classes
+                builtin = list(ov.get("queries", []))
             known = set(builtin) | {"face"} if builtin else set()
             for c in r.classes:
                 if known and c not in known:

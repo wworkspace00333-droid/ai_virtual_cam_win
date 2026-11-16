@@ -38,6 +38,16 @@ Last reviewed: 2026-11-16, for version 0.3.2. This file is a technical record, n
 
 The face detector finds face rectangles only; the program does no identity recognition.
 
+Optional models for "any object" (downloaded with `scripts/fetch_models.py --open-vocab`; not in the installer yet):
+
+| Item | Licence | Source |
+|---|---|---|
+| OWLv2 base patch16 ensemble, 8-bit ONNX (`owlv2_base_ensemble_int8.onnx`, `owlv2_tokenizer.json`) | Apache-2.0 (Google, `google/owlv2-base-patch16-ensemble`) | ONNX export `Xenova/owlv2-base-patch16-ensemble`, commit `3e255bc9` |
+| SAM 2.1 hiera-tiny, 8-bit ONNX (`sam2.1_tiny/`) | Apache-2.0 (Meta, `facebook/sam2.1-hiera-tiny`) | ONNX export `onnx-community/sam2.1-hiera-tiny-ONNX`, commit `814a0666` |
+
+SHA-256 of every file: `scripts/fetch_models.py`. The CLIP text tokenizer is implemented in the program
+(`vcstudio/ai/open_vocab.py`, from the model's `tokenizer.json`); no tokenizer library is shipped.
+
 ## Not included (licence reasons)
 
 - **Ultralytics YOLO11 models** (AGPL-3.0): no longer in the installer. A user can add them with "Import model" on their

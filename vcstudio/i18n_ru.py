@@ -110,6 +110,15 @@ RU: dict[str, str] = {
     "See Virtual Camera page.": "См. страницу «Виртуальная камера».",
     "Camera waiting for video": "Камера ждёт видео",
     "Reinstall camera": "Переустановить камеру",
+    "Any object (by text)": "Любой предмет (по описанию)",
+    "Describe what to find, separated by commas — for example: red cup, cat, laptop. While on, this replaces the 80 built-in classes; regions select objects by these words. Needs a GPU for real time (seconds per frame on a CPU).":
+        "Опишите, что искать, через запятую — например: red cup, cat, laptop. Пока включено, это заменяет 80 встроенных классов; зоны выбирают предметы по этим словам. Для реального времени нужна видеокарта (на процессоре — секунды на кадр).",
+    "Find objects by description": "Искать предметы по описанию",
+    "red cup, cat, laptop": "red cup, cat, laptop",
+    "The open-vocabulary model is not installed (scripts/fetch_models.py --open-vocab).": "Модель поиска по описанию не установлена (scripts/fetch_models.py --open-vocab).",
+    "Running: {model} on {backend}, {ms} ms per frame.": "Работает: {model} на {backend}, {ms} мс на кадр.",
+    "Starts with capture.": "Запустится вместе с захватом.",
+    "Type at least one description.": "Введите хотя бы одно описание.",
     "Background": "Фон",
     "Blur or replace everything behind people in the whole frame (person segmentation, PP-HumanSeg). Region replacements are drawn on top.":
         "Размыть или заменить всё за людьми во всём кадре (сегментация людей, PP-HumanSeg). Замены по зонам рисуются поверх.",

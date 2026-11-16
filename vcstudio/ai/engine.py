@@ -251,7 +251,7 @@ class AIEngine:
     def _judge_max_quality(self, cfg: DetectionConfig, mode: str) -> None:
         """Step down to a smaller model if the current one cannot sustain this mode's budget here."""
         budget = QUALITY_BUDGET_MS.get(mode)
-        if budget is None or self._detector is None:
+        if budget is None or self._detector is None or cfg.open_vocab:   # one open-vocabulary model: no stepping
             return
         name = cfg.segmentation_model if cfg.need_masks else cfg.detector_model
         if name not in ("auto", "", None):
@@ -316,7 +316,34 @@ class AIEngine:
                 return m
         return ranked[-1]                        # everything too slow: use the smallest anyway
 
+    def _ensure_open_vocab(self, cfg: DetectionConfig) -> None:
+        """'Any object' by text: OWLv2 (+ SAM 2.1 masks when an ROI replaces silhouettes) instead of the COCO model."""
+        from vcstudio.ai.open_vocab import OpenVocabPipeline
+        cur = self._detector
+        want_masks = cfg.need_masks
+        if isinstance(cur, OpenVocabPipeline) and cur.masks == want_masks and \
+                getattr(cur, "_cu", None) == cfg.compute_units:
+            if cur.queries != cfg.open_vocab_queries:
+                cur.owl.set_queries(cfg.open_vocab_queries)       # new words: no reload
+                cur.queries = cur.owl.queries
+            return
+        self._set_state("loading")
+        self._detector = None
+        self.models.unload()
+        t0 = time.perf_counter()
+        det = OpenVocabPipeline(cfg.open_vocab_queries, cfg.compute_units, self.models.cache_dir / "onnx", want_masks)
+        det._cu = cfg.compute_units
+        with self._lock:
+            self._stats.model, self._stats.compute_units = det.name, cfg.compute_units
+            self._stats.backend = det.backend
+            self._stats.model_load_s = round(time.perf_counter() - t0, 2)
+        self._lat.clear()
+        self._detector = det
+
     def _ensure_models(self, cfg: DetectionConfig, mode: str) -> None:
+        if cfg.open_vocab:
+            self._ensure_open_vocab(cfg)
+            return
         # Silhouette replacement needs masks: the segmentation model replaces the detector
         # (it also returns boxes and classes), so only one model is resident.
         task, name = ("segment", cfg.segmentation_model) if cfg.need_masks else ("detect", cfg.detector_model)

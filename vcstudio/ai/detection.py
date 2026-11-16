@@ -62,6 +62,13 @@ class DetectionConfig:
     fixed_fps: float = 15.0
     segmentation_model: str = "auto"
     need_masks: bool = False                          # some ROI uses object (silhouette) replacement
+    # "any object" by text (OWLv2, vcstudio/ai/open_vocab.py): replaces the COCO detector while enabled;
+    # detections are labelled with the query text; masks from SAM 2.1 when need_masks
+    open_vocab_queries: list[str] = field(default_factory=list)
+
+    @property
+    def open_vocab(self) -> bool:
+        return bool(self.open_vocab_queries)
 
     @classmethod
     def from_profile(cls, body: dict) -> "DetectionConfig":
@@ -81,6 +88,8 @@ class DetectionConfig:
             need_masks=any(r.get("enabled", True) and (r.get("replacement") or {}).get("enabled")
                            and (r.get("replacement") or {}).get("mode") == "object" and r.get("mode") != "manual"
                            for r in body.get("rois", [])),
+            open_vocab_queries=([q for q in (ai.get("open_vocab") or {}).get("queries", []) if str(q).strip()]
+                                if (ai.get("open_vocab") or {}).get("enabled") else []),
         )
 
 
