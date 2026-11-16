@@ -1,5 +1,6 @@
 """Windows "AI Virtual Camera": shared-memory protocol, output controller, and live loopback through the
 installed DirectShow camera (skipped when the camera is not registered: run build\\native\\vcam-setup.exe --install)."""
+import os
 import re
 import sys
 import threading
@@ -213,7 +214,8 @@ def test_media_foundation_source_in_process():
         assert m, r.stdout
         return int(m[1]), float(m[2]), tuple(int(x, 16) for x in m.group(3, 4, 5))
     n, fps, px = read()
-    assert n == 45 and 25 <= fps <= 35 and all(abs(a - b) <= 3 for a, b in zip(px, (40, 32, 28)))   # the card
+    lo = 15 if os.environ.get("CI") else 25          # shared 2-core CI runners measured 21.4 fps
+    assert n == 45 and lo <= fps <= 35 and all(abs(a - b) <= 3 for a, b in zip(px, (40, 32, 28)))   # the card
     w = VcamWriter()
     stop = threading.Event()
     img = np.zeros((1080, 1920, 4), np.uint8); img[..., 1] = 40; img[..., 2] = 200; img[..., 3] = 255
