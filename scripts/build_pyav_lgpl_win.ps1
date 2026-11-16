@@ -28,6 +28,8 @@ $ProgressPreference = "SilentlyContinue"
 function Check($what) { if ($LASTEXITCODE -ne 0) { throw "$what failed (exit $LASTEXITCODE)" } }
 function Sha($p) { (Get-FileHash $p -Algorithm SHA256).Hash.ToLower() }
 
+New-Item -ItemType Directory -Force $Work | Out-Null      # a fresh CI machine has no work folder yet
+
 # ---- FFmpeg (LGPL)
 $ffRoot = Join-Path $Work "ffmpeg-lgpl"
 if (-not $FfmpegZip) {
