@@ -7,6 +7,10 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+## [0.4.4] — 2026-11-17
+
+Microphone sound in recordings and instant replay.
+
 ### Added
 - **Sound in recordings and instant replay** (Settings → Recording → Microphone): the chosen microphone is
   recorded as AAC next to the video, through FFmpeg's DirectShow input and its own AAC encoder in the LGPL build
@@ -199,6 +203,7 @@ for real hardware are still to be measured (docs/HARDWARE_CHECKLIST.md).
 
 macOS releases; see the history of the original repository.
 
+[0.4.4]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.4
 [0.4.3]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.3
 [0.4.2]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.2
 [0.4.1]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.1
