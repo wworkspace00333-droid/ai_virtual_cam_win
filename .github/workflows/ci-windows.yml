@@ -57,6 +57,17 @@ jobs:
         shell: pwsh
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_native_win.ps1 -Test
 
+      # The runner is an administrator: register the camera built above, so the virtual-camera tests (shared memory,
+      # DirectShow client, Media Foundation through Frame Server where the runner has it) run here instead of
+      # skipping (D11). Not fatal: without a camera those tests skip as before.
+      - name: Register the virtual camera for the tests
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          & build\native\vcam-setup.exe --install
+          "vcam-setup --install: exit code $LASTEXITCODE (0 both cameras, 3 DirectShow only, 4 file missing)"
+          & build\native\vcam-setup.exe --status
+
       - name: Licence gate (runtime packages; PyPI PyAV is expected to fail here, see note)
         # The PyPI wheel of PyAV bundles libx264 / libx265; the installer job rebuilds PyAV against LGPL FFmpeg.
         # Here the gate runs for information only, so a new GPL dependency is still visible in every run.
