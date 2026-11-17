@@ -7,7 +7,11 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
-Fixes from the 0.5 audit (docs/WINDOWS_AUDIT_0.5.md, P0).
+## [0.4.2] — 2026-11-17
+
+The fixes from the 0.5 audit (docs/WINDOWS_AUDIT_0.5.md) and most of the 0.5 roadmap (docs/WINDOWS_ROADMAP_0.5.md):
+scenes, privacy mode, auto-framing, lighting, recording, instant replay, plugins. Still tested only on a server without
+a graphics card.
 
 ### Fixed
 - Tests: every test app wrote its own copy of the optimised AI models (30–80 MB each), about 1.5 GB per full run,
@@ -161,5 +165,6 @@ for real hardware are still to be measured (docs/HARDWARE_CHECKLIST.md).
 
 macOS releases; see the history of the original repository.
 
+[0.4.2]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.2
 [0.4.1]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.1
 [0.4.0]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.0
