@@ -91,6 +91,7 @@ class WindowsCameraSource(CaptureSource):
         self.allow_own_output = allow_own_output
         self.name = name_hint or unique_id or "?"
         self.selected_format: DeviceFormat | None = None
+        self.shared = False                 # Media Foundation: the camera is shared with the app that controls it
         self._nominal = (0, 0, 0.0)
         self._cap: Any = None               # cv2.VideoCapture (DirectShow) or MfCapture (Media Foundation)
         self._thread: threading.Thread | None = None
@@ -162,13 +163,16 @@ class WindowsCameraSource(CaptureSource):
                 raise PermissionDenied(f"{dev.name}: {e}. Turn on camera access in Windows Settings → Privacy & "
                                        "security → Camera.") from e
             raise CaptureError(f"Cannot open {dev.name} (Media Foundation): {e}") from e
-        self.selected_format = chosen or DeviceFormat(cap.width, cap.height, cap.subtype, cap.fps, cap.fps)
+        actual = DeviceFormat(cap.width, cap.height, cap.subtype, cap.fps, cap.fps)
+        # shared: the app that controls the camera chose the mode, so report what actually arrives
+        self.selected_format = actual if cap.shared or chosen is None else chosen
+        self.shared = cap.shared
         self._nominal = (cap.width, cap.height, cap.fps)
         self._cap = cap
         self._on_frame, self._on_event = on_frame, on_event
         self._launch(self._run_mf, cap, "capture-mediafoundation")
-        log.info("mediafoundation capture started: %s %dx%d @ %.2f fps (%s)", dev.name, cap.width, cap.height,
-                 cap.fps, cap.subtype)
+        log.info("mediafoundation capture started: %s %dx%d @ %.2f fps (%s)%s", dev.name, cap.width, cap.height,
+                 cap.fps, cap.subtype, ", shared with another app" if cap.shared else "")
 
     # The capture thread owns its device: it is the only one that reads it, and it closes it when it ends.
     # stop() never closes a device another thread may still be reading (a DirectShow read can block, and

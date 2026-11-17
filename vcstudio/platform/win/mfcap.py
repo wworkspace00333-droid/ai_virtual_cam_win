@@ -36,6 +36,9 @@ def lib():
                                  ctypes.c_int]
         L.mfcap_close.restype = None
         L.mfcap_close.argtypes = [ctypes.c_void_p]
+        if hasattr(L, "mfcap_shared"):           # DLLs from before 0.4.5 do not have it
+            L.mfcap_shared.restype = ctypes.c_int
+            L.mfcap_shared.argtypes = [ctypes.c_void_p]
         _lib = L
     return _lib
 
@@ -67,6 +70,8 @@ class MfCapture:
         if not self._h:
             raise MfCaptureError(err.value or "the device could not be opened")
         self.width, self.height, self.fps, self.subtype = w.value, h.value, f.value, sub.value
+        # True: another app controls the camera and this one reads it in shared mode (its mode, not necessarily ours)
+        self.shared = bool(L.mfcap_shared(self._h)) if hasattr(L, "mfcap_shared") else False
         self.ts_100ns = 0
 
     def read(self, out: np.ndarray, timeout_ms: int = 200) -> int:

@@ -292,6 +292,79 @@ def test_media_foundation_camera_through_frame_server(native, fps):
     assert all(abs(a - b) <= 4 for a, b in zip(px, (0, 40, 200))), px            # the app's frames
 
 
+@camera_free
+@pytest.mark.skipif(not _mf_installed(), reason="Media Foundation camera not installed (vcam-setup.exe --install, "
+                                                "Windows 11 with camera access allowed)")
+def test_media_foundation_camera_with_several_apps_at_once():
+    """Several apps on the Media Foundation camera at the same time (P1.4 / D4): apps that open it in shared mode
+    (sensor group, MFSensorDeviceMode_Shared: Windows Camera, apps on MediaCapture with SharedReadOnly) read it
+    alongside each other and alongside one app that opens it normally. Only two normal (exclusive) readers conflict:
+    the second gets 'device in use', which is Frame Server's rule for every camera, not ours. Measured 2026-11-17 on
+    build 26100 with the camera built against SDK 22621: shared + shared + shared, shared + normal, normal + shared."""
+    import subprocess
+    from vcstudio.platform.win.vcam_writer import VcamWriter
+    w = VcamWriter()
+    stop = threading.Event()
+    img = np.zeros((1080, 1920, 4), np.uint8); img[..., 1] = 40; img[..., 2] = 200; img[..., 3] = 255
+
+    def send():
+        while not stop.is_set():
+            w.publish(img)
+            time.sleep(1 / 30)
+    w.configure(1920, 1080, 30)
+    t = threading.Thread(target=send, daemon=True); t.start()
+
+    def run(modes):
+        procs = []
+        for i, mode in enumerate(modes):                 # staggered, so each joins a camera that is already streaming
+            procs.append(subprocess.Popen([str(MF_CLIENT), mode, MF_DEVICE, str(90 - 20 * i)],
+                                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True))
+            time.sleep(1.0)
+        return [p.communicate(timeout=60)[0] for p in procs]
+    try:
+        time.sleep(0.3)
+        for modes in (["--shared", "--shared", "--shared"], ["--device", "--shared"], ["--shared", "--device"]):
+            outs = run(modes)
+            if any("open failed: 0x80070005" in o for o in outs):
+                pytest.skip("Windows denies camera access in this session (camera privacy settings)")
+            for i, (mode, out) in enumerate(zip(modes, outs)):
+                m = re.search(r"frames (\d+) in [\d.]+ s \(([\d.]+) fps\), centre BGRA (\w\w) (\w\w) (\w\w)", out)
+                assert m and int(m[1]) == 90 - 20 * i, f"{modes} reader {i} ({mode}):\n{out}"
+                assert float(m[2]) > 20, f"{modes} reader {i}: {out}"
+                assert all(abs(int(x, 16) - y) <= 4 for x, y in zip(m.group(3, 4, 5), (0, 40, 200))), out
+        a, b = run(["--device", "--device"])                                       # Frame Server's exclusive rule
+        assert re.search(r"frames 90 ", a), a
+        assert "frames 70 " not in b, b
+
+        # the app's own Media Foundation capture (vcs_mfcap): a camera another app controls is joined in shared mode
+        # instead of failing with "in use" (a user's webcam used by Zoom and by this app at the same time)
+        from vcstudio.platform.win import devices as wd
+        from vcstudio.platform.win.mfcap import MfCapture
+        dev = next(d for d in wd.mf_devices() if d.name == MF_DEVICE)
+        alone = MfCapture(dev.unique_id, 1280, 720, 30)
+        assert not alone.shared
+        alone.close()
+        holder = subprocess.Popen([str(MF_CLIENT), "--device", MF_DEVICE, "150"], stdout=subprocess.PIPE, text=True)
+        try:
+            time.sleep(1.5)
+            cap = MfCapture(dev.unique_id, 1280, 720, 30)
+            try:
+                assert cap.shared
+                out = np.empty((cap.height, cap.width, 4), np.uint8)
+                got, t0 = 0, time.perf_counter()
+                while time.perf_counter() - t0 < 2.0:
+                    got += cap.read(out, 500) == 1
+                assert got >= 40, got
+                assert all(abs(int(a) - b) <= 4 for a, b in zip(out[cap.height // 2, cap.width // 2, :3], (0, 40, 200)))
+            finally:
+                cap.close()
+        finally:
+            held = holder.communicate(timeout=60)[0]
+        assert re.search(r"frames 150 ", held), held                               # the other app is not disturbed
+    finally:
+        stop.set(); t.join(); w.close()
+
+
 @needs_camera
 def test_status_reports_installed_and_visible():
     from vcstudio.camera import camera_manager as cm

@@ -7,6 +7,16 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+### Added
+- **Several apps on one camera.** Media Foundation capture of a camera another app already controls (a webcam
+  in use by Zoom, for example) now joins it in shared mode instead of failing with "in use"; both apps get the
+  frames, in the mode the controlling app chose. The app's own Media Foundation camera works the same way for
+  other apps: apps that open cameras in shared mode run alongside each other and alongside one app with full
+  control. Measured on Windows build 26100 with three readers at once, 30 fps each. This needed no newer
+  Windows SDK (the sensor-group API is in SDK 22621), so the planned SDK 26100 download was not needed.
+  Two apps that both want full control of the Media Foundation camera still cannot share it: the DirectShow
+  camera remains the way for those.
+
 ### Tests
 - Core coverage 83.9 → 87.1 % locally: the ONNX model importer, the elevated camera setup call (UAC outcomes),
   the GPU counters (a stand-in pdh.dll answering like Windows) and the GDI screenshot are now tested on any

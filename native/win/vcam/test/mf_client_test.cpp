@@ -2,7 +2,8 @@
 //   mf_client_test --inproc <path\vcam_mf.dll> [frames [native]]   activate the media source in this process
 //   mf_client_test --device "AI Virtual Camera" [frames [native]]   open the camera from MFEnumDeviceSources (Frame Server)
 //     native: index of the camera's own format to use (the list is printed); default = the reader's choice
-//   mf_client_test --list                                 list Media Foundation video capture devices
+//   mf_client_test --shared "AI Virtual Camera" [frames [native]]   the same in shared mode (sensor group, several readers)
+//   mf_client_test --list                                list Media Foundation video capture devices
 // Prints the negotiated format, frame count, rate and the centre pixel of the last frame. Exit 0 = frames read.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -21,6 +22,7 @@
 #pragma comment(lib, "mfreadwrite.lib")
 #pragma comment(lib, "mfuuid.lib")
 #pragma comment(lib, "ole32.lib")
+#pragma comment(lib, "mfsensorgroup.lib")
 
 using Microsoft::WRL::ComPtr;
 static const GUID CLSID_AIVirtualCameraMF = {0x20c0f518, 0x9f28, 0x4168, {0x9f, 0x73, 0x03, 0x0f, 0x24, 0x3f, 0xb3, 0xb9}};
@@ -39,7 +41,25 @@ static HRESULT inproc_source(const wchar_t *dll, IMFMediaSource **out) {
 	return a->ActivateObject(IID_PPV_ARGS(out));
 }
 
-static HRESULT device_source(const wchar_t *name, IMFMediaSource **out, bool list) {
+// Shared mode: open the device through a sensor group with MFSensorDeviceMode_Shared, the way apps that support
+// several readers at once do (Windows Camera, Teams); a second reader in exclusive mode gets "device in use".
+static HRESULT shared_source(const wchar_t *link, IMFMediaSource **out) {
+	ComPtr<IMFSensorGroup> group;
+	HRESULT hr = MFCreateSensorGroup(link, &group);
+	if (FAILED(hr)) { printf("MFCreateSensorGroup failed: 0x%08lX\n", (unsigned long)hr); return hr; }
+	DWORD count = 0;
+	group->GetSensorDeviceCount(&count);
+	for (DWORD i = 0; i < count; ++i) {
+		ComPtr<IMFSensorDevice> dev;
+		if (FAILED(group->GetSensorDevice(i, &dev))) continue;
+		hr = dev->SetSensorDeviceMode(MFSensorDeviceMode_Shared);
+		if (FAILED(hr)) { printf("SetSensorDeviceMode(Shared) failed: 0x%08lX\n", (unsigned long)hr); return hr; }
+	}
+	printf("sensor group: %lu device(s), shared mode\n", count);
+	return group->CreateMediaSource(out);
+}
+
+static HRESULT device_source(const wchar_t *name, IMFMediaSource **out, bool list, bool shared = false) {
 	ComPtr<IMFAttributes> at;
 	MFCreateAttributes(&at, 1);
 	at->SetGUID(MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID);
@@ -55,7 +75,7 @@ static HRESULT device_source(const wchar_t *name, IMFMediaSource **out, bool lis
 		devs[i]->GetAllocatedString(MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK, &link, &len);
 		if (list) wprintf(L"device %u: %ls  [%ls]\n", i, fn ? fn : L"?", link ? link : L"");
 		if (!list && fn && name && wcscmp(fn, name) == 0 && hr == MF_E_NOT_FOUND)
-			hr = devs[i]->ActivateObject(IID_PPV_ARGS(out));
+			hr = shared ? shared_source(link, out) : devs[i]->ActivateObject(IID_PPV_ARGS(out));
 		CoTaskMemFree(fn);
 		CoTaskMemFree(link);
 		devs[i]->Release();
@@ -74,7 +94,7 @@ int wmain(int argc, wchar_t **argv) {
 	HRESULT hr;
 	if (mode == L"--list") return FAILED(device_source(nullptr, nullptr, true)) ? 1 : 0;
 	if (argc < 3) return 2;
-	hr = mode == L"--inproc" ? inproc_source(argv[2], &src) : device_source(argv[2], &src, false);
+	hr = mode == L"--inproc" ? inproc_source(argv[2], &src) : device_source(argv[2], &src, false, mode == L"--shared");
 	if (FAILED(hr)) { printf("open failed: 0x%08lX\n", (unsigned long)hr); return 1; }
 	int want = argc > 3 ? _wtoi(argv[3]) : 90;
 	ComPtr<IMFAttributes> ra;

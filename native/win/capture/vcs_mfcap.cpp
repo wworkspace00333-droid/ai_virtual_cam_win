@@ -10,6 +10,12 @@
 //   void* mfcap_open(symlink, want_w, want_h, want_fps, &w, &h, &fps, subtype_out, 32, err, errcap)
 //   int   mfcap_read(cap, dst, dst_bytes, &ts_100ns, timeout_ms)   1 frame | 0 timeout | -1 device lost | -2 size
 //   long  mfcap_error(cap)   HRESULT that ended the stream (after -1)
+//   int   mfcap_shared(cap)  1 when the camera is shared with another app (opened in shared mode)
+//
+// A camera another app already uses in controlling mode refuses a second controller ("in use"). Then the camera
+// is opened again in shared mode (sensor group, MFSensorDeviceMode_Shared): both apps get the frames, in the mode
+// the controlling app chose when it differs from the requested one. Works on every Windows with Frame Server
+// (no newer SDK needed); tested with two and three readers on the app's own Media Foundation camera.
 //   void  mfcap_close(cap)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -34,6 +40,7 @@
 #pragma comment(lib, "mfuuid.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "shlwapi.lib")
+#pragma comment(lib, "mfsensorgroup.lib")
 
 using Microsoft::WRL::ComPtr;
 
@@ -71,6 +78,7 @@ public:
 	LONGLONG ts = 0;
 	uint64_t seq = 0, delivered = 0;
 	bool lost = false;
+	bool shared = false;             // opened in shared mode (another app controls the camera)
 	HRESULT last_hr = S_OK;          // why the stream ended (mfcap_error)
 	std::atomic<bool> closing{false};
 	HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
@@ -165,9 +173,27 @@ static void mf_release() {
 	if (g_started > 0 && --g_started == 0) MFShutdown();
 }
 
-extern "C" __declspec(dllexport) void *mfcap_open(const wchar_t *symlink, int want_w, int want_h, double want_fps,
-                                                  int *out_w, int *out_h, double *out_fps, wchar_t *subtype,
-                                                  int subtype_cap, wchar_t *err, int errcap) {
+static HRESULT shared_source(const wchar_t *symlink, IMFMediaSource **out) {
+	ComPtr<IMFSensorGroup> group;
+	HRESULT hr = MFCreateSensorGroup(symlink, &group);
+	if (FAILED(hr)) return hr;
+	DWORD count = 0;
+	group->GetSensorDeviceCount(&count);
+	for (DWORD i = 0; i < count; ++i) {
+		ComPtr<IMFSensorDevice> dev;
+		if (SUCCEEDED(group->GetSensorDevice(i, &dev)) && FAILED(hr = dev->SetSensorDeviceMode(MFSensorDeviceMode_Shared)))
+			return hr;
+	}
+	return group->CreateMediaSource(out);
+}
+
+static bool in_use_error(HRESULT why) {
+	return why == MF_E_HW_MFT_FAILED_START_STREAMING || why == HRESULT_FROM_WIN32(ERROR_SHARING_VIOLATION);
+}
+
+static void *open_capture(const wchar_t *symlink, bool shared, int want_w, int want_h, double want_fps, int *out_w,
+                          int *out_h, double *out_fps, wchar_t *subtype, int subtype_cap, wchar_t *err, int errcap,
+                          HRESULT *in_use) {
 	// COM for the source reader. Deliberately not balanced with CoUninitialize: the capture objects live on
 	// after this call, and leaving the multithreaded apartment could tear it down under them. Repeated calls
 	// on one thread only raise COM's per-thread count (RPC_E_CHANGED_MODE is fine: MF is free-threaded).
@@ -187,8 +213,10 @@ extern "C" __declspec(dllexport) void *mfcap_open(const wchar_t *symlink, int wa
 	at->SetGUID(MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID);
 	at->SetString(MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK, symlink);
 	Capture *c = new Capture();
-	if (FAILED(hr = MFCreateDeviceSource(at.Get(), &c->source))) {
+	c->shared = shared;
+	if (FAILED(hr = shared ? shared_source(symlink, &c->source) : MFCreateDeviceSource(at.Get(), &c->source))) {
 		c->Release();
+		if (in_use && in_use_error(hr)) *in_use = hr;
 		return fail(hr == E_ACCESSDENIED ? L"camera access denied (Settings > Privacy & security > Camera)"
 		                                 : L"cannot open the device (in use, unplugged or its driver failed)", hr);
 	}
@@ -224,8 +252,14 @@ extern "C" __declspec(dllexport) void *mfcap_open(const wchar_t *symlink, int wa
 	GUID native_sub = GUID_NULL;
 	best->GetGUID(MF_MT_SUBTYPE, &native_sub);
 	if (FAILED(hr = c->reader->SetCurrentMediaType(stream, nullptr, best.Get()))) {
-		c->reader.Reset(); c->source->Shutdown(); c->Release();
-		return fail(L"the device refused its own mode", hr);
+		// shared: the controlling app has chosen the mode; take the one the camera is streaming
+		ComPtr<IMFMediaType> now;
+		if (!shared || FAILED(c->reader->GetCurrentMediaType(stream, &now))) {
+			c->reader.Reset(); c->source->Shutdown(); c->Release();
+			return fail(L"the device refused its own mode", hr);
+		}
+		best = now;
+		best->GetGUID(MF_MT_SUBTYPE, &native_sub);
 	}
 	ComPtr<IMFMediaType> rgb;
 	MFCreateMediaType(&rgb);
@@ -265,11 +299,32 @@ extern "C" __declspec(dllexport) void *mfcap_open(const wchar_t *symlink, int wa
 		c->closing = true;
 		c->source->Shutdown(); c->reader.Reset(); c->Release();
 		// Windows lets one app control a camera at a time ("controlling mode"); a second one is refused
-		if (why == MF_E_HW_MFT_FAILED_START_STREAMING || why == HRESULT_FROM_WIN32(ERROR_SHARING_VIOLATION))
-			return fail(L"the camera is in use by another app (Windows lets one app use a camera at a time)", why);
+		if (in_use_error(why)) {
+			if (in_use) *in_use = why;
+			return fail(L"the camera is in use by another app and does not allow sharing", why);
+		}
 		return fail(L"the device stopped right after starting", why);
 	}
 	return c;
+}
+
+extern "C" __declspec(dllexport) void *mfcap_open(const wchar_t *symlink, int want_w, int want_h, double want_fps,
+                                                  int *out_w, int *out_h, double *out_fps, wchar_t *subtype,
+                                                  int subtype_cap, wchar_t *err, int errcap) {
+	HRESULT in_use = S_OK;
+	void *c = open_capture(symlink, false, want_w, want_h, want_fps, out_w, out_h, out_fps, subtype, subtype_cap, err,
+	                       errcap, &in_use);
+	if (c || in_use == S_OK) return c;
+	// another app controls the camera: join it in shared mode
+	c = open_capture(symlink, true, want_w, want_h, want_fps, out_w, out_h, out_fps, subtype, subtype_cap, err, errcap,
+	                 nullptr);
+	if (!c) set_err(err, errcap, L"the camera is in use by another app and does not allow sharing", in_use);
+	return c;
+}
+
+extern "C" __declspec(dllexport) int mfcap_shared(void *h) {
+	Capture *c = static_cast<Capture *>(h);
+	return c && c->shared ? 1 : 0;
 }
 
 extern "C" __declspec(dllexport) int mfcap_read(void *h, uint8_t *dst, int dst_bytes, long long *ts_100ns,

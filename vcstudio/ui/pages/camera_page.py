@@ -127,8 +127,10 @@ class VirtualCameraPage:
                 "<b>Discord</b>: User Settings → Voice &amp; Video → Camera → “{ds}”.<br>"
                 "<b>OBS Studio</b>: Sources → + → Video Capture Device → “{ds}”.<br>"
                 "Windows 11 shows the Media Foundation camera as “{mf}” to every app; the DirectShow camera “{ds}” "
-                "(if installed) can be used by several apps at once. Only one app at a time can use the Media "
-                "Foundation camera.", mf=f"{nm} (Windows Virtual Camera)", ds=nm))
+                "(if installed) can be used by several apps at once. The Media Foundation camera can be shared too: "
+                "apps that open cameras in shared mode run alongside each other and alongside one app that "
+                "takes full control; only two apps that both want full control cannot use it at the same time.",
+                mf=f"{nm} (Windows Virtual Camera)", ds=nm))
             steps.setWordWrap(True); steps.setTextFormat(Qt.RichText)
             apps.layout_.addWidget(steps)
             # the app writes only to its own camera on Windows; OBS turns it into OBS Virtual Camera
