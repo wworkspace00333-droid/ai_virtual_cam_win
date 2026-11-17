@@ -73,7 +73,7 @@ jobs:
       - name: Coverage gate (core packages)
         # 80 % is measured on a full local run with the live camera / OBS tests; those skip on this runner.
         # Raise VCS_COVERAGE_MIN (repository variable) once the CI value is known.
-        run: python scripts/coverage_gate.py build/coverage.json --min ${{ vars.VCS_COVERAGE_MIN || '70' }}
+        run: python scripts/coverage_gate.py build/coverage.json --min ${{ vars.VCS_COVERAGE_MIN || '75' }}
 
       - name: Upload coverage report
         if: always()
