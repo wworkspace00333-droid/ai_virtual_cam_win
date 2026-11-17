@@ -44,13 +44,21 @@ settings, profiles and images stay in `%LOCALAPPDATA%\AIVirtualCameraStudio` unt
 - **Output:** the app's own camera, under the name you give it (Virtual Camera page → Rename). To pass the result on
   as "OBS Virtual Camera", add this camera in OBS as a Video Capture Device and click Start Virtual Camera.
 - **One click on the Preview page:** *Hide face* (YuNet face detection, pixelate or blur), *Logo* (a picture in the
-  corner, transparency kept), *Card for a game*.
+  corner, transparency kept), *Card for a game*, *Privacy mode* (faces; screens, phones and books; background —
+  Ctrl+Alt+H), *Auto-framing* (follows the people in view), *Lighting* (exposure and white balance metered on faces).
+- **Scenes:** a profile with its regions, background and optionally its own input, switched with Ctrl+Alt+1…9; a
+  frame is always entirely one scene.
+- **Recording and instant replay:** the camera output to MP4 (H.264 through Windows Media Foundation, Ctrl+Alt+F9);
+  instant replay keeps the last 30 s in memory and saves them on Ctrl+Alt+F10.
+- **Plugins:** your own Python effects on the output ([docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md)), each switched on
+  explicitly; a failing plugin is switched off, the camera keeps going.
 - **Background:** blur or replace everything behind people (PP-HumanSeg person segmentation).
 - **Regions:** draw regions or let them follow detected objects (80 COCO classes with YOLOX, faces, or any object
   described in words with the optional OWLv2 + SAM 2.1 models); replace them with images or video, blur, pixelate or
   colour-correct them.
-- **Speed:** the mode is chosen automatically on first start from a short measurement; the AI rate adapts when the PC
-  cannot keep up, so the camera output stays smooth.
+- **Speed:** the mode is chosen automatically on first start from a short measurement; when the PC cannot keep up,
+  a resource scheduler slows the least important AI module first (background, then detection), so the camera output
+  stays smooth; without regions that follow objects the detector idles at 2 fps.
 - **Everyday use:** tray icon (closing the window keeps the camera running), start with Windows, global hotkeys,
   profiles, a diagnostics ZIP without personal data (*Settings*), English and Russian interface.
 

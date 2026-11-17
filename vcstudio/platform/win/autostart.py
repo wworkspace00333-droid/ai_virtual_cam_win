@@ -39,6 +39,31 @@ def current() -> str | None:
         return None
 
 
+def _exe_of(cmd: str) -> str:
+    cmd = cmd.strip()
+    if cmd.startswith('"'):
+        return cmd[1:].split('"', 1)[0]
+    return cmd.split(" ", 1)[0]
+
+
+def repair(value: str = VALUE) -> str:
+    """At start of the installed app: an entry that points to an exe that no longer exists or to another install
+    folder (uninstalled by another administrator — the uninstaller can only clean its own user's HKCU — then
+    installed again, maybe elsewhere) is rewritten to this exe. Returns "" (nothing to do), "updated"."""
+    if not getattr(sys, "frozen", False):
+        return ""
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
+            cmd = str(winreg.QueryValueEx(k, value)[0])
+    except OSError:
+        return ""
+    exe = _exe_of(cmd)
+    if exe and Path(exe).exists() and Path(exe).resolve() == Path(sys.executable).resolve():
+        return ""
+    set_enabled(True, value)
+    return "updated"
+
+
 def set_enabled(on: bool, value: str = VALUE) -> None:
     with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE | winreg.KEY_QUERY_VALUE) as k:
         if on:

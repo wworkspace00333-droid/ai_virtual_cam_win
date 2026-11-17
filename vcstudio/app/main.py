@@ -84,6 +84,13 @@ def main(argv: list[str] | None = None) -> int:
             QMessageBox.information(None, APP_NAME, msg)
         return 3
     ctx = AppContext()
+    if sys.platform == "win32":
+        try:                                                 # D13: a stale "start with Windows" entry follows this exe
+            from vcstudio.platform.win import autostart
+            if autostart.repair():
+                ctx.db.log_event("INFO", "app", "start-with-Windows entry updated to this installation")
+        except OSError as e:
+            logging.getLogger(__name__).warning("autostart check failed: %s", e)
     from vcstudio import i18n
     lang = argv[argv.index("--lang") + 1] if "--lang" in argv else ctx.settings.get("ui.language")
     i18n.set_language(i18n.resolve(lang))

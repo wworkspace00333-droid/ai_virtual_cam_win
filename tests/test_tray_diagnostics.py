@@ -23,6 +23,31 @@ def test_autostart_entry_is_added_and_removed_for_the_current_user(monkeypatch):
     assert not autostart.is_enabled()
 
 
+def test_autostart_entry_to_a_removed_exe_is_repaired(monkeypatch, tmp_path):
+    """D13: uninstalled by another administrator, installed again (elsewhere): the stale entry follows the new exe."""
+    import sys
+
+    from vcstudio.platform.win import autostart
+    name = "AIVirtualCameraStudio-test-repair"
+    monkeypatch.setattr(autostart, "VALUE", name)
+    exe = tmp_path / "new" / "vcstudio.exe"
+    exe.parent.mkdir()
+    exe.write_bytes(b"MZ")
+    import winreg
+    try:
+        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, autostart.RUN_KEY, 0, winreg.KEY_SET_VALUE) as k:
+            winreg.SetValueEx(k, name, 0, winreg.REG_SZ, f'"{tmp_path / "gone" / "vcstudio.exe"}" --minimized')
+        assert autostart.repair(name) == ""                        # source tree (not frozen): never touched
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        monkeypatch.setattr(sys, "executable", str(exe))
+        assert autostart.repair(name) == "updated"
+        assert autostart.current() == f'"{exe}" --minimized'
+        assert autostart.repair(name) == ""                        # now correct: nothing to do
+    finally:
+        autostart.set_enabled(False, name)
+    assert autostart.repair(name) == ""                            # no entry: nothing created
+
+
 def test_redactor_replaces_user_computer_home_and_email(tmp_path):
     import getpass
     import socket
