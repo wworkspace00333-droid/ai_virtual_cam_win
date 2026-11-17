@@ -25,6 +25,17 @@ Fixes from the 0.5 audit (docs/WINDOWS_AUDIT_0.5.md, P0).
   rate and ratcheted down to the floor; it now scales from the unthrottled rate (D26).
 
 ### Added
+- **Plugin SDK** (P3.3, API version 1, `docs/PLUGIN_SDK.md`, Settings → Plugins): your own Python effects on the
+  camera output, one `.py` file each in the plugins folder; each frame comes with the tracked objects. Listing
+  plugins never runs their code (name and API version are read from the syntax tree); a plugin runs only after
+  you switch it on and confirm, and the approval is bound to the file's SHA-256 (a changed file is off again);
+  an exception or a wrong result leaves the frame unchanged, three in a row switch the plugin off; emergency
+  passthrough bypasses plugins; `VCS_NO_PLUGINS=1` starts without any. Example: `examples/plugins/vignette.py`.
+- **Check for updates** (P3.5, Settings → Updates): one request to this project's GitHub releases, only when you
+  click; nothing about you is sent, nothing is downloaded or installed, the app never checks by itself; off with
+  `VCS_NO_NETWORK=1` or `privacy.allow_update_check: false`.
+- The installer build in CI installs the built installer silently and runs the PC report from the installed app
+  (`--quick --strict`) before attaching it to a release (P3.4, D9).
 - **Recording** (P3.1, Preview page "● Record", Ctrl+Alt+F9): the camera output — exactly what apps receive — is
   written to an MP4 in Videos\AI Virtual Camera Studio. H.264 through the Windows Media Foundation encoder (hardware
   where the graphics card offers it), no x264; falls back to NVENC / Quick Sync / AMF and finally MPEG-4. The output

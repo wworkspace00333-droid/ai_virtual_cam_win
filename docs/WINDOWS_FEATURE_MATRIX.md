@@ -184,5 +184,5 @@ Windows 10/11). Кадры идут из приложения через общ�
 | Gesture Control | MISSING | — |
 | Recording | MISSING → ✅ P3.1 | Запись выхода камеры в MP4: H.264 через Media Foundation (без x264), запасные кодировщики, время кадров сохраняется, поток вывода не ждёт (`test_recorder.py`) |
 | Instant Replay | MISSING → ✅ P3.2 | Последние 5–300 с в памяти (JPEG-кадры), сохранение кнопкой или Ctrl+Alt+F10 (`test_recorder.py`) |
-| Plugin SDK | MISSING | Плагин OBS — не SDK |
+| Plugin SDK | MISSING → ✅ P3.3 | API 1: эффекты на Python для выхода камеры; список читается без запуска кода, включение по одному с подтверждением, одобрение привязано к SHA-256, сбойный плагин выключается (`vcstudio/plugins/`, `docs/PLUGIN_SDK.md`, `test_plugins.py`) |
 | Scheduler phases 0–6 | MISSING | Отдельные механизмы (раздел H) |

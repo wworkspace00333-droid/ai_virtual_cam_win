@@ -40,8 +40,9 @@ The face detector finds face rectangles only; the program does no identity recog
 
 Optional models for "any object". They are not in the installer; the app downloads them from huggingface.co only
 when the user clicks "Download models" on the Detection page, and checks each file's SHA-256 (values in
-`vcstudio/ai/model_download.py`). This is the program's only network access. `VCS_NO_NETWORK=1` or the setting
-`privacy.allow_downloads: false` turns it off. Developers can use `scripts/fetch_models.py --open-vocab` instead.
+`vcstudio/ai/model_download.py`). Besides "Check for updates" (one request to the GitHub releases list, on click),
+this is the program's only network access. `VCS_NO_NETWORK=1` or the setting `privacy.allow_downloads: false` turns
+it off. Developers can use `scripts/fetch_models.py --open-vocab` instead.
 
 | Item | Licence | Source |
 |---|---|---|

@@ -144,7 +144,158 @@ class SettingsPage:
             self.to_tray.toggled.connect(lambda on: s.set("ui.close_to_tray", on))
             self.wizard_btn.clicked.connect(self._run_wizard)
             self.diag_btn.clicked.connect(self._save_diagnostics)
+        lay.addWidget(self._plugins_card())
+        lay.addWidget(self._updates_card())
         lay.addStretch()
+
+    # ---- plugins (vcstudio/plugins): listed without running them, switched on one by one
+    def _plugins_card(self):
+        from PySide6.QtWidgets import QListWidget
+        card = Card("Plugins")
+        note = QLabel(tr("Your own Python effects on the camera output (docs/PLUGIN_SDK.md). Put a plugin's .py file "
+                         "in the plugins folder and switch it on here. A plugin runs with this app's rights: use only "
+                         "plugins you trust. A changed file is switched off until you switch it on again."))
+        note.setObjectName("muted"); note.setWordWrap(True)
+        card.layout_.addWidget(note)
+        self.plugin_list = QListWidget(); self.plugin_list.setMaximumHeight(140)
+        card.layout_.addWidget(self.plugin_list)
+        row = QHBoxLayout()
+        folder_btn = QPushButton(tr("Open plugins folder")); reload_btn = QPushButton(tr("Reload list"))
+        row.addWidget(folder_btn); row.addWidget(reload_btn); row.addStretch()
+        card.layout_.addLayout(row)
+        self.plugin_status = QLabel(); self.plugin_status.setObjectName("muted"); self.plugin_status.setWordWrap(True)
+        card.layout_.addWidget(self.plugin_status)
+        folder_btn.clicked.connect(self._open_plugins_folder)
+        reload_btn.clicked.connect(self.refresh_plugins)
+        self.plugin_list.itemChanged.connect(self._plugin_toggled)
+        self.confirm_plugin = self._confirm_plugin          # replaceable in tests (a modal box would block)
+        self.refresh_plugins()
+        return card
+
+    def refresh_plugins(self) -> None:
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QListWidgetItem
+        pm = self.ctx.plugins
+        try:
+            infos = pm.discover()
+        except OSError as e:
+            self.plugin_status.setText(tr("Plugins folder not available: {e}", e=e))
+            return
+        self.plugin_list.blockSignals(True)
+        self.plugin_list.clear()
+        for i in infos:
+            state = {"running": tr("running"), "off": tr("off"), "error": tr("stopped after an error"),
+                     "incompatible": tr("incompatible"), "invalid": tr("invalid")}.get(i.state, i.state)
+            extra = f" — {i.error}" if i.error else (tr(" — slow ({ms} ms)", ms=f"{i.avg_ms:.0f}") if i.slow else "")
+            it = QListWidgetItem(f"{i.name} ({i.id}.py) · {state}{extra}")
+            it.setToolTip(i.description or i.id)
+            it.setData(Qt.ItemDataRole.UserRole, i.id)
+            flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+            if i.state not in ("incompatible", "invalid"):
+                flags |= Qt.ItemFlag.ItemIsUserCheckable
+            it.setFlags(flags)
+            it.setCheckState(Qt.CheckState.Checked if i.state == "running" else Qt.CheckState.Unchecked)
+            self.plugin_list.addItem(it)
+        self.plugin_list.blockSignals(False)
+        self.plugin_status.setText(tr("{n} plugin(s) in {path}", n=len(infos), path=pm.folder) if infos else
+                                   tr("No plugins in {path}", path=pm.folder))
+
+    def _confirm_plugin(self, info) -> bool:
+        r = QMessageBox.question(self.widget, tr("Plugins"),
+                                 tr("Switch on “{name}”?\n\n{path}\n\nIts code will run inside this app with your "
+                                    "rights. Only continue if you trust where it comes from.",
+                                    name=info.name, path=info.path))
+        return r == QMessageBox.StandardButton.Yes
+
+    def _plugin_toggled(self, item) -> None:
+        from PySide6.QtCore import Qt
+        pm = self.ctx.plugins
+        pid = item.data(Qt.ItemDataRole.UserRole)
+        if item.checkState() == Qt.CheckState.Checked:
+            info = pm.infos.get(pid)
+            if info is not None and self.confirm_plugin(info):
+                info = pm.enable(pid)
+                if info.state != "running":
+                    self.plugin_status.setText(tr("“{name}” did not start: {e}", name=info.name, e=info.error))
+        else:
+            pm.disable(pid)
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(0, self.refresh_plugins)          # not inside the list's own signal
+
+    def _open_plugins_folder(self) -> None:
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        self.ctx.plugins.folder.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.ctx.plugins.folder)))
+
+    # ---- "Check for updates" (vcstudio/app/update_check.py): one request, only on this click
+    def _updates_card(self):
+        from vcstudio import __version__
+        from vcstudio.app import update_check as uc
+        card = Card("Updates")
+        row = QHBoxLayout()
+        self.update_btn = QPushButton(tr("Check for updates"))
+        self.update_btn.setToolTip(tr("Asks GitHub once whether a newer release exists. Nothing about you or this "
+                                      "computer is sent, nothing is downloaded or installed, and the app never "
+                                      "checks by itself."))
+        row.addWidget(QLabel(tr("Version {v}", v=__version__))); row.addWidget(self.update_btn); row.addStretch()
+        card.layout_.addLayout(row)
+        self.update_info = QLabel(); self.update_info.setObjectName("muted"); self.update_info.setWordWrap(True)
+        self.update_info.setOpenExternalLinks(True)
+        card.layout_.addWidget(self.update_info)
+        if not uc.allowed(self.ctx.settings):
+            self.update_btn.setEnabled(False)
+            self.update_info.setText(tr("Network access is turned off (privacy settings), so the app does not check "
+                                        "for updates."))
+        self.update_btn.clicked.connect(self.check_updates)
+        self._update_result = None
+        self._update_thread = None
+        return card
+
+    def check_updates(self, opener=None) -> None:
+        import threading
+
+        from PySide6.QtCore import QTimer
+
+        from vcstudio import __version__
+        from vcstudio.app import update_check as uc
+        if not uc.allowed(self.ctx.settings) or (self._update_thread and self._update_thread.is_alive()):
+            return
+        self.update_btn.setEnabled(False)
+        self.update_info.setText(tr("Checking…"))
+        self._update_result = None
+
+        def work():
+            try:
+                self._update_result = uc.check(__version__, opener)
+            except uc.UpdateCheckError as e:
+                self._update_result = e
+        self._update_thread = threading.Thread(target=work, name="update-check", daemon=True)
+        self._update_thread.start()
+
+        def poll():
+            if self._update_thread is not None and self._update_thread.is_alive():
+                QTimer.singleShot(200, poll)
+                return
+            self.show_update_result(self._update_result)
+        QTimer.singleShot(200, poll)
+
+    def show_update_result(self, res) -> None:
+        from vcstudio.app.update_check import UpdateInfo
+        self.update_btn.setEnabled(True)
+        if not isinstance(res, UpdateInfo):
+            self.update_info.setText(tr("Could not check for updates: {e}", e=res))
+            return
+        if res.newer:
+            kind = tr(" (preview)") if res.prerelease else ""
+            self.update_info.setText(tr("Version {v}{kind} is available: <a href=\"{url}\">release page</a>. "
+                                        "Download and install it from there.", v=res.latest, kind=kind, url=res.url))
+        elif res.latest:
+            self.update_info.setText(tr("You have the latest version ({v}).", v=res.current))
+        else:
+            self.update_info.setText(tr("No releases found."))
+        import logging
+        logging.getLogger(__name__).info("Update check: current %s, latest %s", res.current, res.latest or "-")
 
     def _toggle_autostart(self, on: bool) -> None:
         from vcstudio.platform.win import autostart

@@ -172,6 +172,7 @@ class VideoPipeline:
         from vcstudio.replacement.lighting import AutoLight
         self.framer = AutoFramer()        # auto-framing: crop to the people, follow them smoothly
         self.light = AutoLight()          # automatic exposure / white balance of the camera picture
+        self.plugins = None               # PluginManager (vcstudio/plugins): user effects on the finished output
         self.taps: list = []              # callables(bgra, pts) given every output frame (recorder, instant replay);
         #                                   they must only queue the frame — they run on the output thread
         self._override_cache: tuple | None = None
@@ -289,6 +290,30 @@ class VideoPipeline:
             log.exception("lighting failed; frame passed unchanged")
             return frame
 
+    def _run_plugins(self, pm, out: Frame, frame: Frame, sc) -> Frame:
+        """User plugins on the finished picture (after framing, before the camera). The manager guards each call;
+        anything else going wrong here leaves the frame as it was."""
+        from vcstudio.core.pixelbuffer import pixel_buffer_for
+        from vcstudio.plugins import FrameInfo, PluginObject
+        try:
+            sx, sy = out.width / max(1, frame.width), out.height / max(1, frame.height)
+            objs = tuple(PluginObject(o.label, o.track_id, float(o.confidence),
+                                      (o.x0 * sx, o.y0 * sy, o.x1 * sx, o.y1 * sy))
+                         for o in self.ai.tracked_at(frame.pts))
+            info = FrameInfo(frame.pts, out.width, out.height, getattr(sc, "name", "") or "", objs)
+            with out.bgra() as a:
+                res = pm.run(a, info)
+                if res is a:
+                    return out
+            arr = Frame(out.seq, out.pts, out.arrival, out.width, out.height, array=res, source=out.source)
+            return Frame(out.seq, out.pts, out.arrival, out.width, out.height, pixel_buffer=pixel_buffer_for(arr),
+                         source=f"{out.source}+plugins")
+        except Exception as e:
+            with self._lock:
+                self._stats.last_error = f"plugins: {type(e).__name__}: {e}"
+            log.exception("plugins failed; frame passed unchanged")
+            return out
+
     def _frame_to_people(self, out: Frame, frame: Frame, fcfg) -> Frame:
         """Auto-framing: crop the finished output to the people and scale it back (vcstudio/replacement/framing.py).
         Any failure leaves the frame unframed: the camera never waits."""
@@ -395,6 +420,9 @@ class VideoPipeline:
                     out = self._frame_to_people(out, frame, fcfg)
                 elif self.framer.rect is not None:
                     self.framer.reset()
+                pm = self.plugins
+                if pm is not None and pm.active and not self.passthrough:
+                    out = self._run_plugins(pm, out, frame, sc)
                 if sc is not None:
                     out.meta["scene"] = sc.version
                 self._last_out = out

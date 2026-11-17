@@ -6,9 +6,11 @@ are not included). It hides faces, blurs or replaces the background, puts images
 or a logo over regions (Direct3D 11 or CPU), and sends the result to its own system camera, **AI Virtual Camera**. You
 can then pick that camera in Zoom, Teams, Chrome, Discord, OBS or the Windows Camera app.
 
-Everything runs locally. The app sends nothing anywhere. Its only network access is the optional "Download models"
-button for "any object by text" (about 220 MB from huggingface.co, SHA-256 checked); `VCS_NO_NETWORK=1` turns it off.
-There is no telemetry and no auto-update.
+Everything runs locally. The app sends nothing anywhere. It uses the network only when you click one of two buttons:
+"Download models" for "any object by text" (about 220 MB from huggingface.co, SHA-256 checked) and "Check for
+updates" in Settings (one request to this project's GitHub releases page list). `VCS_NO_NETWORK=1` turns both off.
+There is no telemetry and no auto-update. Plugins (Settings → Plugins, [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md)) are
+your own code and are not limited by this.
 
 **Status: 0.4.1, a preview release.** Developed and tested on a server without a GPU (Windows Server 2025, software
 Direct3D). Speed on real graphics cards, compatibility with every video app and colour in each of them still have

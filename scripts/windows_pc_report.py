@@ -208,6 +208,20 @@ def markdown(rep: dict) -> str:
     return "\n".join(L) + "\n"
 
 
+def problems(rep: dict) -> list[str]:
+    """What --strict fails on: the parts that must work on any PC, a CI runner included — AI on the CPU and the
+    pipeline benchmark. GPU providers and the camera depend on the machine and are only reported."""
+    out = []
+    cpu = [r for r in rep.get("ai") or [] if r.get("provider") == "CPU"]
+    if not cpu:
+        out.append("ai: no model ran on the CPU (models missing from the app folder?)")
+    out += [f"ai {r['model']} on CPU: {r['error']}" for r in cpu if r.get("error")]
+    p = rep.get("pipeline")
+    if not isinstance(p, dict) or p.get("error"):
+        out.append(f"pipeline: {(p or {}).get('error', 'no result')}"[:600])
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--out", type=Path, default=ROOT / "build" / "pc-report")
@@ -215,6 +229,8 @@ def main() -> int:
     ap.add_argument("--runs", type=int, default=50)
     ap.add_argument("--soak-minutes", type=float, default=0)
     ap.add_argument("--quick", action="store_true", help="short runs, two modes (a smoke check of the script)")
+    ap.add_argument("--strict", action="store_true", help="exit 1 if AI on the CPU or the pipeline benchmark failed "
+                                                          "(CI check of the installed app)")
     a = ap.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
     seconds, runs = (4, 8) if a.quick else (a.seconds, a.runs)
@@ -232,7 +248,10 @@ def main() -> int:
     (a.out / "report.json").write_text(json.dumps(rep, indent=2), encoding="utf-8")
     (a.out / "report.md").write_text(markdown(rep), encoding="utf-8")
     print(f"\nwrote {a.out / 'report.md'} and report.json")
-    return 0
+    bad = problems(rep)
+    for b in bad:
+        print("PROBLEM:", b, flush=True)
+    return 1 if a.strict and bad else 0
 
 
 if __name__ == "__main__":

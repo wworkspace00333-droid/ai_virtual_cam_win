@@ -238,6 +238,42 @@ RU: dict[str, str] = {
     "Instant replay: {s} s kept ({mb} MB)": "Повтор: удержано {s} с ({mb} МБ)",
     "Start / stop recording": "Начать / остановить запись",
     "Save instant replay": "Сохранить повтор",
+    "Updates": "Обновления",
+    "Check for updates": "Проверить обновления",
+    "Asks GitHub once whether a newer release exists. Nothing about you or this computer is sent, nothing is "
+    "downloaded or installed, and the app never checks by itself.":
+        "Один раз спрашивает GitHub, есть ли новая версия. Ничего о вас или компьютере не отправляется, ничего не "
+        "скачивается и не устанавливается, сама программа никогда не проверяет.",
+    "Version {v}": "Версия {v}",
+    "Network access is turned off (privacy settings), so the app does not check for updates.":
+        "Доступ к сети выключен (настройки приватности), поэтому программа не проверяет обновления.",
+    "Could not check for updates: {e}": "Не удалось проверить обновления: {e}",
+    " (preview)": " (предварительная)",
+    "Version {v}{kind} is available: <a href=\"{url}\">release page</a>. Download and install it from there.":
+        "Доступна версия {v}{kind}: <a href=\"{url}\">страница выпуска</a>. Скачайте и установите её оттуда.",
+    "You have the latest version ({v}).": "У вас последняя версия ({v}).",
+    "No releases found.": "Выпусков не найдено.",
+    "Plugins": "Плагины",
+    "Your own Python effects on the camera output (docs/PLUGIN_SDK.md). Put a plugin's .py file in the plugins "
+    "folder and switch it on here. A plugin runs with this app's rights: use only plugins you trust. A changed file "
+    "is switched off until you switch it on again.":
+        "Свои эффекты на Python для выхода камеры (docs/PLUGIN_SDK.md). Положите .py-файл плагина в папку плагинов "
+        "и включите его здесь. Плагин работает с правами программы: используйте только те, которым доверяете. "
+        "Изменённый файл выключается, пока вы не включите его снова.",
+    "Open plugins folder": "Открыть папку плагинов",
+    "Reload list": "Обновить список",
+    "Plugins folder not available: {e}": "Папка плагинов недоступна: {e}",
+    "stopped after an error": "остановлен после ошибки",
+    "incompatible": "несовместим",
+    "invalid": "неверный файл",
+    " — slow ({ms} ms)": " — медленный ({ms} мс)",
+    "{n} plugin(s) in {path}": "Плагинов: {n}, папка {path}",
+    "No plugins in {path}": "Нет плагинов в {path}",
+    "Switch on “{name}”?\n\n{path}\n\nIts code will run inside this app with your rights. Only continue if you trust "
+    "where it comes from.":
+        "Включить «{name}»?\n\n{path}\n\nЕго код будет выполняться внутри программы с вашими правами. Продолжайте, "
+        "только если доверяете источнику.",
+    "“{name}” did not start: {e}": "«{name}» не запустился: {e}",
     "Automatic exposure and white balance, metered on the faces: a dim room or a bright window behind you no longer "
     "leaves your face dark. Your images and backgrounds are not changed.":
         "Автоматическая экспозиция и баланс белого по лицам: тёмная комната или яркое окно за спиной больше не "

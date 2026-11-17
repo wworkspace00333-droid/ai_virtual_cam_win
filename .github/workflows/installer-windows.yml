@@ -94,6 +94,23 @@ jobs:
         shell: pwsh
         run: Remove-Item (Join-Path $env:RUNNER_TEMP "sign.pfx") -ErrorAction SilentlyContinue
 
+      # D9 / roadmap P3.4: the self-check above runs the PyInstaller folder; this runs what users get — the installer,
+      # silently, then the PC report from the installed vcstudio.exe (AI on the CPU and the pipeline must work; GPU
+      # and camera numbers are only reported). Before "Attach", so a broken installed app is never attached.
+      - name: Install silently and check the installed app
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $exe = Get-Item "C:\vcs-build\AIVirtualCameraStudio-Setup-*.exe"
+          $p = Start-Process $exe.FullName -Wait -PassThru -ArgumentList @(
+            "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=C:\vcs-inst", "/LOG=C:\vcs-build\install.log")
+          if ($p.ExitCode -ne 0) { throw "installer exit code $($p.ExitCode) (see install.log)" }
+          $env:VCS_NO_WIZARD = "1"
+          $r = Start-Process C:\vcs-inst\vcstudio.exe -Wait -PassThru -ArgumentList @(
+            "--run-script", "windows_pc_report.py", "--quick", "--strict", "--out", "C:\vcs-build\pc-report")
+          Get-Content C:\vcs-build\pc-report\report.md -ErrorAction SilentlyContinue
+          if ($r.ExitCode -ne 0) { throw "the installed app's report failed (exit code $($r.ExitCode))" }
+
       - name: Attach the installer to the tag's release (draft pre-release if it does not exist)
         if: github.ref_type == 'tag' || inputs.tag != ''
         shell: pwsh
@@ -144,4 +161,6 @@ jobs:
             C:\vcs-build\AIVirtualCameraStudio-Setup-*.exe.sha256
             C:\vcs-build\licences.json
             C:\vcs-build\selfcheck.json
+            C:\vcs-build\install.log
+            C:\vcs-build\pc-report\
           retention-days: 30

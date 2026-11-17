@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 from vcstudio import __version__
 from vcstudio.core.capture_supervisor import CaptureSupervisor
@@ -90,6 +91,12 @@ class AppContext:
         from vcstudio.core.recorder import RecordingService
         self.recording = RecordingService(self.pipeline, self.settings,
                                           lambda lv, m: self.db.log_event(lv, "recording", m))
+        from vcstudio.plugins import PluginManager
+        self.plugins = PluginManager(self.paths.root / "plugins", self.settings,
+                                     lambda lv, m: self.db.log_event(lv, "plugins", m))
+        self.pipeline.plugins = self.plugins
+        if not os.environ.get("VCS_NO_PLUGINS"):            # safe start: VCS_NO_PLUGINS=1 loads none
+            self.plugins.start_approved()
         mode =self.profiles.active()["body"].get("performance_mode")
         if mode and mode != self.settings.get("performance.mode"):
             self.settings.set("performance.mode", mode)
@@ -234,6 +241,7 @@ class AppContext:
         self.watchdog.stop()
         self.pipeline.stop()
         self.recording.close()             # after the pipeline: the file gets every frame that was output
+        self.plugins.close()
         self.background.stop()
         self.replacement.close()
         self.ai.stop()

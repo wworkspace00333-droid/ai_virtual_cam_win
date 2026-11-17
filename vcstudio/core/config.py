@@ -113,12 +113,15 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "start_minimized": False,    # with Windows sign-in autostart: start in the tray
     },
     "processing": {"compositor": "auto"},     # auto (GPU if available) | metal (macOS) / d3d11 (Windows) | cpu
-    # the only network access: optional models fetched on the user's click (vcstudio/ai/model_download.py);
-    # false (or VCS_NO_NETWORK=1) hides the button. Nothing is ever sent or checked in the background.
-    "privacy": {"allow_downloads": True},
+    # the only network access, each on the user's click: optional models (vcstudio/ai/model_download.py) and
+    # "Check for updates" (vcstudio/app/update_check.py); false (or VCS_NO_NETWORK=1) disables the button.
+    # Nothing is ever sent or checked in the background.
+    "privacy": {"allow_downloads": True, "allow_update_check": True},
     # recordings of the camera output (vcstudio/core/recorder.py); folder "" = Videos\AI Virtual Camera Studio.
     # Instant replay keeps the last replay_seconds in memory (about 2 MB per second at 720p) only while enabled.
     "recording": {"folder": "", "replay_enabled": False, "replay_seconds": 30},
+    # plugins (vcstudio/plugins): approved = {plugin id: SHA-256 of the file the user switched on}; options per plugin
+    "plugins": {"approved": {}, "options": {}},
     "hotkeys": dict(DEFAULT_HOTKEYS),
     "logging": {"level": "INFO", "max_bytes": 5_000_000, "backup_count": 5},
 }
