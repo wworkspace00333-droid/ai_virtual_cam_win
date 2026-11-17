@@ -137,20 +137,23 @@ def composite_background(frame_bgra: np.ndarray, mask192: np.ndarray, mode: str,
     aliased. Blur runs on a quarter-size copy (much cheaper than a full-size Gaussian, visually the same for a
     background). Returns a new BGRA array (or `out`)."""
     h, w = frame_bgra.shape[:2]
-    m = cv2.resize(mask192, (w, h), interpolation=cv2.INTER_LINEAR)
+    if mode not in ("blur", "image") or (mode == "image" and image_bgra is None):
+        return frame_bgra
+    # edge remap and 1 - m on the small mask, then both weights scaled up: the same order as the GPU layer (mask
+    # remapped, then sampled bilinearly); remapping 2 M full-size values cost ~11 of the ~24 ms per 1080p frame
     lo, hi = max(0.0, edge - 0.25), min(1.0, edge + 0.25)
-    m = np.clip((m - lo) / max(1e-6, hi - lo), 0.0, 1.0)
+    small_m = np.clip((np.asarray(mask192, np.float32) - lo) / max(1e-6, hi - lo), 0.0, 1.0)
+    m = cv2.resize(small_m, (w, h), interpolation=cv2.INTER_LINEAR)
+    inv = cv2.resize(1.0 - small_m, (w, h), interpolation=cv2.INTER_LINEAR)
     if mode == "blur":
         k = max(1, int(strength)) | 1
         small = cv2.resize(frame_bgra, (max(1, w // 4), max(1, h // 4)), interpolation=cv2.INTER_AREA)
         small = cv2.GaussianBlur(small, (0, 0), sigmaX=max(0.5, k / 4))
         bg = cv2.resize(small, (w, h), interpolation=cv2.INTER_LINEAR)
-    elif mode == "image" and image_bgra is not None:
-        bg = image_bgra if image_bgra.shape[:2] == (h, w) else cv2.resize(image_bgra, (w, h), interpolation=cv2.INTER_AREA)
     else:
-        return frame_bgra
-    m = np.ascontiguousarray(m, dtype=np.float32)
-    res = cv2.blendLinear(np.ascontiguousarray(frame_bgra), np.ascontiguousarray(bg), m, 1.0 - m)   # SIMD, uint8
+        assert image_bgra is not None
+        bg = image_bgra if image_bgra.shape[:2] == (h, w) else cv2.resize(image_bgra, (w, h), interpolation=cv2.INTER_AREA)
+    res = cv2.blendLinear(np.ascontiguousarray(frame_bgra), np.ascontiguousarray(bg), m, inv)   # SIMD, uint8
     if out is None:
         return res
     np.copyto(out, res)

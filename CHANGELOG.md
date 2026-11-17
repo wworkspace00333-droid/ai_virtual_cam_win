@@ -17,6 +17,10 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
   scissors as no gesture. Off by default.
 
 ### Changed
+- Background blur / replacement on a PC without a graphics card is about 1.7–2× cheaper: the edge remap runs
+  on the 192×192 mask instead of every output pixel (1080p blur 26 → 15 ms, image 17 → 8.5 ms per frame; at most
+  a few levels of difference on the person's edge). Live at 1080p60 with blur on the 2-core server: output
+  33.8 → 48.1 fps (D27).
 - Lighting is about 6× cheaper: ~6 ms per 1080p frame on the 2-core server instead of ~40 (one pass with a
   4-channel lookup table, metering on the shrunk whole frame — no full-frame copies).
 - "Start with Windows" follows a reinstalled app: an entry pointing to a removed exe or another install folder is
