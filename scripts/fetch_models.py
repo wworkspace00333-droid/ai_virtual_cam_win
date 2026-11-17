@@ -44,12 +44,15 @@ MODELS = {
 # Apache-2.0); 8-bit ONNX exports pinned to a commit, ~220 MB, not in the installer: the app downloads them on the
 # user's click (vcstudio/ai/model_download.py, the same table).
 sys.path.insert(0, str(ROOT))
+from vcstudio.ai.model_download import CLIP as _CLIP  # noqa: E402
 from vcstudio.ai.model_download import HANDS as _HANDS  # noqa: E402
 from vcstudio.ai.model_download import OPEN_VOCAB as _OV  # noqa: E402
 
 OPEN_VOCAB = {name: (url, digest, lic) for name, (url, digest, lic, _size) in _OV.items()}
 # optional, --hands: gesture control (MediaPipe palm + hand landmarks, OpenCV Zoo ONNX, Apache-2.0, ~8 MB)
 HANDS = {name: (url, digest, lic) for name, (url, digest, lic, _size) in _HANDS.items()}
+# optional, --clip: CLIP ViT-B/32 (OpenAI, MIT, Xenova 8-bit ONNX, ~147 MB) for checking OWLv2 finds and image queries
+CLIP = {name: (url, digest, lic) for name, (url, digest, lic, _size) in _CLIP.items()}
 
 
 def sha256(p: Path) -> str:
@@ -66,9 +69,10 @@ def main() -> int:
     ap.add_argument("--check", action="store_true", help="verify only, download nothing")
     ap.add_argument("--open-vocab", action="store_true", help="also the optional OWLv2 + SAM 2.1 models (~220 MB)")
     ap.add_argument("--hands", action="store_true", help="also the optional hand models for gestures (~8 MB)")
+    ap.add_argument("--clip", action="store_true", help="also CLIP ViT-B/32 for check + image query (~147 MB)")
     a = ap.parse_args()
     bad = 0
-    todo = dict(MODELS, **(OPEN_VOCAB if a.open_vocab else {}), **(HANDS if a.hands else {}))
+    todo = dict(MODELS, **(OPEN_VOCAB if a.open_vocab else {}), **(HANDS if a.hands else {}), **(CLIP if a.clip else {}))
     for name, (url, digest, lic) in todo.items():
         dst = a.dir / name
         dst.parent.mkdir(parents=True, exist_ok=True)

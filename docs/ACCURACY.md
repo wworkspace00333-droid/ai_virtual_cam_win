@@ -41,3 +41,24 @@ from a click on the backpack: 0.93. CPU timings: SAM image encoding 3.7 s, mask 
   under a free licence or own recordings, and a GPU to run OWLv2 + SAM 2.1 per frame in reasonable time.
 - Any speed on a GPU (DirectML / CUDA): `python scripts/windows_pc_report.py` on the target PC.
 - Search by a sample image: the OWLv2 ONNX export used here has no image-query head (docs/AUDIT_WIN.md).
+
+## CLIP check and picture queries (P2.8): measured, not enabled
+
+CLIP ViT-B/32, 8-bit ONNX (Xenova, MIT), models/clip (`scripts/fetch_models.py --clip`), on coco16 with the
+OWLv2 boxes above (`python scripts/eval_open_vocab.py --queries all --compute-units cpu_only --clip`, 2026-11-17,
+server CPU, 14.5 ms per box):
+
+| OWLv2 boxes | mAP50 | mAP50-95 | best F1 |
+|---|---|---|---|
+| as found (reference) | 0.589 | 0.365 | 0.442 |
+| kept if CLIP p(query) >= 0.05 | 0.308 | 0.203 | 0.304 |
+| kept if p >= 0.3 | 0.167 | 0.119 | 0.148 |
+| re-ranked: confidence x sqrt(p) | 0.541 | 0.349 | 0.399 |
+
+Why: CLIP's zero-shot top-1 on the ground-truth crops is 25 % over the 80 names (15 % below 48 px, 42-48 % above
+96 px), lower than OWLv2's own judgement. Picture-to-picture search for the same class (one crop as the example,
+crops of other photos ranked by cosine): mean AP 0.31, precision 0.04-0.07 at every threshold from 0.6 to 0.85.
+Conclusion: with this model both features would make results worse, so they are not in the app. The code
+(`vcstudio/ai/clip.py`) and the measurement stay, to test a stronger model (full precision or a larger ViT, a new
+download) the same way. Not measured: matching one specific object (your own mug or logo) rather than a class, which
+is easier for CLIP; coco16 has no such labels.

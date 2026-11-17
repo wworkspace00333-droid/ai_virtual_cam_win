@@ -61,6 +61,18 @@ HANDS: dict[str, tuple[str, str, str, int]] = {
 }
 HANDS_APPROX_MB = 8
 
+# CLIP ViT-B/32 (OpenAI, MIT), 8-bit ONNX (Xenova, Transformers.js), pinned commit, about 147 MB: checks what OWLv2
+# found against the query text, and finds objects like an example picture (vcstudio/ai/clip.py). The text model uses
+# the CLIP tokenizer that comes with OWLv2 (same vocabulary), so it is only useful with the open-vocabulary models.
+CLIP_REV = "Xenova/clip-vit-base-patch32/resolve/6b7c523703ae26e39be4b03774966f8571c7f523/"
+CLIP: dict[str, tuple[str, str, str, int]] = {
+    "clip/vision_model_int8.onnx": (HF + CLIP_REV + "onnx/vision_model_quantized.onnx",
+                                    "583fd1110a514667812fee7d684952aaf82a99b959760c8d7dca7e0ab9839299", "MIT", 89117001),
+    "clip/text_model_int8.onnx": (HF + CLIP_REV + "onnx/text_model_quantized.onnx",
+                                  "73baab855d406190da9faa498cfedf65f15cf309f4cc7385b7b032e6d08e5c3a", "MIT", 64504507),
+}
+CLIP_APPROX_MB = 147
+
 
 class DownloadError(RuntimeError):
     pass
