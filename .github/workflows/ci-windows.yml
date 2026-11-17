@@ -87,9 +87,9 @@ jobs:
         run: python scripts/junit_annotations.py build/junit.xml
 
       - name: Coverage gate (core packages)
-        # 80 % is measured on a full local run with the live camera / OBS tests; those skip on this runner.
-        # Raise VCS_COVERAGE_MIN (repository variable) once the CI value is known.
-        run: python scripts/coverage_gate.py build/coverage.json --min ${{ vars.VCS_COVERAGE_MIN || '78' }}
+        # CI measures 83.5 % of core (2026-11-17; a full local run with the live camera tests: 87 %).
+        # The floor keeps ~1.5 points of headroom; VCS_COVERAGE_MIN (repository variable) overrides it.
+        run: python scripts/coverage_gate.py build/coverage.json --min ${{ vars.VCS_COVERAGE_MIN || '82' }}
 
       - name: Upload coverage report
         if: always()
