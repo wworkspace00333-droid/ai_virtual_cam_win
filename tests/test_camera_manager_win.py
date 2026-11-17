@@ -108,6 +108,94 @@ def test_status_message_for_each_registration_state(monkeypatch, states, visible
                                   "broken_registration" if "broken_registration" in states else "not_installed")
 
 
+def test_status_when_the_device_list_fails(monkeypatch):
+    from vcstudio.camera import camera_manager
+    from vcstudio.core import devices
+    from vcstudio.platform.win import vcam_status as vs
+    monkeypatch.setattr(vs, "components", lambda: [_comp("installed")])
+    monkeypatch.setattr(vs, "setup_tool", lambda: "vcam-setup.exe")
+
+    def boom():
+        raise OSError("enumeration failed")
+    monkeypatch.setattr(devices, "list_video_devices", boom)
+    st = camera_manager.status()
+    assert not st.device_visible and "not listed as a video device yet" in st.message
+
+
+class _FakeWinApi:
+    """Stands in for shell32 / kernel32: records the ShellExecuteExW request, returns a chosen outcome."""
+
+    def __init__(self, started=True, error=0, wait=0, exit_code=0):
+        self.started, self.error, self.wait, self.exit_code = started, error, wait, exit_code
+        self.request = None
+        self.closed = []
+        self.shell32 = SimpleNamespace(ShellExecuteExW=self._shell_execute)
+        self.kernel32 = SimpleNamespace(WaitForSingleObject=self._wait, GetExitCodeProcess=self._exit_code,
+                                        CloseHandle=self.closed.append)
+
+    def _shell_execute(self, ref):
+        info = ref._obj
+        self.request = (info.lpVerb, info.lpFile, info.lpParameters, info.nShow, info.fMask)
+        info.hProcess = 1234
+        return 1 if self.started else 0
+
+    def _wait(self, handle, ms):
+        self.wait_ms = ms
+        return self.wait
+
+    def _exit_code(self, handle, ref):
+        ref._obj.value = self.exit_code
+        return 1
+
+    def api(self):
+        return self.shell32, self.kernel32, lambda: self.error
+
+
+@pytest.fixture
+def elevated(monkeypatch, tmp_path):
+    from vcstudio.camera import camera_manager
+    from vcstudio.platform.win import vcam_status as vs
+    tool = tmp_path / "vcam-setup.exe"
+    monkeypatch.setattr(vs, "setup_tool", lambda: tool)
+
+    def use(**kw):
+        fake = _FakeWinApi(**kw)
+        monkeypatch.setattr(camera_manager, "_win_api", fake.api)
+        return fake, tool
+    return camera_manager, use
+
+
+def test_elevated_setup_runs_hidden_with_runas_and_returns_its_exit_code(elevated):
+    cm, use = elevated
+    fake, tool = use(exit_code=3)
+    assert cm._run_setup_elevated("--install", timeout=2.5) == (3, "")
+    assert fake.request == ("runas", str(tool), "--install", 0, 0x40)
+    assert fake.wait_ms == 2500 and fake.closed == [1234]                 # process handle closed
+
+
+def test_elevated_setup_declined_or_not_started(elevated):
+    cm, use = elevated
+    use(started=False, error=1223)
+    assert cm._run_setup_elevated("--install") == (1, "Administrator rights were declined.")
+    use(started=False, error=2)
+    assert cm._run_setup_elevated("--install") == (1, "Could not start vcam-setup.exe (2).")
+
+
+def test_elevated_setup_timeout_still_closes_the_handle(elevated):
+    cm, use = elevated
+    fake, _ = use(wait=0x102)                                              # WAIT_TIMEOUT
+    assert cm._run_setup_elevated("--uninstall", timeout=1) == (1, "vcam-setup.exe did not finish in time.")
+    assert fake.closed == [1234]
+
+
+def test_win_api_points_at_the_system_libraries():
+    import ctypes
+
+    from vcstudio.camera import camera_manager
+    shell32, kernel32, last_error = camera_manager._win_api()
+    assert shell32 is ctypes.windll.shell32 and kernel32 is ctypes.windll.kernel32 and last_error is ctypes.GetLastError
+
+
 def test_setup_tool_missing_is_reported_without_a_uac_prompt(monkeypatch):
     from vcstudio.camera import camera_manager
     from vcstudio.platform.win import vcam_status as vs

@@ -53,7 +53,7 @@ class ModelReport:
         return asdict(self)
 
 
-def _shape(desc) -> list[int]:
+def _shape(desc) -> list[int]:  # pragma: macos
     try:
         c = desc.multiArrayConstraint()
         return [int(x) for x in c.shape()] if c is not None else []
@@ -78,7 +78,7 @@ def _class_names(md, user_meta: dict) -> list[str]:
     return []
 
 
-def _compile(src: Path) -> Path:
+def _compile(src: Path) -> Path:  # pragma: macos
     import CoreML  # type: ignore
     import Foundation  # type: ignore
     url, err = CoreML.MLModel.compileModelAtURL_error_(Foundation.NSURL.fileURLWithPath_(str(src)), None)
@@ -153,6 +153,10 @@ def inspect_model(src: Path, sample=None, runs: int = 20) -> ModelReport:
     if src.suffix not in (".mlpackage", ".mlmodel") or ".mlpackage" not in model_extensions():
         raise ModelImportError("choose a .mlpackage or .mlmodel file (Core ML)" if ".mlpackage" in model_extensions()
                                else "choose an .onnx file (YOLO detector or YOLO-seg exported by Ultralytics)")
+    return _inspect_coreml(src, sample, runs)
+
+
+def _inspect_coreml(src: Path, sample, runs: int) -> ModelReport:  # pragma: macos
     import CoreML  # type: ignore
     import Foundation  # type: ignore
     from vcstudio.core.pyobjc_prewarm import prewarm

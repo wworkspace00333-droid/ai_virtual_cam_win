@@ -25,6 +25,10 @@ PDH_MORE_DATA = 0x800007D2
 ERROR_SUCCESS = 0
 
 
+def _load_pdh():
+    return ctypes.WinDLL("pdh")
+
+
 class _FmtValue(ctypes.Structure):
     class _U(ctypes.Union):
         _fields_ = [("longValue", wintypes.LONG), ("doubleValue", ctypes.c_double),
@@ -49,7 +53,7 @@ class GpuMonitor:
         self.available = False
         self.error = ""
         try:
-            self._pdh = ctypes.WinDLL("pdh")
+            self._pdh = _load_pdh()
         except OSError as e:
             self.error = str(e)
             return

@@ -74,6 +74,10 @@ def status() -> CameraStatus:
     from vcstudio.platform import IS_WINDOWS
     if IS_WINDOWS:
         return _status_windows()
+    return _status_mac()  # pragma: macos
+
+
+def _status_mac() -> CameraStatus:  # pragma: macos
     ext = next((e for e in camera_extensions() if e["bundle_id"] == EXTENSION_ID), None)
     try:
         from vcstudio.core.devices import list_video_devices
@@ -131,10 +135,10 @@ def _run_setup_elevated(flag: str, timeout: float = 120) -> tuple[int, str]:
     SEE_MASK_NOCLOSEPROCESS = 0x40
     info = SHELLEXECUTEINFOW(cbSize=ctypes.sizeof(SHELLEXECUTEINFOW), fMask=SEE_MASK_NOCLOSEPROCESS,
                              lpVerb="runas", lpFile=str(tool), lpParameters=flag, nShow=0)
-    if not ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(info)):
-        err = ctypes.GetLastError()
+    shell32, k32, last_error = _win_api()
+    if not shell32.ShellExecuteExW(ctypes.byref(info)):
+        err = last_error()
         return 1, ("Administrator rights were declined." if err == 1223 else f"Could not start vcam-setup.exe ({err}).")
-    k32 = ctypes.windll.kernel32
     try:
         if k32.WaitForSingleObject(info.hProcess, int(timeout * 1000)) != 0:
             return 1, "vcam-setup.exe did not finish in time."
@@ -146,12 +150,18 @@ def _run_setup_elevated(flag: str, timeout: float = 120) -> tuple[int, str]:
         k32.CloseHandle(info.hProcess)
 
 
+def _win_api():
+    """(shell32, kernel32, GetLastError): one place, so the tests can stand in for the UAC prompt."""
+    import ctypes
+    return ctypes.windll.shell32, ctypes.windll.kernel32, ctypes.GetLastError
+
+
 def activate() -> tuple[int, str]:
     """0 active, 2 needs user approval, 3 needs reboot, other = error."""
     from vcstudio.platform import IS_WINDOWS
     if IS_WINDOWS:
         return _run_setup_elevated("--install")
-    return _run_host("--activate-camera")
+    return _run_host("--activate-camera")  # pragma: macos
 
 
 def reinstall() -> tuple[int, str]:
@@ -182,7 +192,7 @@ def deactivate() -> tuple[int, str]:
     from vcstudio.platform import IS_WINDOWS
     if IS_WINDOWS:
         return _run_setup_elevated("--uninstall")
-    return _run_host("--deactivate-camera")
+    return _run_host("--deactivate-camera")  # pragma: macos
 
 
 def open_approval_settings() -> None:
@@ -191,4 +201,4 @@ def open_approval_settings() -> None:
     if IS_WINDOWS:
         os.startfile("ms-settings:privacy-webcam")      # noqa: S606 - fixed system URI
         return
-    subprocess.Popen(["open", APPROVAL_PANE])
+    subprocess.Popen(["open", APPROVAL_PANE])  # pragma: macos

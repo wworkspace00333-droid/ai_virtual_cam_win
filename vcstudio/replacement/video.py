@@ -60,14 +60,14 @@ def ffmpeg_path() -> str | None:
                                            if Path(p).exists()), None)
 
 
-def _fourcc(v: int) -> str:
+def _fourcc(v: int) -> str:  # pragma: macos
     try:
         return int(v).to_bytes(4, "big").decode("ascii").strip()
     except (UnicodeDecodeError, OverflowError):
         return str(v)
 
 
-def _av_asset(path: Path):
+def _av_asset(path: Path):  # pragma: macos
     import AVFoundation as AV  # type: ignore
     import Foundation  # type: ignore
     asset = AV.AVURLAsset.URLAssetWithURL_options_(Foundation.NSURL.fileURLWithPath_(str(path)), None)
@@ -83,6 +83,11 @@ def probe(path: Path) -> VideoInfo:
     if not IS_MAC:                    # Windows: PyAV / FFmpeg (vcstudio/platform/win/video_decode.py)
         from vcstudio.platform.win.video_decode import probe as pyav_probe
         return pyav_probe(path)
+    return _probe_mac(path)
+
+
+def _probe_mac(path: Path) -> VideoInfo:  # pragma: macos
+    """AVFoundation first, ffprobe for what it cannot read (macOS)."""
     import CoreMedia as CM  # type: ignore
     asset, track = _av_asset(path)
     if track is not None:
@@ -148,7 +153,7 @@ def _premultiply(a: np.ndarray) -> np.ndarray:
     return out
 
 
-class AVFDecoder:
+class AVFDecoder:  # pragma: macos
     """Iterates (pts_seconds, premultiplied BGRA ndarray) from start_s using AVAssetReader."""
 
     def __init__(self, path: Path, info: VideoInfo, start_s: float, max_side: int | None):
@@ -212,8 +217,8 @@ class AVFDecoder:
             pass
 
 
-class FFmpegDecoder:
-    """Software fallback: ffmpeg subprocess emitting raw BGRA."""
+class FFmpegDecoder:  # pragma: macos
+    """Software fallback on macOS: ffmpeg subprocess emitting raw BGRA (Windows decodes with PyAV)."""
 
     def __init__(self, path: Path, info: VideoInfo, start_s: float, max_side: int | None):
         ff = ffmpeg_path()
@@ -248,7 +253,7 @@ def open_decoder(path: Path, info: VideoInfo, start_s: float, max_side: int | No
     if info.decoder == "pyav":
         from vcstudio.platform.win.video_decode import PyAVDecoder
         return PyAVDecoder(path, info, start_s, max_side)
-    return (AVFDecoder if info.decoder == "avfoundation" else FFmpegDecoder)(path, info, start_s, max_side)
+    return (AVFDecoder if info.decoder == "avfoundation" else FFmpegDecoder)(path, info, start_s, max_side)  # pragma: macos
 
 
 @dataclass

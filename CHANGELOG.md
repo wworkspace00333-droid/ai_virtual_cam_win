@@ -7,6 +7,12 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+### Tests
+- Core coverage 83.9 → 87.1 % locally: the ONNX model importer, the elevated camera setup call (UAC outcomes),
+  the GPU counters (a stand-in pdh.dll answering like Windows) and the GDI screenshot are now tested on any
+  machine. macOS-only code paths in shared modules moved into functions marked `# pragma: macos`, like the rest
+  of the macOS code; behaviour on Windows is unchanged.
+
 ## [0.4.4] — 2026-11-17
 
 Microphone sound in recordings and instant replay.

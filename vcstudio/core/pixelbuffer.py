@@ -14,21 +14,7 @@ class PixelBufferPool:
 
     def __init__(self, width: int, height: int):
         self.width, self.height = width, height
-        if not IS_MAC:
-            self._pool = None
-            return
-        import Quartz as Q  # type: ignore
-        self.width, self.height = width, height
-        attrs = {
-            Q.kCVPixelBufferPixelFormatTypeKey: Q.kCVPixelFormatType_32BGRA,
-            Q.kCVPixelBufferWidthKey: width,
-            Q.kCVPixelBufferHeightKey: height,
-            Q.kCVPixelBufferIOSurfacePropertiesKey: {},
-            Q.kCVPixelBufferMetalCompatibilityKey: True,
-        }
-        err, self._pool = Q.CVPixelBufferPoolCreate(None, {Q.kCVPixelBufferPoolMinimumBufferCountKey: 3}, attrs, None)
-        if err != 0:
-            raise RuntimeError(f"CVPixelBufferPoolCreate failed: {err}")
+        self._pool = _cv_pool(width, height) if IS_MAC else None
 
     def from_array(self, arr: np.ndarray):
         h, w = arr.shape[:2]
@@ -36,19 +22,39 @@ class PixelBufferPool:
             raise ValueError("array does not match pool format")
         if not IS_MAC:
             return np.array(arr, order="C", copy=True)
-        import Quartz as Q  # type: ignore
-        err, pb = Q.CVPixelBufferPoolCreatePixelBuffer(None, self._pool, None)
-        if err != 0:
-            raise RuntimeError(f"CVPixelBufferPoolCreatePixelBuffer failed: {err}")
-        Q.CVPixelBufferLockBaseAddress(pb, 0)
-        try:
-            bpr = Q.CVPixelBufferGetBytesPerRow(pb)
-            buf = Q.CVPixelBufferGetBaseAddress(pb).as_buffer(bpr * h)
-            dst = np.frombuffer(buf, dtype=np.uint8).reshape(h, bpr)[:, : w * 4].reshape(h, w, 4)
-            dst[...] = arr
-        finally:
-            Q.CVPixelBufferUnlockBaseAddress(pb, 0)
-        return pb
+        return _cv_fill(self._pool, arr)
+
+
+def _cv_pool(width: int, height: int):  # pragma: macos
+    import Quartz as Q  # type: ignore
+    attrs = {
+        Q.kCVPixelBufferPixelFormatTypeKey: Q.kCVPixelFormatType_32BGRA,
+        Q.kCVPixelBufferWidthKey: width,
+        Q.kCVPixelBufferHeightKey: height,
+        Q.kCVPixelBufferIOSurfacePropertiesKey: {},
+        Q.kCVPixelBufferMetalCompatibilityKey: True,
+    }
+    err, pool = Q.CVPixelBufferPoolCreate(None, {Q.kCVPixelBufferPoolMinimumBufferCountKey: 3}, attrs, None)
+    if err != 0:
+        raise RuntimeError(f"CVPixelBufferPoolCreate failed: {err}")
+    return pool
+
+
+def _cv_fill(pool, arr: np.ndarray):  # pragma: macos
+    import Quartz as Q  # type: ignore
+    h, w = arr.shape[:2]
+    err, pb = Q.CVPixelBufferPoolCreatePixelBuffer(None, pool, None)
+    if err != 0:
+        raise RuntimeError(f"CVPixelBufferPoolCreatePixelBuffer failed: {err}")
+    Q.CVPixelBufferLockBaseAddress(pb, 0)
+    try:
+        bpr = Q.CVPixelBufferGetBytesPerRow(pb)
+        buf = Q.CVPixelBufferGetBaseAddress(pb).as_buffer(bpr * h)
+        dst = np.frombuffer(buf, dtype=np.uint8).reshape(h, bpr)[:, : w * 4].reshape(h, w, 4)
+        dst[...] = arr
+    finally:
+        Q.CVPixelBufferUnlockBaseAddress(pb, 0)
+    return pb
 
 
 _pools: dict[tuple[int, int], PixelBufferPool] = {}
@@ -68,6 +74,10 @@ def pixel_buffer_for(frame):
     if not IS_MAC:
         a = frame.array
         return a if a.flags.c_contiguous else np.ascontiguousarray(a)
+    return _pooled(frame)
+
+
+def _pooled(frame):  # pragma: macos
     key = (frame.width, frame.height)
     with _lock:
         pool = _pools.get(key)
