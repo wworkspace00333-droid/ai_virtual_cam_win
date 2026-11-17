@@ -87,7 +87,10 @@ class AppContext:
         self.watchdog = Watchdog(self)
         from vcstudio.core.scene import SceneManager
         self.scenes = SceneManager(self)
-        mode = self.profiles.active()["body"].get("performance_mode")
+        from vcstudio.core.recorder import RecordingService
+        self.recording = RecordingService(self.pipeline, self.settings,
+                                          lambda lv, m: self.db.log_event(lv, "recording", m))
+        mode =self.profiles.active()["body"].get("performance_mode")
         if mode and mode != self.settings.get("performance.mode"):
             self.settings.set("performance.mode", mode)
         self.apply_ai_config()
@@ -124,6 +127,9 @@ class AppContext:
             self.monitor.set_warning_mb(warn)
             self.watchdog.set_thresholds(warn, crit)
             log.info("Memory thresholds: warning %d MB, critical %d MB", warn, crit)
+            return
+        if key.startswith("recording"):
+            self.recording.apply_settings()
             return
         if key.startswith("performance"):
             self.apply_ai_config()
@@ -227,6 +233,7 @@ class AppContext:
         self.scheduler.stop()
         self.watchdog.stop()
         self.pipeline.stop()
+        self.recording.close()             # after the pipeline: the file gets every frame that was output
         self.background.stop()
         self.replacement.close()
         self.ai.stop()

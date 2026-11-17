@@ -224,6 +224,10 @@ class MainWindow(QMainWindow):
             if holder.get("level", "off") != "off" and not pipe.replacement_enabled:
                 pipe.set_replacement_enabled(True)
             log.info("Privacy: %s", holder.get("level"))
+        elif aid in ("record_toggle", "replay_save"):
+            page = next((p for p in self.pages if p.key == "preview"), None)
+            if page is not None:
+                page.toggle_recording() if aid == "record_toggle" else page.save_replay()
         elif aid.startswith("scene_"):
             try:
                 name = self.ctx.scenes.switch_slot(int(aid.split("_", 1)[1]))

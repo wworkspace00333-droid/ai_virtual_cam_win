@@ -59,6 +59,8 @@ DEFAULT_HOTKEYS: dict[str, str] = {
     "card_prev": "Ctrl+Alt+Left",
     "card_toggle": "Ctrl+Alt+C",
     "privacy_toggle": "Ctrl+Alt+H",                                  # vcstudio/replacement/privacy_mode.py
+    "record_toggle": "Ctrl+Alt+F9",                                  # vcstudio/core/recorder.py
+    "replay_save": "Ctrl+Alt+F10",
     **{f"scene_{n}": f"Ctrl+Alt+{n}" for n in range(1, 10)},        # scene slots 1..9 (vcstudio/core/scene.py)
 }
 
@@ -114,6 +116,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # the only network access: optional models fetched on the user's click (vcstudio/ai/model_download.py);
     # false (or VCS_NO_NETWORK=1) hides the button. Nothing is ever sent or checked in the background.
     "privacy": {"allow_downloads": True},
+    # recordings of the camera output (vcstudio/core/recorder.py); folder "" = Videos\AI Virtual Camera Studio.
+    # Instant replay keeps the last replay_seconds in memory (about 2 MB per second at 720p) only while enabled.
+    "recording": {"folder": "", "replay_enabled": False, "replay_seconds": 30},
     "hotkeys": dict(DEFAULT_HOTKEYS),
     "logging": {"level": "INFO", "max_bytes": 5_000_000, "backup_count": 5},
 }
@@ -137,6 +142,7 @@ _RANGES = {
     ("input", "missing_input_timeout_ms"): (100, 60000),
     ("ui", "preview_max_fps"): (1, 60),
     ("performance", "memory_warning_mb"): (256, 262144),
+    ("recording", "replay_seconds"): (5, 300),
 }
 
 

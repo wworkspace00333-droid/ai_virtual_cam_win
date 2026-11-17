@@ -172,6 +172,8 @@ class VideoPipeline:
         from vcstudio.replacement.lighting import AutoLight
         self.framer = AutoFramer()        # auto-framing: crop to the people, follow them smoothly
         self.light = AutoLight()          # automatic exposure / white balance of the camera picture
+        self.taps: list = []              # callables(bgra, pts) given every output frame (recorder, instant replay);
+        #                                   they must only queue the frame — they run on the output thread
         self._override_cache: tuple | None = None
         self._consecutive_errors = 0
         self._generation = 0
@@ -397,6 +399,12 @@ class VideoPipeline:
                     out.meta["scene"] = sc.version
                 self._last_out = out
             self.camera.send(out.pixel_buffer, frame.pts)
+            if self.taps and isinstance(out.pixel_buffer, np.ndarray):
+                for tap in tuple(self.taps):
+                    try:
+                        tap(out.pixel_buffer, frame.pts)
+                    except Exception:
+                        log.exception("output tap failed")
             self.processed.put((frame, out))
             done = host_time_s()
             self._fps.tick()

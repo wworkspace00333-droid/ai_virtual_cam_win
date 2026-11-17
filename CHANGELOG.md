@@ -10,6 +10,8 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 Fixes from the 0.5 audit (docs/WINDOWS_AUDIT_0.5.md, P0).
 
 ### Fixed
+- Tests: every test app wrote its own copy of the optimised AI models (30–80 MB each), about 1.5 GB per full run,
+  kept for three runs — enough to fill this server's disk. The test apps now share one cache per run.
 - An AI model loads even when its optimised copy cannot be saved (full disk, read-only cache folder); before, ONNX
   Runtime's "Protobuf serialization failed" left the AI in an error state (D23).
 - The self-check, the diagnostics ZIP and the camera loopback test delete their temporary folders; every self-check
@@ -23,6 +25,14 @@ Fixes from the 0.5 audit (docs/WINDOWS_AUDIT_0.5.md, P0).
   rate and ratcheted down to the floor; it now scales from the unthrottled rate (D26).
 
 ### Added
+- **Recording** (P3.1, Preview page "● Record", Ctrl+Alt+F9): the camera output — exactly what apps receive — is
+  written to an MP4 in Videos\AI Virtual Camera Studio. H.264 through the Windows Media Foundation encoder (hardware
+  where the graphics card offers it), no x264; falls back to NVENC / Quick Sync / AMF and finally MPEG-4. The output
+  thread only queues a copy (a frame that does not fit is dropped and counted), so recording never slows the camera;
+  frame times are kept (a pause stays a pause). On the 2-core server: 90 frames of 720p encoded in 0.55 s.
+- **Instant replay** (P3.2, Preview page, Ctrl+Alt+F10 saves): while on, the last 30 s (5–300, setting
+  `recording.replay_seconds`) are kept in memory as downscaled JPEG frames, about 2 MB per second at 720p; nothing
+  touches the disk until you save.
 - **Lighting enhancement** (P2.6, Preview page): automatic exposure metered on the inner part of the faces (a bright
   window behind no longer darkens the face), grey-world white balance, highlight roll-off instead of clipping,
   smoothed over time; applied to the camera picture before the background and replacements, so user images stay as

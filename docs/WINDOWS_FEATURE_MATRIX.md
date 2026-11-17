@@ -177,12 +177,12 @@ Windows 10/11). Кадры идут из приложения через общ�
 |---|---|---|
 | Scene Manager | MISSING → ✅ P2.2 | Страница «Сцены»: сцена = профиль + клавиша Ctrl+Alt+1…9 + свой вход (необязательно), миниатюры |
 | Atomic Scene State | MISSING → ✅ P2.2 | Неизменяемый снимок сцены публикуется одним присваиванием, кадр рисуется из одной ссылки (`core/scene.py`); тест: ни одного смешанного кадра при 12 переключениях |
-| Multi-Object Replacement | PARTIAL → ✅ P2.3 | Много зон и объектов; «каждому объекту свой ресурс» по очереди, закрепляется за ID трека (	est_multi_object.py) |
-| Auto-Framing | MISSING → ✅ P2.5 | Кадрирование по людям, плавное следование, мёртвая зона с гистерезисом, возврат к полному кадру (	est_framing.py) |
-| AI Privacy Mode | PARTIAL → ✅ P2.4 | Уровни: лица · лица и экраны · всё с фоном; Ctrl+Alt+H; выключение возвращает сцену (	est_privacy_mode.py) |
-| AI Lighting Enhancement | MISSING → ✅ P2.6 | Экспозиция по лицам, баланс белого, мягкие светлые тона, сглаживание (	est_lighting.py) |
+| Multi-Object Replacement | PARTIAL → ✅ P2.3 | Много зон и объектов; «каждому объекту свой ресурс» по очереди, закрепляется за ID трека (test_multi_object.py) |
+| Auto-Framing | MISSING → ✅ P2.5 | Кадрирование по людям, плавное следование, мёртвая зона с гистерезисом, возврат к полному кадру (test_framing.py) |
+| AI Privacy Mode | PARTIAL → ✅ P2.4 | Уровни: лица · лица и экраны · всё с фоном; Ctrl+Alt+H; выключение возвращает сцену (test_privacy_mode.py) |
+| AI Lighting Enhancement | MISSING → ✅ P2.6 | Экспозиция по лицам, баланс белого, мягкие светлые тона, сглаживание (test_lighting.py) |
 | Gesture Control | MISSING | — |
-| Recording | MISSING | — |
-| Instant Replay | MISSING | — |
+| Recording | MISSING → ✅ P3.1 | Запись выхода камеры в MP4: H.264 через Media Foundation (без x264), запасные кодировщики, время кадров сохраняется, поток вывода не ждёт (`test_recorder.py`) |
+| Instant Replay | MISSING → ✅ P3.2 | Последние 5–300 с в памяти (JPEG-кадры), сохранение кнопкой или Ctrl+Alt+F10 (`test_recorder.py`) |
 | Plugin SDK | MISSING | Плагин OBS — не SDK |
 | Scheduler phases 0–6 | MISSING | Отдельные механизмы (раздел H) |

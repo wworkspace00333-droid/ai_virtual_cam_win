@@ -215,6 +215,29 @@ RU: dict[str, str] = {
     "Privacy off": "Приватность выкл.",
     "Auto-framing": "Автокадрирование",
     "Lighting": "Освещение",
+    "● Record": "● Запись",
+    "■ Stop recording {t}": "■ Остановить {t}",
+    "Record the camera output (exactly what apps receive) to an MP4 file in Videos\\AI Virtual Camera Studio "
+    "(Ctrl+Alt+F9).":
+        "Записывает выход камеры (ровно то, что получают приложения) в файл MP4 в папке "
+        "Видео\\AI Virtual Camera Studio (Ctrl+Alt+F9).",
+    "Instant replay": "Повтор",
+    "Keep the last seconds of the output in memory (nothing is written to disk) so you can save a moment after it "
+    "happened.":
+        "Держит последние секунды выхода в памяти (на диск ничего не пишется), чтобы сохранить момент уже после "
+        "того, как он случился.",
+    "Save replay": "Сохранить повтор",
+    "Save the kept seconds as an MP4 (Ctrl+Alt+F10).": "Сохраняет удержанные секунды в MP4 (Ctrl+Alt+F10).",
+    "Recording failed: {e}": "Запись не удалась: {e}",
+    "Saved {path} ({s} s)": "Сохранено: {path} ({s} с)",
+    "Turn on Instant replay first: it keeps the last seconds from then on.":
+        "Сначала включите «Повтор»: с этого момента он держит последние секунды.",
+    "Saving the replay…": "Сохраняю повтор…",
+    "Replay not saved: {e}": "Повтор не сохранён: {e}",
+    "nothing to save yet": "пока нечего сохранять",
+    "Instant replay: {s} s kept ({mb} MB)": "Повтор: удержано {s} с ({mb} МБ)",
+    "Start / stop recording": "Начать / остановить запись",
+    "Save instant replay": "Сохранить повтор",
     "Automatic exposure and white balance, metered on the faces: a dim room or a bright window behind you no longer "
     "leaves your face dark. Your images and backgrounds are not changed.":
         "Автоматическая экспозиция и баланс белого по лицам: тёмная комната или яркое окно за спиной больше не "

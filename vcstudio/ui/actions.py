@@ -31,6 +31,8 @@ ACTION_SPECS: list[ActionSpec] = [
     ActionSpec("card_prev", "Game card: previous", 1),
     ActionSpec("card_toggle", "Game card: show / hide", 1),
     ActionSpec("privacy_toggle", "Privacy mode on / off", 1),
+    ActionSpec("record_toggle", "Start / stop recording", 1),
+    ActionSpec("replay_save", "Save instant replay", 1),
 ] + [ActionSpec(f"scene_{n}", f"Scene {n}", 1) for n in range(1, 10)]   # vcstudio/core/scene.py slots
 CURRENT_STAGE = 10
 
