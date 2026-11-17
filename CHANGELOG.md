@@ -7,6 +7,10 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-11-17
+
+Gesture control and a faster picture on PCs without a graphics card (background, lighting).
+
 ### Added
 - **Gesture control** (P2.7, Settings → Gestures): open palm, fist, victory, pointing finger and thumbs up, held
   for about 0.6 s in front of the camera, run an action of your choice — the same actions as the hotkeys (by
@@ -185,6 +189,7 @@ for real hardware are still to be measured (docs/HARDWARE_CHECKLIST.md).
 
 macOS releases; see the history of the original repository.
 
+[0.4.3]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.3
 [0.4.2]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.2
 [0.4.1]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.1
 [0.4.0]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.0

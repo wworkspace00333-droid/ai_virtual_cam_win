@@ -11,7 +11,7 @@
 - [ ] Компьютер: модель процессора, объём памяти, видеокарта и версия драйвера, Windows 10 или 11 и номер сборки
       (`winver`).
 - [ ] Поставить программу из релиза. Сначала сверить SHA-256 установщика с файлом `.sha256` в релизе:
-      `Get-FileHash .\AIVirtualCameraStudio-Setup-0.4.2.exe -Algorithm SHA256`.
+      `Get-FileHash .\AIVirtualCameraStudio-Setup-0.4.3.exe -Algorithm SHA256`.
 - [ ] Отчёт о производительности (железо, скорость ИИ на каждом бэкенде, конвейер в каждом режиме, режимы камеры):
       `"C:\Program Files\AI Virtual Camera Studio\vcstudio.exe" --run-script windows_pc_report.py --out "%USERPROFILE%\Desktop\pc-report"`
       Папку `pc-report` (`report.md`, `report.json`) приложить к результатам.
