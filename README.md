@@ -49,8 +49,9 @@ settings, profiles and images stay in `%LOCALAPPDATA%\AIVirtualCameraStudio` unt
   Ctrl+Alt+H), *Auto-framing* (follows the people in view), *Lighting* (exposure and white balance metered on faces).
 - **Scenes:** a profile with its regions, background and optionally its own input, switched with Ctrl+Alt+1…9; a
   frame is always entirely one scene.
-- **Recording and instant replay:** the camera output to MP4 (H.264 through Windows Media Foundation, Ctrl+Alt+F9);
-  instant replay keeps the last 30 s in memory and saves them on Ctrl+Alt+F10.
+- **Recording and instant replay:** the camera output to MP4 (H.264 through Windows Media Foundation, Ctrl+Alt+F9),
+  with your microphone's sound if you choose one (Settings → Recording); instant replay keeps the last 30 s in
+  memory and saves them on Ctrl+Alt+F10.
 - **Gestures:** open palm, fist, victory, pointing finger, thumbs up held for half a second run an action of your
   choice (privacy mode, save replay, record, …); MediaPipe hand models, on this PC, off by default.
 - **Plugins:** your own Python effects on the output ([docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md)), each switched on

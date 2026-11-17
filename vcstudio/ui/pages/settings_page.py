@@ -144,10 +144,61 @@ class SettingsPage:
             self.to_tray.toggled.connect(lambda on: s.set("ui.close_to_tray", on))
             self.wizard_btn.clicked.connect(self._run_wizard)
             self.diag_btn.clicked.connect(self._save_diagnostics)
+        lay.addWidget(self._recording_card())
         lay.addWidget(self._gestures_card())
         lay.addWidget(self._plugins_card())
         lay.addWidget(self._updates_card())
         lay.addStretch()
+
+    # ---- recording (vcstudio/core/recorder.py, vcstudio/core/audio.py)
+    def _recording_card(self):
+        card = Card("Recording")
+        f = QFormLayout()
+        mrow = QHBoxLayout()
+        self.mic = QComboBox()
+        self.mic.setToolTip(tr("Sound for recordings and instant replay. The camera itself carries no sound: "
+                               "video apps take your microphone directly."))
+        mic_refresh = QPushButton(tr("Refresh list"))
+        mrow.addWidget(self.mic, 1); mrow.addWidget(mic_refresh)
+        f.addRow(tr("Microphone"), mrow)
+        frow = QHBoxLayout()
+        self.rec_folder = QLabel(str(self.ctx.recording.folder())); self.rec_folder.setWordWrap(True)
+        open_btn = QPushButton(tr("Open folder"))
+        frow.addWidget(self.rec_folder, 1); frow.addWidget(open_btn)
+        f.addRow(tr("Recordings folder"), frow)
+        self.replay_secs = QSpinBox(); self.replay_secs.setRange(5, 300); self.replay_secs.setSuffix(tr(" s"))
+        self.replay_secs.setValue(int(self.ctx.settings.get("recording.replay_seconds") or 30))
+        f.addRow(tr("Instant replay keeps"), self.replay_secs)
+        card.layout_.addLayout(f)
+        self.fill_microphones()
+        self.mic.currentIndexChanged.connect(
+            lambda _i: self.ctx.settings.set("recording.audio_device", self.mic.currentData() or ""))
+        mic_refresh.clicked.connect(lambda: self.fill_microphones())
+        open_btn.clicked.connect(self._open_recordings)
+        self.replay_secs.valueChanged.connect(lambda v: self.ctx.settings.set("recording.replay_seconds", int(v)))
+        return card
+
+    def fill_microphones(self, names: list[str] | None = None) -> None:
+        if names is None:
+            from vcstudio.core.audio import list_microphones
+            names = list_microphones()
+        cur = str(self.ctx.settings.get("recording.audio_device") or "")
+        self.mic.blockSignals(True)
+        self.mic.clear()
+        self.mic.addItem(tr("No sound"), "")
+        for n in names:
+            self.mic.addItem(n, n)
+        if cur and cur not in names:                       # chosen before, not connected now: keep it visible
+            self.mic.addItem(tr("{name} (not connected)", name=cur), cur)
+        self.mic.setCurrentIndex(max(0, self.mic.findData(cur)))
+        self.mic.blockSignals(False)
+
+    def _open_recordings(self) -> None:
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        d = self.ctx.recording.folder()
+        d.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(d)))
 
     # ---- gestures (vcstudio/ai/gestures.py)
     GESTURE_LABELS = {"open_palm": "Open palm", "fist": "Fist", "victory": "Victory (two fingers)",

@@ -119,7 +119,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "privacy": {"allow_downloads": True, "allow_update_check": True},
     # recordings of the camera output (vcstudio/core/recorder.py); folder "" = Videos\AI Virtual Camera Studio.
     # Instant replay keeps the last replay_seconds in memory (about 2 MB per second at 720p) only while enabled.
-    "recording": {"folder": "", "replay_enabled": False, "replay_seconds": 30},
+    # audio_device: a DirectShow microphone name (vcstudio/core/audio.py) recorded with the video; "" = no sound
+    "recording": {"folder": "", "replay_enabled": False, "replay_seconds": 30, "audio_device": ""},
     # plugins (vcstudio/plugins): approved = {plugin id: SHA-256 of the file the user switched on}; options per plugin
     "plugins": {"approved": {}, "options": {}},
     # gesture control (vcstudio/ai/gestures.py): gesture -> action id of vcstudio/ui/actions.py ("" = nothing)

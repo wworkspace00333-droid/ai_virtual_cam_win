@@ -51,12 +51,22 @@ class RecorderStats:
     dropped: int = 0
     seconds: float = 0.0
     error: str = ""
+    audio_seconds: float = 0.0
+    audio_dropped: int = 0
 
 
 def open_writer(path: Path, w: int, h: int, fps: int, encoders=ENCODERS):
     """(container, stream, encoder name) for the first encoder that really opens — an encoder FFmpeg knows can still
     fail to open (no GPU of that vendor, Media Foundation encoder missing on a Windows N edition)."""
+    container, st, name, _a = open_writer_av(path, w, h, fps, encoders, audio=False)
+    return container, st, name
+
+
+def open_writer_av(path: Path, w: int, h: int, fps: int, encoders=ENCODERS, audio: bool = False):
+    """As open_writer, plus an AAC stereo 48 kHz audio stream (FFmpeg's own AAC encoder, LGPL) when `audio`."""
     import av
+
+    from vcstudio.core.audio import RATE
     last: Exception | None = None
     for name in encoders:
         container = av.open(str(path), mode="w")
@@ -68,7 +78,13 @@ def open_writer(path: Path, w: int, h: int, fps: int, encoders=ENCODERS):
             st.codec_context.time_base = TIME_BASE
             st.time_base = TIME_BASE
             st.codec_context.open()                             # fail here, not on the first frame
-            return container, st, name
+            ast = None
+            if audio:
+                ast = container.add_stream("aac", rate=RATE)
+                ast.codec_context.layout = "stereo"
+                ast.bit_rate = 128_000
+                ast.codec_context.open()
+            return container, st, name, ast
         except Exception as e:
             last = e
             log.info("encoder %s unavailable: %s", name, e)
@@ -82,14 +98,28 @@ def open_writer(path: Path, w: int, h: int, fps: int, encoders=ENCODERS):
 class Recorder:
     """Records BGRA frames to an MP4 in a background thread. push() never blocks (unless asked to)."""
 
-    def __init__(self, path: Path, fps: float = 30, encoders=ENCODERS, queue_frames: int = QUEUE_FRAMES):
+    def __init__(self, path: Path, fps: float = 30, encoders=ENCODERS, queue_frames: int = QUEUE_FRAMES,
+                 audio: bool = False, audio_queue: int = 2000):
         self.path = Path(path)
         self.fps = max(1, int(round(fps)))
         self.encoders = tuple(encoders)
+        self.audio = audio
         self.stats = RecorderStats()
         self._q: queue.Queue = queue.Queue(maxsize=queue_frames)
+        self._aq: queue.Queue = queue.Queue(maxsize=audio_queue)   # (samples (n, 2) int16, start time)
         self._t: threading.Thread | None = None
         self._stop = threading.Event()
+
+    def push_audio(self, samples: np.ndarray, t: float) -> bool:
+        """Hand microphone samples over (same clock as the frames). Never blocks; False when dropped."""
+        if not self.audio or not self.active or self._stop.is_set():
+            return False
+        try:
+            self._aq.put_nowait((samples, float(t)))
+            return True
+        except queue.Full:
+            self.stats.audio_dropped += 1
+            return False
 
     @property
     def active(self) -> bool:
@@ -129,19 +159,25 @@ class Recorder:
         import av
         container: Any = None
         st: Any = None
+        aw: _AudioWriter | None = None
         t0 = 0.0
         last_ms = -1
         try:
             while not (self._stop.is_set() and self._q.empty()):
+                if aw is not None:
+                    aw.drain(self._aq)
                 try:
                     img, pts = self._q.get(timeout=0.1)
                 except queue.Empty:
                     continue
                 h, w = img.shape[:2]
                 if container is None:
-                    container, st, name = open_writer(self.path, w - w % 2, h - h % 2, self.fps, self.encoders)
+                    container, st, name, ast = open_writer_av(self.path, w - w % 2, h - h % 2, self.fps,
+                                                             self.encoders, audio=self.audio)
                     self.stats.encoder = name
                     t0 = pts
+                    if ast is not None:
+                        aw = _AudioWriter(container, ast, t0, self.stats)
                 if (h, w) != (st.height, st.width):
                     if (h - h % 2, w - w % 2) == (st.height, st.width):  # 4:2:0 encoders want even sizes
                         img = np.ascontiguousarray(img[:st.height, :st.width])
@@ -159,6 +195,9 @@ class Recorder:
             if st is not None:
                 for pkt in st.encode():
                     container.mux(pkt)
+            if aw is not None:
+                aw.drain(self._aq)
+                aw.finish()
             self.stats.state = "done"
         except Exception as e:
             self.stats.state, self.stats.error = "error", f"{type(e).__name__}: {e}"
@@ -169,6 +208,74 @@ class Recorder:
                     container.close()
                 except Exception:
                     log.exception("closing the recording failed")
+
+
+class _AudioWriter:
+    """Places microphone chunks on the file's timeline: sample index = (chunk time - first video frame time) × rate.
+    Small timing jitter is ignored (samples continue back to back); a gap over GAP_S is filled with silence, an
+    overlap over GAP_S is cut, audio from before the first frame is trimmed — so the sound never drifts more than
+    GAP_S from the picture (lip-sync errors become noticeable around 45 ms). Encodes 1024-sample AAC frames."""
+    GAP_S = 0.04
+
+    def __init__(self, container, stream, t0: float, stats: RecorderStats):
+        import av
+
+        from vcstudio.core.audio import RATE
+        self.container, self.stream, self.t0, self.stats = container, stream, t0, stats
+        self.rate = RATE
+        self.pos: int | None = None                 # next sample index on the file timeline
+        self.fifo = av.AudioFifo()
+
+    def _write(self, samples: np.ndarray) -> None:
+        import av
+        if len(samples) == 0:
+            return
+        assert self.pos is not None
+        planar = np.ascontiguousarray(samples.T.astype(np.float32) / 32768.0)     # (2, n) float planar
+        fr = av.AudioFrame.from_ndarray(planar, format="fltp", layout="stereo")
+        fr.sample_rate = self.rate
+        fr.pts = self.pos
+        fr.time_base = Fraction(1, self.rate)
+        self.fifo.write(fr)
+        self.pos += len(samples)
+        size = self.stream.codec_context.frame_size or 1024
+        while self.fifo.samples >= size:
+            for pkt in self.stream.encode(self.fifo.read(size)):
+                self.container.mux(pkt)
+        self.stats.audio_seconds = self.pos / self.rate
+
+    def add(self, samples: np.ndarray, t: float) -> None:
+        idx = int(round((t - self.t0) * self.rate))
+        if self.pos is None:
+            if idx + len(samples) <= 0:
+                return                               # entirely before the first frame
+            if idx < 0:
+                samples, idx = samples[-idx:], 0
+            self.pos = 0
+            if idx > 0:
+                self._write(np.zeros((idx, 2), np.int16))     # the file starts with the video: lead-in silence
+        gap = idx - self.pos
+        tol = int(self.GAP_S * self.rate)
+        if gap > tol:
+            self._write(np.zeros((gap, 2), np.int16))
+        elif gap < -tol:
+            samples = samples[min(len(samples), -gap):]
+        self._write(samples)
+
+    def drain(self, q: queue.Queue) -> None:
+        while True:
+            try:
+                samples, t = q.get_nowait()
+            except queue.Empty:
+                return
+            self.add(samples, t)
+
+    def finish(self) -> None:
+        if self.fifo.samples:
+            for pkt in self.stream.encode(self.fifo.read()):
+                self.container.mux(pkt)
+        for pkt in self.stream.encode(None):
+            self.container.mux(pkt)
 
 
 class InstantReplay:
@@ -184,6 +291,7 @@ class InstantReplay:
         self.min_interval = 1.0 / max_fps
         self.dropped = 0
         self._buf: collections.deque = collections.deque()
+        self._abuf: collections.deque = collections.deque()      # (start time, samples (n, 2) int16): ~192 KB/s
         self._lock = threading.Lock()
         self._last = -1e9
         self._last_offer = -1e9
@@ -249,6 +357,13 @@ class InstantReplay:
                 self._buf.popleft()
         return True
 
+    def push_audio(self, samples: np.ndarray, t: float) -> None:
+        """Microphone samples (same clock as the frames); kept as long as the frames."""
+        with self._lock:
+            self._abuf.append((float(t), np.array(samples, np.int16, copy=True)))
+            while self._abuf and t - self._abuf[0][0] > self.seconds + 0.5:
+                self._abuf.popleft()
+
     @property
     def held_seconds(self) -> float:
         with self._lock:
@@ -260,22 +375,27 @@ class InstantReplay:
 
     def memory_bytes(self) -> int:
         with self._lock:
-            return sum(len(j) for _, j in self._buf)
+            return sum(len(j) for _, j in self._buf) + sum(a.nbytes for _, a in self._abuf)
 
     def clear(self) -> None:
         with self._lock:
             self._buf.clear()
+            self._abuf.clear()
         self._last = self._last_offer = -1e9
 
     def save(self, path: Path, encoders=ENCODERS) -> RecorderStats:
-        """Write the held frames as an MP4 (blocking; call it off the UI thread). Safe while frames keep coming."""
+        """Write the held frames (and microphone audio, if any) as an MP4 (blocking; call it off the UI thread).
+        Safe while frames keep coming."""
         import cv2
         with self._lock:
             frames = list(self._buf)
+            audio = list(self._abuf)
         if not frames:
             return RecorderStats(state="error", path=str(path), error="nothing to save yet")
-        rec = Recorder(path, 30, encoders, queue_frames=16)
+        rec = Recorder(path, 30, encoders, queue_frames=16, audio=bool(audio), audio_queue=0)
         rec.start()
+        for t, samples in audio:                    # queued before the frames; placed by time when the file opens
+            rec.push_audio(samples, t)
         for pts, jpg in frames:
             img = cv2.imdecode(jpg, cv2.IMREAD_COLOR)
             if img is None:
@@ -289,15 +409,44 @@ class RecordingService:
     """The app's recording and instant replay: attaches to the pipeline's output taps (settings section
     "recording"). Events go to `log_event(level, message)` (the journal)."""
 
-    def __init__(self, pipeline, settings, log_event=None, encoders=ENCODERS):
+    def __init__(self, pipeline, settings, log_event=None, encoders=ENCODERS, audio_factory=None):
+        from vcstudio.core.audio import AudioSource
         self.pipeline, self.settings = pipeline, settings
         self._log = log_event or (lambda lv, m: None)
         self.encoders = encoders
         self.recorder: Recorder | None = None
         self.replay: InstantReplay | None = None
         self.last_path: Path | None = None
+        self.audio = None                                # AudioSource while a recording / replay needs the mic
+        self._audio_factory = audio_factory or AudioSource
         self._lock = threading.Lock()
         self.apply_settings()
+
+    # ---- microphone
+    def audio_device(self) -> str:
+        return str(self.settings.get("recording.audio_device") or "").strip()
+
+    def _on_audio(self, samples: np.ndarray, t: float) -> None:
+        rec, rp = self.recorder, self.replay
+        if rec is not None:
+            rec.push_audio(samples, t)
+        if rp is not None:
+            rp.push_audio(samples, t)
+
+    def _sync_audio(self) -> None:
+        """Run the microphone exactly while a recording or the instant replay wants sound."""
+        dev = self.audio_device()
+        want = bool(dev) and (self.recording or self.replay is not None)
+        cur = self.audio
+        if cur is not None and (not want or cur.device != dev):
+            cur.stop()
+            self.audio = None
+        if want and self.audio is None:
+            src = self._audio_factory(dev)
+            src.listeners.append(self._on_audio)
+            src.start()
+            self.audio = src
+            self._log("INFO", f"microphone on: {dev}")
 
     def folder(self) -> Path:
         f = (self.settings.get("recording.folder") or "").strip()
@@ -315,11 +464,12 @@ class RecordingService:
                 return self.recorder.path
             p = Path(path) if path else self.folder() / new_name("recording")
             fps = self.settings.get("output.fps") or 30
-            rec = Recorder(p, fps, self.encoders)
+            rec = Recorder(p, fps, self.encoders, audio=bool(self.audio_device()))
             rec.start()
             self.recorder = rec
             self.pipeline.taps.append(rec.push)
-        self._log("INFO", f"recording started: {p}")
+        self._sync_audio()
+        self._log("INFO", f"recording started: {p}" + (f" (sound: {self.audio_device()})" if rec.audio else ""))
         return p
 
     def stop_recording(self) -> RecorderStats | None:
@@ -332,10 +482,13 @@ class RecordingService:
             except ValueError:
                 pass
         st = rec.stop()
+        self._sync_audio()
         self.last_path = rec.path
         lv = "ERROR" if st.state == "error" else "INFO"
+        sound = f", sound {st.audio_seconds:.1f} s" if rec.audio else ""
+        mic_err = f" (microphone: {self.audio.error})" if self.audio is not None and self.audio.error else ""
         self._log(lv, f"recording stopped: {st.path} ({st.frames} frames, {st.seconds:.1f} s, {st.encoder or '-'}"
-                      f", {st.dropped} dropped){' ' + st.error if st.error else ''}")
+                      f", {st.dropped} dropped{sound}){' ' + st.error if st.error else ''}{mic_err}")
         return st
 
     def toggle_recording(self) -> bool:
@@ -363,6 +516,7 @@ class RecordingService:
                 self.replay = None
             elif self.replay is not None:
                 self.replay.seconds = secs
+        self._sync_audio()
 
     def save_replay(self, path: Path | None = None) -> RecorderStats:
         rp = self.replay
@@ -381,3 +535,6 @@ class RecordingService:
         self.stop_recording()
         if self.replay is not None:
             self.replay.stop()
+        if self.audio is not None:
+            self.audio.stop()
+            self.audio = None

@@ -274,6 +274,17 @@ RU: dict[str, str] = {
         "Включить «{name}»?\n\n{path}\n\nЕго код будет выполняться внутри программы с вашими правами. Продолжайте, "
         "только если доверяете источнику.",
     "“{name}” did not start: {e}": "«{name}» не запустился: {e}",
+    "Recording": "Запись",
+    "Sound for recordings and instant replay. The camera itself carries no sound: video apps take your microphone "
+    "directly.":
+        "Звук для записей и повтора. Сама камера звук не передаёт: программы видеосвязи берут микрофон напрямую.",
+    "Refresh list": "Обновить список",
+    "Microphone": "Микрофон",
+    "Open folder": "Открыть папку",
+    "Recordings folder": "Папка записей",
+    "Instant replay keeps": "Повтор хранит",
+    "No sound": "Без звука",
+    "{name} (not connected)": "{name} (не подключён)",
     "Gestures": "Жесты",
     "Hold a gesture in front of the camera for about half a second to run an action. The hand is recognised on "
     "this PC (MediaPipe hand models, about 8 MB, downloaded once); nothing is recorded or sent.":

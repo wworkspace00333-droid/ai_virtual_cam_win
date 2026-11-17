@@ -7,6 +7,16 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+### Added
+- **Sound in recordings and instant replay** (Settings → Recording → Microphone): the chosen microphone is
+  recorded as AAC next to the video, through FFmpeg's DirectShow input and its own AAC encoder in the LGPL build
+  (no new package). Sound and picture use the same clock; the microphone runs only while a recording or the
+  instant replay needs it. Drift between the microphone's and the PC's clock is corrected before it reaches
+  40 ms (lip-sync errors are noticed from ~45 ms). Checked with generated sound: a tone and a white frame at the
+  same moment land within 0.1 ms of each other in the file. The camera itself still carries no sound (Windows
+  cameras are video only); video apps take the microphone directly. Not tried with a real microphone yet: the
+  development server has none.
+
 ## [0.4.3] — 2026-11-17
 
 Gesture control and a faster picture on PCs without a graphics card (background, lighting).
