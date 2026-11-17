@@ -259,6 +259,10 @@ def test_media_foundation_camera_through_frame_server(native, fps):
     def read(n):
         r = subprocess.run([str(MF_CLIENT), "--device", MF_DEVICE, str(n), str(native), "raw"],
                            capture_output=True, text=True, timeout=60)
+        if "open failed: 0x80070005" in r.stdout:
+            # E_ACCESSDENIED from the camera privacy check (Settings → Privacy → Camera): a CI runner's session is
+            # not allowed to open cameras. An environment setting, not a defect — the tests do not change it.
+            pytest.skip("Windows denies camera access in this session (camera privacy settings)")
         assert r.returncode == 0, r.stdout + r.stderr
         assert re.search(r"native %d: .*matrix (1|0), range (2|0)  <- selected" % native, r.stdout), r.stdout
         m = re.search(r"frames (\d+) in [\d.]+ s \(([\d.]+) fps\), centre BGRA (\w\w) (\w\w) (\w\w)", r.stdout)
