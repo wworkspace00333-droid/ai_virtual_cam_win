@@ -47,6 +47,20 @@ OPEN_VOCAB: dict[str, tuple[str, str, str, int]] = {
 }
 APPROX_MB = 220
 
+# Gesture control (vcstudio/ai/hands.py): MediaPipe palm detector + hand landmarks, ONNX from the OpenCV Zoo
+# (Apache-2.0), about 8 MB, pinned commits. Downloaded with the same button rules (a click, SHA-256 checked).
+PALM_REV = "opencv/palm_detection_mediapipe/resolve/233e619dcea1759bf6de707b9b904fe30881ea55/"
+HANDPOSE_REV = "opencv/handpose_estimation_mediapipe/resolve/4b2a0b446e5cf2f11fb6b2c7251091c035d2c1f7/"
+HANDS: dict[str, tuple[str, str, str, int]] = {
+    "hands/palm_detection_mediapipe_2023feb.onnx": (
+        HF + PALM_REV + "palm_detection_mediapipe_2023feb.onnx",
+        "78ff51c38496b7fc8b8ebdb6cc8c1abb02fa6c38427c6848254cdaba57fcce7c", "Apache-2.0", 3905734),
+    "hands/handpose_estimation_mediapipe_2023feb.onnx": (
+        HF + HANDPOSE_REV + "handpose_estimation_mediapipe_2023feb.onnx",
+        "db0898ae717b76b075d9bf563af315b29562e11f8df5027a1ef07b02bef6d81c", "Apache-2.0", 4099621),
+}
+HANDS_APPROX_MB = 8
+
 
 class DownloadError(RuntimeError):
     pass

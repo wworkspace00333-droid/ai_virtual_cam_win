@@ -144,9 +144,103 @@ class SettingsPage:
             self.to_tray.toggled.connect(lambda on: s.set("ui.close_to_tray", on))
             self.wizard_btn.clicked.connect(self._run_wizard)
             self.diag_btn.clicked.connect(self._save_diagnostics)
+        lay.addWidget(self._gestures_card())
         lay.addWidget(self._plugins_card())
         lay.addWidget(self._updates_card())
         lay.addStretch()
+
+    # ---- gestures (vcstudio/ai/gestures.py)
+    GESTURE_LABELS = {"open_palm": "Open palm", "fist": "Fist", "victory": "Victory (two fingers)",
+                      "point": "Pointing finger", "thumbs_up": "Thumbs up"}
+
+    def _gestures_card(self):
+        from PySide6.QtCore import QTimer
+        from vcstudio.ai.gestures import GestureConfig
+        card = Card("Gestures")
+        note = QLabel(tr("Hold a gesture in front of the camera for about half a second to run an action. The hand "
+                         "is recognised on this PC (MediaPipe hand models, about 8 MB, downloaded once); nothing "
+                         "is recorded or sent."))
+        note.setObjectName("muted"); note.setWordWrap(True)
+        card.layout_.addWidget(note)
+        row = QHBoxLayout()
+        self.gest_on = QCheckBox(tr("Gesture control"))
+        self.gest_dl = QPushButton(tr("Download hand models (8 MB)"))
+        row.addWidget(self.gest_on); row.addWidget(self.gest_dl); row.addStretch()
+        card.layout_.addLayout(row)
+        f = QFormLayout()
+        cfg = GestureConfig.from_settings(self.ctx.settings)
+        self.gest_combos: dict[str, QComboBox] = {}
+        for g, label in self.GESTURE_LABELS.items():
+            c = QComboBox()
+            c.addItem(tr("— nothing —"), "")
+            for spec in ACTION_SPECS:
+                if not spec.id.startswith(("scene_", "card_")):
+                    c.addItem(tr(spec.label), spec.id)
+            c.setCurrentIndex(max(0, c.findData(cfg.actions.get(g, ""))))
+            c.currentIndexChanged.connect(self._save_gesture_map)
+            f.addRow(tr(label), c)
+            self.gest_combos[g] = c
+        card.layout_.addLayout(f)
+        self.gest_status = QLabel(); self.gest_status.setObjectName("muted"); self.gest_status.setWordWrap(True)
+        card.layout_.addWidget(self.gest_status)
+        self.gest_on.setChecked(cfg.enabled)
+        self.gest_on.toggled.connect(lambda on: self.ctx.settings.set("gestures.enabled", on))
+        self.gest_dl.clicked.connect(self.download_hand_models)
+        self._gest_dl_thread = None
+        self._gest_dl_msg = ""
+        self._gest_timer = QTimer(self.widget)
+        self._gest_timer.timeout.connect(self.refresh_gestures)
+        self._gest_timer.start(1000)
+        self.refresh_gestures()
+        return card
+
+    def _save_gesture_map(self, *_):
+        self.ctx.settings.set("gestures.actions", {g: c.currentData() or "" for g, c in self.gest_combos.items()})
+
+    def refresh_gestures(self) -> None:
+        from vcstudio.ai import hands
+        from vcstudio.ai import model_download as md
+        have = hands.available()
+        busy = self._gest_dl_thread is not None and self._gest_dl_thread.is_alive()
+        self.gest_dl.setVisible(not have and md.network_allowed(self.ctx.settings))
+        self.gest_dl.setEnabled(not busy)
+        self.gest_on.setEnabled(have)
+        st = self.ctx.gestures.stats
+        if busy or self._gest_dl_msg:
+            text = self._gest_dl_msg
+        elif not have:
+            text = tr("The hand models are not installed yet.")
+        elif st.state == "running":
+            g = tr(self.GESTURE_LABELS.get(st.gesture, "")) if st.gesture else tr("none")
+            text = tr("Running ({backend}, {fps} fps, {ms} ms): {hands} hand(s), gesture: {g}",
+                      backend=st.backend or "—", fps=f"{st.fps:.0f}", ms=f"{st.ms:.0f}", hands=st.hands, g=g)
+            if st.last_action:
+                text += " · " + tr("last: {a}", a=st.last_action)
+        elif st.state == "error":
+            text = tr("Gestures stopped: {e}", e=st.error)
+        else:
+            text = tr("Off.")
+        self.gest_status.setText(text)
+
+    def download_hand_models(self, opener=None) -> None:
+        import threading
+
+        from vcstudio.ai import model_download as md
+        from vcstudio.ai.open_vocab import user_models_dir
+        if self._gest_dl_thread is not None and self._gest_dl_thread.is_alive():
+            return
+        self._gest_dl_msg = tr("Downloading the hand models…")
+
+        def work():
+            try:
+                md.download(user_models_dir(), table=md.HANDS, opener=opener)
+                self._gest_dl_msg = tr("Hand models installed. Switch on Gesture control.")
+                self.ctx.db.log_event("INFO", "gestures", "hand models downloaded")
+            except md.DownloadError as e:
+                self._gest_dl_msg = tr("Download failed: {e}", e=e)
+        self._gest_dl_thread = threading.Thread(target=work, name="hands-download", daemon=True)
+        self._gest_dl_thread.start()
+        self.refresh_gestures()
 
     # ---- plugins (vcstudio/plugins): listed without running them, switched on one by one
     def _plugins_card(self):

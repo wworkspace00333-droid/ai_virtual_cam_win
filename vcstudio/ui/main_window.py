@@ -43,6 +43,8 @@ class MainWindow(QMainWindow):
         self.actions_ = ActionRegistry(self)
         self.actions_.triggered.connect(self.on_action)
         self.global_hotkey_fired.connect(self.on_action, Qt.QueuedConnection)
+        # gestures (vcstudio/ai/gestures.py) fire on their own thread: the same queued path as global hotkeys
+        ctx.gestures.listeners.append(lambda aid, _g: self.global_hotkey_fired.emit(aid))
         from vcstudio.native.hotkeys import GlobalHotkeys
         self.global_hotkeys = GlobalHotkeys()
         self.apply_hotkeys()

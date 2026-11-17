@@ -122,6 +122,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "recording": {"folder": "", "replay_enabled": False, "replay_seconds": 30},
     # plugins (vcstudio/plugins): approved = {plugin id: SHA-256 of the file the user switched on}; options per plugin
     "plugins": {"approved": {}, "options": {}},
+    # gesture control (vcstudio/ai/gestures.py): gesture -> action id of vcstudio/ui/actions.py ("" = nothing)
+    "gestures": {"enabled": False, "fps": 8, "hold_s": 0.6,
+                 "actions": {"open_palm": "privacy_toggle", "victory": "replay_save", "thumbs_up": "", "fist": "",
+                             "point": ""}},
     "hotkeys": dict(DEFAULT_HOTKEYS),
     "logging": {"level": "INFO", "max_bytes": 5_000_000, "backup_count": 5},
 }

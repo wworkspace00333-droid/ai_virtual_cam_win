@@ -7,6 +7,15 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+### Added
+- **Gesture control** (P2.7, Settings → Gestures): open palm, fist, victory, pointing finger and thumbs up, held
+  for about 0.6 s in front of the camera, run an action of your choice — the same actions as the hotkeys (by
+  default: open palm → privacy mode, victory → save instant replay). A gesture fires once and again only after
+  the hand changed. MediaPipe palm detector + 21 hand landmarks (OpenCV Zoo ONNX, Apache-2.0, ~8 MB, downloaded
+  on your click, SHA-256 checked); recognised on the input picture at 8 fps, ~30 ms per frame on the 2-core
+  server. Checked on a COCO photo: two hands found, a flat hand recognised as an open palm, a hand holding
+  scissors as no gesture. Off by default.
+
 ### Changed
 - Lighting is about 6× cheaper: ~6 ms per 1080p frame on the 2-core server instead of ~40 (one pass with a
   4-channel lookup table, metering on the shrunk whole frame — no full-frame copies).

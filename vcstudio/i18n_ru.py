@@ -274,6 +274,29 @@ RU: dict[str, str] = {
         "Включить «{name}»?\n\n{path}\n\nЕго код будет выполняться внутри программы с вашими правами. Продолжайте, "
         "только если доверяете источнику.",
     "“{name}” did not start: {e}": "«{name}» не запустился: {e}",
+    "Gestures": "Жесты",
+    "Hold a gesture in front of the camera for about half a second to run an action. The hand is recognised on "
+    "this PC (MediaPipe hand models, about 8 MB, downloaded once); nothing is recorded or sent.":
+        "Покажите жест в камеру примерно на полсекунды, чтобы выполнить действие. Рука распознаётся на этом "
+        "компьютере (модели рук MediaPipe, около 8 МБ, скачиваются один раз); ничего не записывается и не "
+        "отправляется.",
+    "Gesture control": "Управление жестами",
+    "Download hand models (8 MB)": "Скачать модели рук (8 МБ)",
+    "— nothing —": "— ничего —",
+    "Open palm": "Открытая ладонь",
+    "Fist": "Кулак",
+    "Victory (two fingers)": "Победа (два пальца)",
+    "Pointing finger": "Указательный палец",
+    "Thumbs up": "Большой палец вверх",
+    "The hand models are not installed yet.": "Модели рук ещё не установлены.",
+    "Running ({backend}, {fps} fps, {ms} ms): {hands} hand(s), gesture: {g}":
+        "Работает ({backend}, {fps} к/с, {ms} мс): рук {hands}, жест: {g}",
+    "last: {a}": "последнее: {a}",
+    "Gestures stopped: {e}": "Жесты остановлены: {e}",
+    "Off.": "Выключено.",
+    "Downloading the hand models…": "Скачиваю модели рук…",
+    "Hand models installed. Switch on Gesture control.": "Модели рук установлены. Включите управление жестами.",
+    "Download failed: {e}": "Скачать не удалось: {e}",
     "Automatic exposure and white balance, metered on the faces: a dim room or a bright window behind you no longer "
     "leaves your face dark. Your images and backgrounds are not changed.":
         "Автоматическая экспозиция и баланс белого по лицам: тёмная комната или яркое окно за спиной больше не "

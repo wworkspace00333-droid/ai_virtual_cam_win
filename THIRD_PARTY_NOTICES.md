@@ -38,16 +38,19 @@ Last reviewed: 2026-11-17, for version 0.4.2. This file is a technical record, n
 
 The face detector finds face rectangles only; the program does no identity recognition.
 
-Optional models for "any object". They are not in the installer; the app downloads them from huggingface.co only
-when the user clicks "Download models" on the Detection page, and checks each file's SHA-256 (values in
+Optional models for "any object" and for gestures. They are not in the installer; the app downloads them from
+huggingface.co only when the user clicks "Download models" on the Detection page or "Download hand models" in
+Settings → Gestures, and checks each file's SHA-256 (values in
 `vcstudio/ai/model_download.py`). Besides "Check for updates" (one request to the GitHub releases list, on click),
 this is the program's only network access. `VCS_NO_NETWORK=1` or the setting `privacy.allow_downloads: false` turns
-it off. Developers can use `scripts/fetch_models.py --open-vocab` instead.
+it off. Developers can use `scripts/fetch_models.py --open-vocab --hands` instead.
 
 | Item | Licence | Source |
 |---|---|---|
 | OWLv2 base patch16 ensemble, 8-bit ONNX (`owlv2_base_ensemble_int8.onnx`, `owlv2_tokenizer.json`) | Apache-2.0 (Google, `google/owlv2-base-patch16-ensemble`) | ONNX export `Xenova/owlv2-base-patch16-ensemble`, commit `3e255bc9` |
 | SAM 2.1 hiera-tiny, 8-bit ONNX (`sam2.1_tiny/`) | Apache-2.0 (Meta, `facebook/sam2.1-hiera-tiny`) | ONNX export `onnx-community/sam2.1-hiera-tiny-ONNX`, commit `814a0666` |
+| MediaPipe palm detection, ONNX (`hands/palm_detection_mediapipe_2023feb.onnx`) | Apache-2.0 (Google MediaPipe; OpenCV Zoo export) | `opencv/palm_detection_mediapipe`, commit `233e619d` |
+| MediaPipe hand landmarks, ONNX (`hands/handpose_estimation_mediapipe_2023feb.onnx`) | Apache-2.0 (Google MediaPipe; OpenCV Zoo export) | `opencv/handpose_estimation_mediapipe`, commit `4b2a0b44`; the hand crop geometry in `vcstudio/ai/hands.py` follows its Apache-2.0 reference code |
 
 SHA-256 of every file: `scripts/fetch_models.py`. The CLIP text tokenizer is implemented in the program
 (`vcstudio/ai/open_vocab.py`, from the model's `tokenizer.json`); no tokenizer library is shipped.

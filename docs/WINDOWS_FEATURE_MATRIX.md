@@ -181,7 +181,7 @@ Windows 10/11). Кадры идут из приложения через общ�
 | Auto-Framing | MISSING → ✅ P2.5 | Кадрирование по людям, плавное следование, мёртвая зона с гистерезисом, возврат к полному кадру (test_framing.py) |
 | AI Privacy Mode | PARTIAL → ✅ P2.4 | Уровни: лица · лица и экраны · всё с фоном; Ctrl+Alt+H; выключение возвращает сцену (test_privacy_mode.py) |
 | AI Lighting Enhancement | MISSING → ✅ P2.6 | Экспозиция по лицам, баланс белого, мягкие светлые тона, сглаживание (test_lighting.py) |
-| Gesture Control | MISSING | — |
+| Gesture Control | MISSING → ✅ P2.7 | 5 жестов → любое действие из горячих клавиш; модели рук MediaPipe (Apache-2.0, ~8 МБ, по кнопке); удержание 0,6 с, повтор только после смены жеста (`test_gestures.py`) |
 | Recording | MISSING → ✅ P3.1 | Запись выхода камеры в MP4: H.264 через Media Foundation (без x264), запасные кодировщики, время кадров сохраняется, поток вывода не ждёт (`test_recorder.py`) |
 | Instant Replay | MISSING → ✅ P3.2 | Последние 5–300 с в памяти (JPEG-кадры), сохранение кнопкой или Ctrl+Alt+F10 (`test_recorder.py`) |
 | Plugin SDK | MISSING → ✅ P3.3 | API 1: эффекты на Python для выхода камеры; список читается без запуска кода, включение по одному с подтверждением, одобрение привязано к SHA-256, сбойный плагин выключается (`vcstudio/plugins/`, `docs/PLUGIN_SDK.md`, `test_plugins.py`) |

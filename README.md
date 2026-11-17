@@ -6,9 +6,10 @@ are not included). It hides faces, blurs or replaces the background, puts images
 or a logo over regions (Direct3D 11 or CPU), and sends the result to its own system camera, **AI Virtual Camera**. You
 can then pick that camera in Zoom, Teams, Chrome, Discord, OBS or the Windows Camera app.
 
-Everything runs locally. The app sends nothing anywhere. It uses the network only when you click one of two buttons:
-"Download models" for "any object by text" (about 220 MB from huggingface.co, SHA-256 checked) and "Check for
-updates" in Settings (one request to this project's GitHub releases page list). `VCS_NO_NETWORK=1` turns both off.
+Everything runs locally. The app sends nothing anywhere. It uses the network only when you click one of three buttons:
+"Download models" for "any object by text" (about 220 MB from huggingface.co), "Download hand models" for gestures
+(about 8 MB, same source; both SHA-256 checked) and "Check for updates" in Settings (one request to this
+project's GitHub releases list). `VCS_NO_NETWORK=1` turns all three off.
 There is no telemetry and no auto-update. Plugins (Settings → Plugins, [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md)) are
 your own code and are not limited by this.
 
@@ -50,6 +51,8 @@ settings, profiles and images stay in `%LOCALAPPDATA%\AIVirtualCameraStudio` unt
   frame is always entirely one scene.
 - **Recording and instant replay:** the camera output to MP4 (H.264 through Windows Media Foundation, Ctrl+Alt+F9);
   instant replay keeps the last 30 s in memory and saves them on Ctrl+Alt+F10.
+- **Gestures:** open palm, fist, victory, pointing finger, thumbs up held for half a second run an action of your
+  choice (privacy mode, save replay, record, …); MediaPipe hand models, on this PC, off by default.
 - **Plugins:** your own Python effects on the output ([docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md)), each switched on
   explicitly; a failing plugin is switched off, the camera keeps going.
 - **Background:** blur or replace everything behind people (PP-HumanSeg person segmentation).

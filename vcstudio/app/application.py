@@ -97,6 +97,11 @@ class AppContext:
         self.pipeline.plugins = self.plugins
         if not os.environ.get("VCS_NO_PLUGINS"):            # safe start: VCS_NO_PLUGINS=1 loads none
             self.plugins.start_approved()
+        from vcstudio.ai.gestures import GestureService
+        self.gestures = GestureService(self.capture, self.settings,
+                                       lambda lv, m: self.db.log_event(lv, "gestures", m),
+                                       cache_dir=self.models.cache_dir / "onnx")
+        self.gestures.apply_settings()                      # starts it when enabled
         mode =self.profiles.active()["body"].get("performance_mode")
         if mode and mode != self.settings.get("performance.mode"):
             self.settings.set("performance.mode", mode)
@@ -137,6 +142,9 @@ class AppContext:
             return
         if key.startswith("recording"):
             self.recording.apply_settings()
+            return
+        if key.startswith("gestures"):
+            self.gestures.apply_settings()
             return
         if key.startswith("performance"):
             self.apply_ai_config()
@@ -237,6 +245,7 @@ class AppContext:
 
     def shutdown(self) -> None:
         log.info("Shutting down")
+        self.gestures.stop()
         self.scheduler.stop()
         self.watchdog.stop()
         self.pipeline.stop()
