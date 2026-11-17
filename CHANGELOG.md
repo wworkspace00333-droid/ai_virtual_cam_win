@@ -7,6 +7,13 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+### Changed
+- Lighting is about 6× cheaper: ~6 ms per 1080p frame on the 2-core server instead of ~40 (one pass with a
+  4-channel lookup table, metering on the shrunk whole frame — no full-frame copies).
+- "Start with Windows" follows a reinstalled app: an entry pointing to a removed exe or another install folder is
+  rewritten at start (D13).
+- CI actions on Node 24 (checkout v7, setup-python v7, upload-artifact v7, cache v5).
+
 ## [0.4.2] — 2026-11-17
 
 The fixes from the 0.5 audit (docs/WINDOWS_AUDIT_0.5.md) and most of the 0.5 roadmap (docs/WINDOWS_ROADMAP_0.5.md):

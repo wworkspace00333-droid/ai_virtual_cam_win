@@ -98,9 +98,9 @@ def test_cost_per_1080p_frame():
         al.update(a, [(800, 300, 1000, 550)], i / 30)
         al.apply(a)
         times.append((time.perf_counter() - t0) * 1000)
-    # the fastest frame: what the code costs, without a busy CI runner's interruptions (the mean of 10 was 43 ms on
-    # a GitHub runner under coverage); a few ms on a normal CPU, < 40 on the 2-core server
-    assert min(times) < 40, times
+    # the fastest frame: what the code costs without a busy runner's interruptions. Was ~41 ms on a GitHub runner
+    # (two full-frame copies for a 3-channel slice); with the 4-channel table ~6 ms on the 2-core server
+    assert min(times) < 20, times
 
 
 def test_pipeline_lights_the_camera_picture(paths, monkeypatch):
