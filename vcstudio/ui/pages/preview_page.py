@@ -39,6 +39,10 @@ class PreviewPage:
         self.framing_btn = QPushButton(tr("Auto-framing")); self.framing_btn.setCheckable(True)
         self.framing_btn.setToolTip(tr("Crop to the people in view and follow them smoothly (zoom up to 2×); back to "
                                        "the full picture when nobody is there."))
+        self.light_btn = QPushButton(tr("Lighting")); self.light_btn.setCheckable(True)
+        self.light_btn.setToolTip(tr("Automatic exposure and white balance, metered on the faces: a dim room or a "
+                                     "bright window behind you no longer leaves your face dark. Your images and "
+                                     "backgrounds are not changed."))
         self.card_btn = QPushButton(tr("Card for a game…"))
         self.card_btn.setToolTip(tr("Put a photo into the frame a browser game or an emulator draws over the camera."))
         self.boxes = QCheckBox(tr("Show detections")); self.boxes.setChecked(True)
@@ -50,8 +54,8 @@ class PreviewPage:
         bar.addWidget(src_btn)
         lay.addLayout(bar)
         bar2 = QHBoxLayout()
-        for b in (self.repl_btn, self.privacy, self.face_btn, self.logo_btn, self.framing_btn, self.card_btn,
-                  self.boxes):
+        for b in (self.repl_btn, self.privacy, self.face_btn, self.logo_btn, self.framing_btn, self.light_btn,
+                  self.card_btn, self.boxes):
             bar2.addWidget(b)
         bar2.addStretch()
         lay.addLayout(bar2)
@@ -84,6 +88,7 @@ class PreviewPage:
         self.privacy.currentIndexChanged.connect(self._privacy_changed)
         self.framing_btn.toggled.connect(
             lambda on: self.ctx.update_active_profile(lambda b: b.setdefault("framing", {}).__setitem__("enabled", on)))
+        self.light_btn.toggled.connect(self._toggle_light)
         self.card_btn.clicked.connect(self.open_game_card)
         self._card_dialog = None
         src_btn.clicked.connect(goto_input)
@@ -104,14 +109,23 @@ class PreviewPage:
         on = self._logo_on()
         if self.logo_btn.isChecked() != on:
             self.logo_btn.blockSignals(True); self.logo_btn.setChecked(on); self.logo_btn.blockSignals(False)
-        fon = bool((self.ctx.profiles.active()["body"].get("framing") or {}).get("enabled"))
-        if self.framing_btn.isChecked() != fon:
-            self.framing_btn.blockSignals(True); self.framing_btn.setChecked(fon); self.framing_btn.blockSignals(False)
+        body = self.ctx.profiles.active()["body"]
+        for btn, section in ((self.framing_btn, "framing"), (self.light_btn, "lighting")):
+            on = bool((body.get(section) or {}).get("enabled"))
+            if btn.isChecked() != on:
+                btn.blockSignals(True); btn.setChecked(on); btn.blockSignals(False)
         from vcstudio.replacement import privacy_mode as pm
         lv = pm.level_of(self.ctx.profiles.active()["body"])
         if self.privacy.currentData() != lv:
             self.privacy.blockSignals(True); self.privacy.setCurrentIndex(self.privacy.findData(lv))
             self.privacy.blockSignals(False)
+
+    def _toggle_light(self, on: bool) -> None:
+        def mutate(b):
+            b.setdefault("lighting", {})["enabled"] = on
+            if on:                                   # metering on faces needs face detection
+                b.setdefault("ai", {})["face_detection"] = "vision"
+        self.ctx.update_active_profile(mutate)
 
     def _privacy_changed(self, *_):
         from vcstudio.replacement import privacy_mode as pm

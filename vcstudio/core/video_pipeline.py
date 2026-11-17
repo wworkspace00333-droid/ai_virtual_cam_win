@@ -169,7 +169,9 @@ class VideoPipeline:
         self.background = None            # BackgroundService (vcstudio/replacement/background.py), set by the app
         self.scene = None                 # SceneState (vcstudio/core/scene.py): published whole by the app
         from vcstudio.replacement.framing import AutoFramer
+        from vcstudio.replacement.lighting import AutoLight
         self.framer = AutoFramer()        # auto-framing: crop to the people, follow them smoothly
+        self.light = AutoLight()          # automatic exposure / white balance of the camera picture
         self._override_cache: tuple | None = None
         self._consecutive_errors = 0
         self._generation = 0
@@ -267,6 +269,24 @@ class VideoPipeline:
                 self._iteration(st)
         self.heartbeat = time.monotonic()
 
+    def _light(self, frame: Frame, lcfg) -> Frame:
+        """Lighting enhancement (vcstudio/replacement/lighting.py); any failure leaves the picture as it was."""
+        try:
+            self.light.cfg = lcfg
+            faces = [(o.x0, o.y0, o.x1, o.y1) for o in self.ai.tracked_at(frame.pts) if o.label == "face"]
+            with frame.bgra() as a:
+                self.light.update(a, faces, frame.pts)
+                lit = self.light.apply(a)
+                if lit is a:
+                    return frame
+            return Frame(frame.seq, frame.pts, frame.arrival, frame.width, frame.height, array=lit,
+                         source=f"{frame.source}+light")
+        except Exception as e:
+            with self._lock:
+                self._stats.last_error = f"lighting: {type(e).__name__}: {e}"
+            log.exception("lighting failed; frame passed unchanged")
+            return frame
+
     def _frame_to_people(self, out: Frame, frame: Frame, fcfg) -> Frame:
         """Auto-framing: crop the finished output to the people and scale it back (vcstudio/replacement/framing.py).
         Any failure leaves the frame unframed: the camera never waits."""
@@ -321,14 +341,19 @@ class VideoPipeline:
                 # One scene for the whole frame (vcstudio/core/scene.py): a switch published while this frame is drawn
                 # takes effect on the next frame, never half-way through this one.
                 sc = self.scene
+                lcfg = sc.lighting if sc is not None else None
+                if lcfg is not None and lcfg.enabled and not self.passthrough:
+                    work = self._light(frame, lcfg)          # correct the camera picture before anything is drawn
+                elif self.light._t is not None:
+                    self.light.reset()
                 bg = self.background
                 snap = (sc.bg_cfg, sc.bg_image) if sc is not None and sc.bg_cfg is not None else None
                 if bg is not None and not self.passthrough and self.replacement_enabled:
                     try:
                         if bg.use_gpu_layers(self.replacement.compositor.active.name):
-                            pre_ops = bg.ops(frame, snap)
+                            pre_ops = bg.ops(work, snap)
                         else:
-                            work = bg.apply(frame, snap)
+                            work = bg.apply(work, snap)
                     except Exception as e:    # the frame goes on without background; the camera never waits
                         with self._lock:
                             self._stats.last_error = f"background: {type(e).__name__}: {e}"

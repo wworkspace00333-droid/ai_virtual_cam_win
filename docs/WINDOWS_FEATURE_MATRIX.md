@@ -180,7 +180,7 @@ Windows 10/11). Кадры идут из приложения через общ�
 | Multi-Object Replacement | PARTIAL → ✅ P2.3 | Много зон и объектов; «каждому объекту свой ресурс» по очереди, закрепляется за ID трека (	est_multi_object.py) |
 | Auto-Framing | MISSING → ✅ P2.5 | Кадрирование по людям, плавное следование, мёртвая зона с гистерезисом, возврат к полному кадру (	est_framing.py) |
 | AI Privacy Mode | PARTIAL → ✅ P2.4 | Уровни: лица · лица и экраны · всё с фоном; Ctrl+Alt+H; выключение возвращает сцену (	est_privacy_mode.py) |
-| AI Lighting Enhancement | MISSING | Только ручная цветокоррекция зоны |
+| AI Lighting Enhancement | MISSING → ✅ P2.6 | Экспозиция по лицам, баланс белого, мягкие светлые тона, сглаживание (	est_lighting.py) |
 | Gesture Control | MISSING | — |
 | Recording | MISSING | — |
 | Instant Replay | MISSING | — |

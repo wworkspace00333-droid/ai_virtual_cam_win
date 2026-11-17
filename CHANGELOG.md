@@ -23,6 +23,11 @@ Fixes from the 0.5 audit (docs/WINDOWS_AUDIT_0.5.md, P0).
   rate and ratcheted down to the floor; it now scales from the unthrottled rate (D26).
 
 ### Added
+- **Lighting enhancement** (P2.6, Preview page): automatic exposure metered on the inner part of the faces (a bright
+  window behind no longer darkens the face), grey-world white balance, highlight roll-off instead of clipping,
+  smoothed over time; applied to the camera picture before the background and replacements, so user images stay as
+  they are. A dimmed, tinted COCO photo: face brightness 0.18 → 0.35. Found by the tests: metering on a padded face
+  box measured mostly background and darkened a backlit face — now it meters inside the face.
 - **Auto-framing** (P2.5, Preview page): the output is cropped to the people in view (with the output's aspect ratio,
   zoom up to 2×) and follows them smoothly; small movements are ignored (dead zone with hysteresis, so a zoom-out
   still reaches the full frame); after 2 s without anyone it eases back to the full picture. It is the last step of

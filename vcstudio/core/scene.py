@@ -43,6 +43,7 @@ class SceneState:
     bg_cfg: Any = None                       # replacement.background.BackgroundConfig
     bg_image: Any = None                     # decoded background image (numpy) or None
     framing: Any = None                      # replacement.framing.FramingConfig
+    lighting: Any = None                     # replacement.lighting.LightingConfig
 
     @property
     def replacement_active(self) -> bool:
@@ -57,10 +58,11 @@ class SceneState:
 def build_state(name: str, rois, replacement, background, body: dict | None = None) -> SceneState:
     """Snapshot of the services after they loaded a profile (called before publishing)."""
     from vcstudio.replacement.framing import FramingConfig
+    from vcstudio.replacement.lighting import LightingConfig
     specs, assets = replacement.state()
     cfg, image = background.snapshot() if background is not None else (None, None)
     return SceneState(next(_versions), name or "", tuple(rois.rois()), specs, assets, cfg, image,
-                      FramingConfig.from_profile(body or {}))
+                      FramingConfig.from_profile(body or {}), LightingConfig.from_profile(body or {}))
 
 
 def scene_data(body: dict) -> dict:

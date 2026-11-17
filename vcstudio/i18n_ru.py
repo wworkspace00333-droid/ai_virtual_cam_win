@@ -214,6 +214,11 @@ RU: dict[str, str] = {
     "Scenes": "Сцены",
     "Privacy off": "Приватность выкл.",
     "Auto-framing": "Автокадрирование",
+    "Lighting": "Освещение",
+    "Automatic exposure and white balance, metered on the faces: a dim room or a bright window behind you no longer "
+    "leaves your face dark. Your images and backgrounds are not changed.":
+        "Автоматическая экспозиция и баланс белого по лицам: тёмная комната или яркое окно за спиной больше не "
+        "делают лицо тёмным. Ваши изображения и фоны не меняются.",
     "Crop to the people in view and follow them smoothly (zoom up to 2×); back to the full picture when nobody is "
     "there.":
         "Кадрирует по людям в кадре и плавно следует за ними (приближение до 2×); без людей возвращает полный кадр.",
