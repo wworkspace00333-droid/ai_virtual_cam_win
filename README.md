@@ -13,15 +13,15 @@ project's GitHub releases list). `VCS_NO_NETWORK=1` turns all three off.
 There is no telemetry and no auto-update. Plugins (Settings → Plugins, [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md)) are
 your own code and are not limited by this.
 
-**Status: 0.4.6, a preview release.** Developed and tested on a server without a GPU (Windows Server 2025, software
+**Status: 0.4.7, a preview release.** Developed and tested on a server without a GPU (Windows Server 2025, software
 Direct3D). Speed on real graphics cards, compatibility with every video app and colour in each of them still have
 to be checked on real PCs: [docs/HARDWARE_CHECKLIST.md](docs/HARDWARE_CHECKLIST.md). Changes:
 [CHANGELOG.md](CHANGELOG.md).
 
 ## Install
 
-1. Download `AIVirtualCameraStudio-Setup-0.4.6.exe` from [Releases](../../releases) and check it:
-   `Get-FileHash .\AIVirtualCameraStudio-Setup-0.4.6.exe -Algorithm SHA256` must equal the value in the `.sha256` file
+1. Download `AIVirtualCameraStudio-Setup-0.4.7.exe` from [Releases](../../releases) and check it:
+   `Get-FileHash .\AIVirtualCameraStudio-Setup-0.4.7.exe -Algorithm SHA256` must equal the value in the `.sha256` file
    next to it.
 2. Run it. The installer is not code-signed yet, so SmartScreen shows "Windows protected your PC": click
    **More info → Run anyway**. Windows asks for administrator rights once to register the camera.

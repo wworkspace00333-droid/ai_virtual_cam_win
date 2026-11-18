@@ -7,6 +7,10 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+## [0.4.7] — 2026-11-18
+
+Camera output crash fixed; CPU compositor 4-5x faster.
+
 ### Fixed
 - A crash (access violation) when the camera output was closed while a frame was being written to it: the
   virtual-camera writer now finishes the frame first and ignores frames sent after closing. This was the cause
@@ -258,6 +262,7 @@ for real hardware are still to be measured (docs/HARDWARE_CHECKLIST.md).
 
 macOS releases; see the history of the original repository.
 
+[0.4.7]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.7
 [0.4.6]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.6
 [0.4.5]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.5
 [0.4.4]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.4
