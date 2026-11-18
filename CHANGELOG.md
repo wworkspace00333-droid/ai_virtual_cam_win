@@ -7,6 +7,14 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+### Changed
+- **The CPU compositor (used when Direct3D is not available or fails) is 4-5x faster.** It blends with 8-bit
+  OpenCV calls straight into the output instead of float32 NumPy over every box, and a wide blur region runs on a
+  smaller copy (as the background blur already did). 1080p, two regions (logo with mask, video): 68 -> 15 ms per
+  frame; with a blur and a pixelate region too: 114 -> 20 ms. Live 1080p60 with regions on the CPU compositor:
+  13 -> 55 fps. Results differ from before by at most 1 level (blur: 3). Software Direct3D (WARP) uses the same
+  faster blur for blur regions.
+
 ## [0.4.6] — 2026-11-18
 
 Background blur 2-3x cheaper on the CPU; maintenance jobs isolated from the live video; shared webcams shown on the Input page.

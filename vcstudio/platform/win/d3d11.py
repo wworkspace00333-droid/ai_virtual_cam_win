@@ -196,9 +196,7 @@ class D3D11Backend(MetalBackend):
         from vcstudio.replacement.compositor import CpuBackend
         H, W = src.shape[:2]
         x0, y0, x1, y1 = op.bbox
-        eff = CpuBackend._effect(src, op, W, H)                    # float 0..1, already 8-bit rounded
-        patch = np.empty((y1 - y0, x1 - x0, 4), np.uint8)
-        patch[..., :3] = np.clip(eff * 255 + 0.5, 0, 255).astype(np.uint8)
+        patch = CpuBackend.blur8(src, op.bbox, op.params[0], W, H)  # BGRA uint8, the CPU backend's blur
         patch[..., 3] = 255
         inv = np.array([[1.0, 0.0, -x0], [0.0, 1.0, -y0]])
         return DrawOp(op.roi_id, "composite", op.bbox, op.opacity, mask=op.mask, mask_rect=op.mask_rect,
