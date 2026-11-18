@@ -7,6 +7,10 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+## [0.4.5] — 2026-11-18
+
+Several apps on one camera; core test coverage 87 % (83.5 % in CI); CLIP measured (not enabled).
+
 ### Added
 - **Several apps on one camera.** Media Foundation capture of a camera another app already controls (a webcam
   in use by Zoom, for example) now joins it in shared mode instead of failing with "in use"; both apps get the
