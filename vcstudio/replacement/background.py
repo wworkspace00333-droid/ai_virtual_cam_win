@@ -109,12 +109,13 @@ class BackgroundService:
         cfg, image = self._resolve(snap)
         if not self._snap_active(cfg, image):
             return frame
-        mask, _ = self.seg.masks.peek()
+        mask, ver = self.seg.masks.peek()
         if mask is None:
             return frame
         from vcstudio.ai.person_segmentation import composite_background
         with frame.bgra() as img:
-            out = composite_background(img, mask, cfg.mode, cfg.strength, image, cfg.edge)
+            out = composite_background(img, mask, cfg.mode, cfg.strength, image, cfg.edge,
+                                       mask_key=(id(self), ver))       # same mask version: reuse its blend weights
         self.applied += 1
         return Frame(frame.seq, frame.pts, frame.arrival, frame.width, frame.height, array=out,
                      source=f"{frame.source}+background")

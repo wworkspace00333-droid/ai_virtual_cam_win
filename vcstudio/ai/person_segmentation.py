@@ -128,32 +128,62 @@ class BackgroundSegmenter:
                 stop.wait(rest)
 
 
-def composite_background(frame_bgra: np.ndarray, mask192: np.ndarray, mode: str, strength: int = 25,
-                         image_bgra: np.ndarray | None = None, edge: float = 0.5,
-                         out: np.ndarray | None = None) -> np.ndarray:
-    """Blend: person from the frame, background blurred (mode "blur") or replaced (mode "image").
+# full-size blend weights of the last mask: (key, m, inv). The mask changes at the segmentation rate (5-15 /s), the
+# frames at 30-60 /s, so most frames reuse them (two 1080p float resizes, ~4.5 ms on the development server).
+_weights_cache: tuple | None = None
 
-    The mask is upscaled with a soft edge: values are remapped around `edge` (0..1) so the outline is crisp but not
-    aliased. Blur runs on a quarter-size copy (much cheaper than a full-size Gaussian, visually the same for a
-    background). Returns a new BGRA array (or `out`)."""
-    h, w = frame_bgra.shape[:2]
-    if mode not in ("blur", "image") or (mode == "image" and image_bgra is None):
-        return frame_bgra
+
+def _weights(mask192: np.ndarray, edge: float, w: int, h: int, key) -> tuple[np.ndarray, np.ndarray]:
+    global _weights_cache
+    ck = (key, round(float(edge), 4), w, h)
+    c = _weights_cache
+    if key is not None and c is not None and c[0] == ck:
+        return c[1], c[2]
     # edge remap and 1 - m on the small mask, then both weights scaled up: the same order as the GPU layer (mask
     # remapped, then sampled bilinearly); remapping 2 M full-size values cost ~11 of the ~24 ms per 1080p frame
     lo, hi = max(0.0, edge - 0.25), min(1.0, edge + 0.25)
     small_m = np.clip((np.asarray(mask192, np.float32) - lo) / max(1e-6, hi - lo), 0.0, 1.0)
     m = cv2.resize(small_m, (w, h), interpolation=cv2.INTER_LINEAR)
     inv = cv2.resize(1.0 - small_m, (w, h), interpolation=cv2.INTER_LINEAR)
+    if key is not None:
+        _weights_cache = (ck, m, inv)                  # one tuple: readers on other threads see old or new, whole
+    return m, inv
+
+
+def blur_scale(strength: int) -> int:
+    """Downscale factor for the background blur: 1/8 once the blur is wide enough (sigma >= 3 px there, 24 px at full
+    size) that a bilinear upscale cannot show the coarser grid; 1/4 below. ~2.5 ms less per 1080p frame."""
+    return 8 if int(strength) >= 24 else 4
+
+
+def composite_background(frame_bgra: np.ndarray, mask192: np.ndarray, mode: str, strength: int = 25,
+                         image_bgra: np.ndarray | None = None, edge: float = 0.5,
+                         out: np.ndarray | None = None, mask_key=None) -> np.ndarray:
+    """Blend: person from the frame, background blurred (mode "blur") or replaced (mode "image").
+
+    The mask is upscaled with a soft edge: values are remapped around `edge` (0..1) so the outline is crisp but not
+    aliased. Blur runs on a 1/4 or 1/8 size copy (much cheaper than a full-size Gaussian, visually the same for a
+    background). `mask_key` (e.g. the mask's version number) lets frames that share a mask reuse its upscaled blend
+    weights. Returns a new BGRA array (or `out`, written in place)."""
+    h, w = frame_bgra.shape[:2]
+    if mode not in ("blur", "image") or (mode == "image" and image_bgra is None):
+        return frame_bgra
+    m, inv = _weights(mask192, edge, w, h, mask_key)
     if mode == "blur":
         k = max(1, int(strength)) | 1
-        small = cv2.resize(frame_bgra, (max(1, w // 4), max(1, h // 4)), interpolation=cv2.INTER_AREA)
-        small = cv2.GaussianBlur(small, (0, 0), sigmaX=max(0.5, k / 4))
+        f = blur_scale(strength)
+        small = cv2.resize(frame_bgra, (max(1, w // f), max(1, h // f)), interpolation=cv2.INTER_AREA)
+        small = cv2.GaussianBlur(small, (0, 0), sigmaX=max(0.5, k / f))
         bg = cv2.resize(small, (w, h), interpolation=cv2.INTER_LINEAR)
     else:
         assert image_bgra is not None
         bg = image_bgra if image_bgra.shape[:2] == (h, w) else cv2.resize(image_bgra, (w, h), interpolation=cv2.INTER_AREA)
-    res = cv2.blendLinear(np.ascontiguousarray(frame_bgra), np.ascontiguousarray(bg), m, inv)   # SIMD, uint8
+    src = np.ascontiguousarray(frame_bgra)
+    if out is not None and out.shape == src.shape and out.dtype == src.dtype and out.flags.c_contiguous \
+            and not np.shares_memory(out, src):
+        cv2.blendLinear(src, np.ascontiguousarray(bg), m, inv, dst=out)              # SIMD, uint8, no extra copy
+        return out
+    res = cv2.blendLinear(src, np.ascontiguousarray(bg), m, inv)
     if out is None:
         return res
     np.copyto(out, res)

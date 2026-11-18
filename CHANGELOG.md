@@ -7,6 +7,13 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Background blur and replacement are 2-3x cheaper on the CPU.** Frames between two mask updates (the mask
+  changes 5-15 times a second, frames 60) reuse its upscaled blend weights, a wide blur runs on a 1/8-size copy
+  (52-54 dB PSNR against the previous 1/4-size blur: no visible difference), and the blend writes straight into
+  the output. Per 1080p frame on the 2-core development server: blur 17 -> 7.4 ms, image 9.3 -> 3.3 ms; live
+  1080p60 with blur and the camera output on: 44.8 -> 55-56 fps.
+
 ## [0.4.5] — 2026-11-18
 
 Several apps on one camera; core test coverage 87 % (83.5 % in CI); CLIP measured (not enabled).
