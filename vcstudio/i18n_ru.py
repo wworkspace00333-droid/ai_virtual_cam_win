@@ -425,6 +425,7 @@ RU: dict[str, str] = {
     "Yes (OBS)": "Да (OBS)",
     "Camera permission: {state}.": "Доступ к камере: {state}.",
     "{fmt} · nominal {fps} fps": "{fmt} · номинально {fps} кадр/с",
+    "shared with another app": "вместе с другой программой",
     "1 s sliding window": "скользящее окно 1 с",
     "frame timestamp → app": "метка кадра → приложение",
     "uptime {s} s": "работает {s} с",

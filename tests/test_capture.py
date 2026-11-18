@@ -87,6 +87,16 @@ def test_runs_at_nominal_rate(sup):
     assert f is not None and f.width == 1280
 
 
+def test_shared_device_is_reported(sup):
+    """A Windows camera joined in shared mode (another app controls it) shows up in the stats (Input page note)."""
+    src = TestPatternSource(640, 360, 30)
+    assert sup.stats().shared is False
+    src.shared = True
+    sup.start(lambda: src)
+    assert wait_for(lambda: sup.stats().state == "running")
+    assert sup.stats().shared is True
+
+
 def test_frozen_detected_without_reconnect(sup):
     src = TestPatternSource(640, 360, 30)
     sup.start(lambda: src)

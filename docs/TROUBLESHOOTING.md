@@ -32,6 +32,8 @@ The log files are in `~/Library/Application Support/AIVirtualCameraStudio/logs/`
 | Preview: "camera not installed: output visible here only" | Install the camera extension: [CAMERA_SETUP.md](CAMERA_SETUP.md). |
 | Receiving app shows "Waiting for AI Virtual Camera Studio…" | The app isn't sending frames: click **Start** on the Preview page, or **Start test pattern** on the Virtual Camera page. |
 | Receiving app doesn't list AI Virtual Camera | Quit and reopen that app after installing or approving the extension. |
+| Second app says the camera is **in use** (Windows) | Two apps that both take full control cannot share the Media Foundation camera ("AI Virtual Camera (Windows Virtual Camera)"); this is Windows' rule for every camera. Pick the DirectShow camera ("AI Virtual Camera") in one of them: it has no such limit. Apps that open cameras in shared mode (the Windows Camera app, for example) work alongside. |
+| Input: the webcam opens, but in a different resolution than chosen (Windows) | Another app uses the webcam, so this app joined it in shared mode and receives the mode that app chose (the log says "shared with another app"). Close the other app, or choose the same resolution there. |
 | Output state **PASSTHROUGH (automatic …)** | Rendering failed 5 times in a row, so the app forwarded the original video to keep the camera alive. See Logs, then switch passthrough off on the Preview page. |
 | Compositor shows **CPU** although Metal is selected | The Metal library is missing (`scripts/build_native.sh`) or a GPU error forced a fallback (see Logs). The CPU path is about 75× slower. |
 

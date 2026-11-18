@@ -7,6 +7,10 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+### Added
+- The Input page says when a webcam is shared with another app ("shared with another app"): the resolution then is
+  the one that app chose. README and Troubleshooting describe camera sharing on Windows.
+
 ### Changed
 - **Background blur and replacement are 2-3x cheaper on the CPU.** Frames between two mask updates (the mask
   changes 5-15 times a second, frames 60) reuse its upscaled blend weights, a wide blur runs on a 1/8-size copy

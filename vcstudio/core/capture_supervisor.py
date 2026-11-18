@@ -40,6 +40,7 @@ class CaptureStats:
     height: int = 0
     pixel_format: str = ""
     nominal_fps: float = 0.0
+    shared: bool = False          # Windows Media Foundation: the device is shared with the app that controls it
     measured_fps: float = 0.0
     frames: int = 0
     dropped_by_source: int = 0
@@ -193,6 +194,7 @@ class CaptureSupervisor:
             st = self._stats
             st.source_name, st.source_kind = src.name, src.kind
             st.width, st.height, st.nominal_fps = w, h, fps
+            st.shared = bool(getattr(src, "shared", False))
             st.last_error = ""
         self._opened_at = host_time_s()
 

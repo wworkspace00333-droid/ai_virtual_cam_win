@@ -44,6 +44,9 @@ settings, profiles and images stay in `%LOCALAPPDATA%\AIVirtualCameraStudio` unt
   file** (played in real time, looping).
 - **Output:** the app's own camera, under the name you give it (Virtual Camera page → Rename). To pass the result on
   as "OBS Virtual Camera", add this camera in OBS as a Video Capture Device and click Start Virtual Camera.
+  Several apps can use it at once: any number on the DirectShow camera; on the Media Foundation camera, apps that
+  open cameras in shared mode together with one app that takes full control. A webcam another app already uses
+  is joined in shared mode as an input instead of failing with "in use".
 - **One click on the Preview page:** *Hide face* (YuNet face detection, pixelate or blur), *Logo* (a picture in the
   corner, transparency kept), *Card for a game*, *Privacy mode* (faces; screens, phones and books; background —
   Ctrl+Alt+H), *Auto-framing* (follows the people in view), *Lighting* (exposure and white balance metered on faces).
