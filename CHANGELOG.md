@@ -7,6 +7,10 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+## [0.4.6] — 2026-11-18
+
+Background blur 2-3x cheaper on the CPU; maintenance jobs isolated from the live video; shared webcams shown on the Input page.
+
 ### Added
 - The Input page says when a webcam is shared with another app ("shared with another app"): the resolution then is
   the one that app chose. README and Troubleshooting describe camera sharing on Windows.
@@ -239,6 +243,8 @@ for real hardware are still to be measured (docs/HARDWARE_CHECKLIST.md).
 
 macOS releases; see the history of the original repository.
 
+[0.4.6]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.6
+[0.4.5]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.5
 [0.4.4]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.4
 [0.4.3]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.3
 [0.4.2]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.2
