@@ -269,7 +269,7 @@ def test_media_foundation_capture_through_the_apps_own_reader(w, h, fps):
         k, t0 = 0, time.perf_counter()
         while not stop.is_set():
             k += 1; wr.publish(img); time.sleep(max(0.0, t0 + k / 60 - time.perf_counter()))
-    threading.Thread(target=send, daemon=True).start()
+    sender = threading.Thread(target=send, daemon=True); sender.start()
     got = []
     src = WindowsCameraSource("mediafoundation", None, "AI Virtual Camera", w, h, fps, allow_own_output=True)
     try:
@@ -279,7 +279,7 @@ def test_media_foundation_capture_through_the_apps_own_reader(w, h, fps):
         time.sleep(0.5); n0, t0 = len(got), time.perf_counter(); time.sleep(3)
         rate = (len(got) - n0) / (time.perf_counter() - t0)
     finally:
-        src.stop(); stop.set(); wr.close()
+        src.stop(); stop.set(); sender.join(5); wr.close()
     assert src.nominal[:2] == (w, h) and abs(src.nominal[2] - fps) < 0.5
     assert rate >= 0.85 * fps, rate
     b, g, r = got[-1][3]

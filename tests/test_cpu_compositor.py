@@ -136,3 +136,15 @@ def test_wide_blur_on_a_smaller_copy_matches_the_full_blur(sigma):
     assert psnr > 45 and d.mean() < 1.0, (sigma, d.max(), psnr)
     if sigma < 6:
         assert d.max() == 0                                       # narrow blur: exact
+
+
+@pytest.mark.parametrize("params", [(0.1, 1.4, 0.2, 0), (0.0, 1.0, 0.0, 0), (-0.3, 2.5, 1.8, 0), (0.0, 1.0, 1.0, 0)])
+def test_colour_effect_is_one_affine_map(params):
+    """The colour effect (brightness, contrast, saturation) as cv2.transform equals the float formula, clipping
+    included, and leaves alpha alone."""
+    frame = scene()
+    op = DrawOp("e", "effect", (0, 0, W, H), 1.0, effect="color", params=params)
+    ref = np.clip(CpuBackend._effect(frame, op, W, H) * 255 + 0.5, 0, 255).astype(np.uint8)
+    got = CpuBackend._effect8(frame, op, W, H)
+    assert np.abs(got[..., :3].astype(int) - ref.astype(int)).max() <= 1
+    assert np.array_equal(got[..., 3], frame[..., 3])

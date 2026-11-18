@@ -7,7 +7,14 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+### Fixed
+- A crash (access violation) when the camera output was closed while a frame was being written to it: the
+  virtual-camera writer now finishes the frame first and ignores frames sent after closing. This was the cause
+  of the occasional crash of the full test run.
+
 ### Changed
+- The colour effect (brightness, contrast, saturation) on the CPU compositor is one 8-bit OpenCV pass
+  (`cv2.transform`): the soak's three regions 32 -> 13 ms per 1080p frame, identical result.
 - **The CPU compositor (used when Direct3D is not available or fails) is 4-5x faster.** It blends with 8-bit
   OpenCV calls straight into the output instead of float32 NumPy over every box, and a wide blur region runs on a
   smaller copy (as the background blur already did). 1080p, two regions (logo with mask, video): 68 -> 15 ms per

@@ -208,8 +208,23 @@ class CpuBackend:
             xs, cx = np.unique(np.clip((np.arange(x0, x1) // b) * b + b // 2, 0, W - 1), return_counts=True)
             small = frame[ys][:, xs]
             return np.ascontiguousarray(np.repeat(np.repeat(small, cy, axis=0), cx, axis=1))
-        c = np.clip(CpuBackend._effect(frame, op, W, H) * 255 + 0.5, 0, 255).astype(np.uint8)
-        return cv2.cvtColor(c, cv2.COLOR_BGR2BGRA) if frame.shape[2] == 4 else c
+        return cv2.transform(frame[y0:y1, x0:x1], CpuBackend.color_matrix(op.params, frame.shape[2]))
+
+    @staticmethod
+    def color_matrix(params, channels: int = 4) -> np.ndarray:
+        """The colour effect as one affine map on 0..255 values (cv2.transform: one saturating 8-bit pass).
+
+        c' = (c - 0.5) contrast + 0.5 + bright;  out = lum(c') + (c' - lum(c')) sat  with lum = LUMA . c'
+        is linear in c: out = sat c' + (1 - sat) 1 LUMA^T c'; the luma weights sum to 1, so the offset passes
+        through unchanged. Alpha (4th channel) is copied."""
+        bright, contrast, sat = float(params[0]), float(params[1]), float(params[2])
+        Mc = sat * np.eye(3) + (1 - sat) * np.outer(np.ones(3), LUMA_BGR.astype(np.float64))
+        m = np.zeros((channels, channels + 1))
+        m[:3, :3] = Mc * contrast
+        m[:3, channels] = 255 * (0.5 - 0.5 * contrast + bright)
+        if channels == 4:
+            m[3, 3] = 1.0
+        return m
 
     @staticmethod
     def _place(mask: np.ndarray, rect, bbox) -> np.ndarray:

@@ -98,6 +98,31 @@ def test_writer_publishes_with_seqlock():
         w.close()
 
 
+def test_writer_close_while_another_thread_publishes():
+    """D10: the full test run crashed with an access violation when a test closed the writer while its sender thread
+    was still copying a frame into the mapped view. close() now waits for the frame and later publishes do nothing
+    (the app has the same pattern: the pipeline sends while the UI turns the camera output off)."""
+    from vcstudio.platform.win.vcam_writer import VcamWriter
+    img = np.full((1080, 1920, 4), 9, np.uint8)
+    for _ in range(20):
+        w = VcamWriter("Local\vcam-race-" + str(time.time_ns()))
+        w.configure(1920, 1080, 60)
+        sent = threading.Event()
+
+        def send():
+            while True:
+                w.publish(img)                                   # after close: a no-op, not a crash
+                sent.set()
+                if w.base is None:
+                    return
+        t = threading.Thread(target=send, daemon=True); t.start()
+        sent.wait(5)
+        w.close()
+        t.join(5)
+        assert not t.is_alive() and w.base is None
+    w.configure(640, 360, 30); w.publish(img); w.close()           # all harmless after close
+
+
 def test_output_refuses_other_devices():
     from vcstudio.camera.output import CameraOutputError, VirtualCameraOutput
     with pytest.raises(CameraOutputError) as e:

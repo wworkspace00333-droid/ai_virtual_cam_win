@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import threading
 import time
 from ctypes import wintypes
 
@@ -138,6 +139,10 @@ class VcamWriter:
         self._u32(O_HEADER, HEADER); self._u64(O_SLOT_BYTES, SLOT_BYTES); self._u32(O_PID, os.getpid())
         self.n = self._get64(O_LATEST)          # continue numbering if a camera kept the section alive
         self.sent = 0
+        # publish / configure / close from different threads (the pipeline sends while the UI closes the output, the
+        # test-pattern sender shares this writer): close must never unmap the view under a frame being written -
+        # that was an access violation (D10). After close, publish and configure do nothing.
+        self._lock = threading.Lock()
 
     def _u32(self, off: int, v: int) -> None:
         ctypes.c_uint32.from_address(self.base + off).value = v
@@ -149,6 +154,12 @@ class VcamWriter:
         return ctypes.c_uint64.from_address(self.base + off).value
 
     def configure(self, width: int, height: int, fps: float) -> None:
+        with self._lock:
+            if not self.base:
+                return
+            self._configure(width, height, fps)
+
+    def _configure(self, width: int, height: int, fps: float) -> None:
         self._u32(O_WIDTH, width); self._u32(O_HEIGHT, height)
         self._u32(O_FPS_NUM, int(round(fps * 1000))); self._u32(O_FPS_DEN, 1000)
         self._u32(O_ACTIVE, 1)
@@ -157,6 +168,11 @@ class VcamWriter:
         h, w = bgra.shape[:2]
         if w > MAX_W or h > MAX_H or bgra.ndim != 3 or bgra.shape[2] != 4 or bgra.dtype != np.uint8:
             raise ValueError(f"camera frames are BGRA uint8 up to {MAX_W}x{MAX_H}, got {bgra.shape} {bgra.dtype}")
+        with self._lock:
+            if self.base:
+                self._publish(bgra, h, w, ts_ns)
+
+    def _publish(self, bgra: np.ndarray, h: int, w: int, ts_ns: int | None) -> None:
         n = self.n + 1
         i = n % SLOTS
         so = O_SLOT0 + i * SLOT_SIZE
@@ -172,13 +188,21 @@ class VcamWriter:
         self.sent += 1
 
     def close(self) -> None:
-        if self.base:
+        lock = getattr(self, "_lock", None)   # absent if __init__ failed before mapping
+        if lock is None:
+            self._close()
+            return
+        with lock:
+            self._close()
+
+    def _close(self) -> None:
+        if getattr(self, "base", None):
             # only the current writer marks the output closed: a second, short-lived writer on the same section
             # (a test, the test-pattern sender of another copy) must not blank the camera of the one still running
             if ctypes.c_int32.from_address(self.base + O_PID).value == os.getpid():
                 self._u32(O_ACTIVE, 0)
             _k32.UnmapViewOfFile(self.base)
             self.base = None
-        if self.h:
+        if getattr(self, "h", None):
             _k32.CloseHandle(self.h)
             self.h = None
