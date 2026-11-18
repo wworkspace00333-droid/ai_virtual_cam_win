@@ -30,9 +30,9 @@ def inspect_in_background(path: Path, on_done) -> threading.Thread:
                 sig.done.emit(rep, None)
             except Exception as e:  # noqa: BLE001 - shown to the user
                 sig.done.emit(None, e)
-    t = threading.Thread(target=work, name="model-import", daemon=True)
-    t._sig = sig                 # keep the QObject alive with the thread
-    t.start()
+    from vcstudio.core import maintenance
+    t = maintenance.start("model-import", work)
+    t._sig = sig                 # type: ignore[attr-defined]  # keep the QObject alive with the thread
     return t
 
 

@@ -14,6 +14,9 @@ Modules (registered by the app):
 Only active modules take part (background on, AI enabled); an inactive module is reset to full rate. The detector's
 own "on demand" standby (no region needs it, 2 fps) is applied by the AI engine on top of this.
 
+  maintenance (a job from core/maintenance.py runs: benchmark, accuracy check, download...): hold - no step either
+  way, timers restart when it ends. The dip is temporary and caused by the job, not by the live modules.
+
 A module exposes: `active()`, `set_scale(scale, reason)`, and for the status panel `rate_fps()`, `cost_ms()`,
 `state()`. The scheduler never blocks the video: it runs in its own thread every `period` seconds and only changes
 numbers the modules read.
@@ -57,7 +60,7 @@ class ModuleStatus:
 
 @dataclass
 class SchedulerStatus:
-    load: str = "idle"                              # idle | ok | overloaded | recovering
+    load: str = "idle"                              # idle | ok | overloaded | recovering | maintenance
     output_fps: float = 0.0
     input_fps: float = 0.0
     steps_down: int = 0
@@ -69,8 +72,10 @@ class SchedulerStatus:
 class ResourceScheduler:
     def __init__(self, probe: Callable[[], tuple[float, float]], *, low: float = 0.90, high: float = 0.97,
                  down_after: float = 2.0, up_after: float = 5.0, step_down: float = 0.75, step_up: float = 1.15,
-                 period: float = 0.5, event_sink: Callable[[str, str], None] | None = None):
+                 period: float = 0.5, event_sink: Callable[[str, str], None] | None = None,
+                 maintenance: Callable[[], str] | None = None):
         self.probe = probe                          # () -> (output fps, input fps); (0, 0) when not running
+        self.maintenance = maintenance              # () -> running maintenance job names, "" when none
         self.low, self.high = low, high
         self.down_after, self.up_after = down_after, up_after
         self.step_down, self.step_up = step_down, step_up
@@ -107,9 +112,17 @@ class ResourceScheduler:
                 self._set(m, 1.0, "")
         st = self.status
         st.output_fps, st.input_fps = out_fps, in_fps
+        try:
+            job = self.maintenance() if self.maintenance is not None else ""
+        except Exception:
+            job = ""
         if in_fps < 5 or out_fps <= 0:              # no video: nothing to judge
             self._over_since = self._ok_since = None
             st.load = "idle"
+        elif job:                                   # a temporary job (benchmark, download...) causes the dip: hold
+            self._over_since = self._ok_since = None
+            st.load = "maintenance"
+            st.last_action = f"holding while running: {job}"
         elif out_fps < self.low * in_fps:
             self._ok_since = None
             self._over_since = self._over_since if self._over_since is not None else now

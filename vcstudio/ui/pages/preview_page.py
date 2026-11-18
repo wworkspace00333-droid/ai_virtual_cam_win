@@ -153,7 +153,6 @@ class PreviewPage:
         self._sync_recording()
 
     def save_replay(self) -> None:
-        import threading
         rs = self.ctx.recording
         if rs.replay is None:
             self._rec_msg = tr("Turn on Instant replay first: it keeps the last seconds from then on.")
@@ -167,8 +166,8 @@ class PreviewPage:
             st = rs.save_replay()
             self._rec_msg = (tr("Replay not saved: {e}", e=tr(st.error)) if st.state == "error" else
                              tr("Saved {path} ({s} s)", path=st.path, s=f"{st.seconds:.0f}"))
-        self._saving = threading.Thread(target=work, name="replay-save", daemon=True)
-        self._saving.start()
+        from vcstudio.core import maintenance
+        self._saving = maintenance.start("replay-save", work, heavy=False)
         self._sync_recording()
 
     def _sync_recording(self) -> None:

@@ -230,7 +230,8 @@ class DetectionPage:
                 sig.finished.emit("cancelled", "")
             except md.DownloadError as e:
                 sig.finished.emit("error", str(e))
-        threading.Thread(target=run, name="model-download", daemon=True).start()
+        from vcstudio.core import maintenance
+        maintenance.start("model-download", run, heavy=False)
 
     def _dl_progress(self, name: str, done: int, total: int) -> None:
         self.dl_bar.setFormat(f"{name.split('/')[-1]}  {done / 1e6:.0f}" + (f" / {total / 1e6:.0f} MB" if total else " MB"))

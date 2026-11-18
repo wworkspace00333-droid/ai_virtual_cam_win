@@ -6,7 +6,6 @@ Nothing here needs administrator rights or the network: camera installation stay
 """
 from __future__ import annotations
 
-import threading
 
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QLabel, QProgressBar, QRadioButton, QVBoxLayout,
@@ -193,7 +192,8 @@ class _ModePage(QWizardPage):
                 except Exception as e:
                     r = {"error": str(e)}
                 self._sig.done.emit(r)
-            threading.Thread(target=work, name="wizard-measure", daemon=True).start()
+            from vcstudio.core import maintenance
+            maintenance.start("wizard-measure", work)
 
     def _measured(self, r: dict) -> None:
         self.bar.setRange(0, 1); self.bar.setValue(1)

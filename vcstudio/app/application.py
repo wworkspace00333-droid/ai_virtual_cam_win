@@ -66,12 +66,14 @@ class AppContext:
         # Resource scheduler: one governor for the optional heavy modules (vcstudio/core/scheduler.py). It watches
         # output vs input rate (only while the pipeline runs) and slows background segmentation first, then the
         # detector. The AI engine's own load probe is off: the scheduler sets its rate factor.
+        from vcstudio.core import maintenance
         from vcstudio.core.scheduler import Module, ResourceScheduler
         self.ai.load_probe = None
         self.scheduler = ResourceScheduler(
             lambda: ((self.pipeline.output_fps(), self.capture.stats().measured_fps)
                      if self.pipeline.running else (0.0, 0.0)),
-            event_sink=lambda level, msg: self.db.log_event(level, "scheduler", msg))
+            event_sink=lambda level, msg: self.db.log_event(level, "scheduler", msg),
+            maintenance=maintenance.busy)
         seg = self.background.seg
         self.scheduler.add(Module(
             "background", priority=1, min_scale=1 / 3,

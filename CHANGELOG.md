@@ -11,6 +11,11 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 - The Input page says when a webcam is shared with another app ("shared with another app"): the resolution then is
   the one that app chose. README and Troubleshooting describe camera sharing on Windows.
 
+- Maintenance isolation (roadmap P2.1): the detector benchmark, accuracy check, model import check, the
+  first-start performance measurement, model downloads and saving an instant replay run in below-normal
+  priority threads, the CPU-heavy ones one at a time. While one runs, the resource scheduler holds instead of
+  throttling the live AI for a temporary dip (Performance page: "maintenance job running").
+
 ### Changed
 - **Background blur and replacement are 2-3x cheaper on the CPU.** Frames between two mask updates (the mask
   changes 5-15 times a second, frames 60) reuse its upscaled blend weights, a wide blur runs on a 1/8-size copy

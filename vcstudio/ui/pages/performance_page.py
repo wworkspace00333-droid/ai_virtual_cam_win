@@ -72,7 +72,8 @@ class PerformancePage:
         lay.addStretch()
 
     MODULE_LABELS = {"background": "Background segmentation", "detector": "Detection (objects, faces)"}
-    LOAD_LABELS = {"idle": "no video", "ok": "keeping up", "overloaded": "overloaded", "recovering": "recovering"}
+    LOAD_LABELS = {"idle": "no video", "ok": "keeping up", "overloaded": "overloaded", "recovering": "recovering",
+                   "maintenance": "maintenance job running"}
 
     def on_scheduler(self, st) -> None:
         mods = st.modules

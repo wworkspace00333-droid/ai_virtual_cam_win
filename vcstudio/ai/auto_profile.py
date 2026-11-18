@@ -74,9 +74,8 @@ def choose_once(settings, models, apply) -> threading.Thread | None:
         r["mode_before"] = before
         log.info("Automatic performance mode: %s", r["note"])
         apply(r)
-    t = threading.Thread(target=work, name="auto-profile", daemon=True)
-    t.start()
-    return t
+    from vcstudio.core import maintenance
+    return maintenance.start("auto-profile", work)
 
 
 def apply_result(ctx, r: dict) -> bool:

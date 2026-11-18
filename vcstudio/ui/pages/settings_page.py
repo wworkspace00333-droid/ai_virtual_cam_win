@@ -274,8 +274,6 @@ class SettingsPage:
         self.gest_status.setText(text)
 
     def download_hand_models(self, opener=None) -> None:
-        import threading
-
         from vcstudio.ai import model_download as md
         from vcstudio.ai.open_vocab import user_models_dir
         if self._gest_dl_thread is not None and self._gest_dl_thread.is_alive():
@@ -289,8 +287,8 @@ class SettingsPage:
                 self.ctx.db.log_event("INFO", "gestures", "hand models downloaded")
             except md.DownloadError as e:
                 self._gest_dl_msg = tr("Download failed: {e}", e=e)
-        self._gest_dl_thread = threading.Thread(target=work, name="hands-download", daemon=True)
-        self._gest_dl_thread.start()
+        from vcstudio.core import maintenance
+        self._gest_dl_thread = maintenance.start("hands-download", work, heavy=False)
         self.refresh_gestures()
 
     # ---- plugins (vcstudio/plugins): listed without running them, switched on one by one

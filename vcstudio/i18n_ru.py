@@ -367,6 +367,7 @@ RU: dict[str, str] = {
     "keeping up": "успевает",
     "overloaded": "перегрузка",
     "recovering": "восстановление",
+    "maintenance job running": "идёт служебная задача",
     "Load: {load} · output {out} / input {inp} fps · steps down {d}, up {u}":
         "Нагрузка: {load} · выход {out} / вход {inp} к/с · замедлений {d}, восстановлений {u}",
     "Change on the Input page": "Изменить на странице «Ввод»",

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import threading
 import time
 from pathlib import Path
 
@@ -360,7 +359,8 @@ class AIEnginePage:
             except Exception as e:
                 log.exception("accuracy check failed")
                 self._acc_sig.done.emit(tr("Accuracy check failed: {e}", e=e))
-        threading.Thread(target=work, name="ai-accuracy", daemon=True).start()
+        from vcstudio.core import maintenance
+        maintenance.start("accuracy-check", work)
 
     def _acc_row(self, item):
         name, m = item
@@ -394,7 +394,8 @@ class AIEnginePage:
             except Exception as e:
                 log.exception("benchmark failed")
                 self._sig.done.emit(tr("Benchmark failed: {e}", e=e))
-        threading.Thread(target=work, name="ai-benchmark", daemon=True).start()
+        from vcstudio.core import maintenance
+        maintenance.start("benchmark", work)
 
     def _bench_row(self, row):
         r = self.bench.rowCount()
