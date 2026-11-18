@@ -107,7 +107,7 @@ Windows 10/11). Кадры идут из приложения через общ�
 | Заливка цветом (фон зоны) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | READY | `ReplacementSpec.background` |
 | Размытие / пикселизация / цветокоррекция | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | READY | `test_replacement.py`, `test_quick_face_win.py` |
 | Несколько правил (зон) одновременно, приоритеты, перекрытия | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | READY | Стресс 24 зоны: 0 ошибок рендера |
-| Разные замены для разных объектов одного класса | — | — | — | — | — | — | PARTIAL | Зона auto применяет одну замену ко всем подходящим объектам; «видео на каждый объект» есть, разные картинки — нет |
+| Разные замены для разных объектов одного класса | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | READY (P2.3) | «Каждому объекту свой ресурс»: картинки/видео по очереди, закреплены за ID трека (`test_multi_object.py`) |
 | Потеря и восстановление трека | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | READY | `include_coasting`, `test_tracking.py` |
 | Стабильность масок (силуэт) | ✓ | ✓ | — | ✓ | — | ✓ | PARTIAL | Зависит от модели сегментации (D6) |
 
@@ -159,14 +159,14 @@ Windows 10/11). Кадры идут из приложения через общ�
 | Виртуальная камера | ✓ | ✓ (установка, переустановка, имя, тест, подсказки OBS) | `test_ui_win.py`, `test_camera_manager_win.py` | READY |
 | Производительность | ✓ | ✓ | `test_ui.py` | READY |
 | Журнал | ✓ | ✓ | `test_ui.py` | READY |
-| Настройки | ✓ | ✓ (кроме D17) | `test_ui_win.py` | READY |
+| Настройки | ✓ | ✓ (D17 закрыт) | `test_ui_win.py` | READY |
 | Scene Manager | ✓ (P2.2) | ✓ | `test_scenes.py` | READY (после аудита) |
-| Auto-Framing | — | — | — | MISSING |
-| Privacy (отдельный экран) | — | — | — | MISSING |
-| Lighting | — | — | — | MISSING |
-| Gesture Control | — | — | — | MISSING |
-| Recording | — | — | — | MISSING |
-| AI Resource Manager | — | — | — | MISSING |
+| Auto-Framing | ✓ кнопка на «Просмотре» (P2.5) | ✓ | `test_framing.py` | READY (после аудита) |
+| Privacy | ✓ уровни на «Просмотре», Ctrl+Alt+H (P2.4) | ✓ | `test_privacy_mode.py` | READY (после аудита) |
+| Lighting | ✓ кнопка на «Просмотре» (P2.6) | ✓ | `test_lighting.py` | READY (после аудита) |
+| Gesture Control | ✓ «Настройки» → «Жесты» (P2.7) | ✓ | `test_gestures.py` | READY (после аудита) |
+| Recording | ✓ «Просмотр» (запись, повтор) и «Настройки» → «Запись» (P3.1, P3.2) | ✓ | `test_recorder.py` | READY (после аудита) |
+| AI Resource Manager | ✓ «Производительность» → «Ресурсы ИИ» (P2.1) | ✓ | `test_scheduler.py`, `test_maintenance.py` | READY (после аудита) |
 
 ## J. Функции из описания 0.5
 
@@ -185,4 +185,4 @@ Windows 10/11). Кадры идут из приложения через общ�
 | Recording | MISSING → ✅ P3.1 | Запись выхода камеры в MP4: H.264 через Media Foundation (без x264), запасные кодировщики, время кадров сохраняется, поток вывода не ждёт (`test_recorder.py`) |
 | Instant Replay | MISSING → ✅ P3.2 | Последние 5–300 с в памяти (JPEG-кадры), сохранение кнопкой или Ctrl+Alt+F10 (`test_recorder.py`) |
 | Plugin SDK | MISSING → ✅ P3.3 | API 1: эффекты на Python для выхода камеры; список читается без запуска кода, включение по одному с подтверждением, одобрение привязано к SHA-256, сбойный плагин выключается (`vcstudio/plugins/`, `docs/PLUGIN_SDK.md`, `test_plugins.py`) |
-| Scheduler phases 0–6 | MISSING | Отдельные механизмы (раздел H) |
+| Scheduler phases 0–6 | MISSING → ✅ P2.1 | Планировщик ресурсов, ИИ по требованию, изоляция обслуживания, сторож (раздел H) |
