@@ -7,7 +7,9 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
-Fixes from the 2026-11-19 audit (reports/).
+## [0.5.2] — 2026-11-19
+
+Fixes from the 2026-11-19 audit (reports/). Includes the 0.5.1 installer fix (0.5.1 was not published).
 
 ### Fixed
 - **A slow plugin no longer drags the camera down.** Plugins run on the output thread; one taking 40 ms per frame
@@ -330,6 +332,7 @@ for real hardware are still to be measured (docs/HARDWARE_CHECKLIST.md).
 
 macOS releases; see the history of the original repository.
 
+[0.5.2]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.5.2
 [0.5.1]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.5.1
 [0.5.0]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.5.0
 [0.4.8]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.8
