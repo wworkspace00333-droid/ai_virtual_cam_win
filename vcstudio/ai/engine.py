@@ -516,7 +516,10 @@ class AIEngine:
             dets, ms = detector.detect(frame, model_conf, cfg.iou)
             face_ms = 0.0
             if face is not None:
-                fd, face_ms = face.detect(frame)
+                if getattr(face, "name", "") == "yunet":     # distant faces: re-checked in enlarged head crops
+                    fd, face_ms = face.detect(frame, [d for d in dets if d.label == "person"])
+                else:
+                    fd, face_ms = face.detect(frame)
                 dets.extend(fd)
                 self._face_lat.append(face_ms)
             if stop.is_set():          # stopped or abandoned while the model ran: publish nothing

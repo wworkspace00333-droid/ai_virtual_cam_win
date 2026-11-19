@@ -174,3 +174,33 @@ def test_real_person_silhouettes_on_the_sample_photo():
         fill = (d.mask > 127).mean()
         assert 0.15 < fill < 0.95, fill                                    # a silhouette, not empty or the whole box
     print(f"\nPP-HumanSeg silhouettes: {len(people)} people, {ms:.0f} ms per frame incl. detector (CPU)")
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows models")
+def test_distant_faces_are_found_in_enlarged_head_crops():
+    """D25: a face of ~14 px in a 1080p frame is below what the 640 px pass sees; the person's head crop finds it,
+    and a person whose face the frame pass already found gets no second look."""
+    import cv2
+    from vcstudio.ai.onnx_engine import YuNetFaceDetector, yunet_path
+    from vcstudio.core.frame import Frame
+    if not yunet_path().exists():
+        pytest.skip("YuNet missing")
+    src = cv2.cvtColor(cv2.imread("tests/data/bus.jpg"), cv2.COLOR_BGR2BGRA)          # two faces ~40 px
+    fd = YuNetFaceDetector()
+
+    def scene(scale):
+        canvas = np.full((1080, 1920, 4), 90, np.uint8)
+        sm = cv2.resize(src, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        canvas[100:100 + sm.shape[0], 700:700 + sm.shape[1]] = sm
+        # the two people with faces in bus.jpg (boxes from yolox_nano on the original), placed like the photo
+        people = [Detection("person", 0.9, 700 + x0 * scale, 100 + y0 * scale, 700 + x1 * scale, 100 + y1 * scale)
+                  for x0, y0, x1, y1 in ((48, 398, 245, 902), (221, 405, 344, 857))]
+        return Frame(1, 0, 0, 1920, 1080, array=canvas), people
+
+    f, people = scene(0.35)
+    assert fd.detect(f)[0] == []                                           # too small for the frame pass
+    faces, _ = fd.detect(f, people)
+    assert len(faces) == 2 and fd.head_crops == 2
+    f, people = scene(0.6)
+    faces, _ = fd.detect(f, people)
+    assert len(faces) == 2 and fd.head_crops == 0                          # found already: no crops, no duplicates

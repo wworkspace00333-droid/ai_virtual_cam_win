@@ -337,8 +337,15 @@ def yunet_path() -> Path:
 
 
 class YuNetFaceDetector:
-    """OpenCV Zoo YuNet face rectangles (MIT). Detection only: no identity recognition."""
+    """OpenCV Zoo YuNet face rectangles (MIT). Detection only: no identity recognition.
+
+    Faces are found on a copy scaled to FACE_INPUT_MAX, where a face below ~10 px (about 30 px in a 1080p frame: a
+    person a few metres away) is missed. Given the detector's people, the head area of each person too small for that
+    pass is searched again on its own, enlarged crop ("Hide face" must not leave a distant face uncovered)."""
     name = "yunet"
+    HEAD_CROPS = 6                # at most this many people re-checked per frame, largest first
+    HEAD_INPUT = 160              # long side of an enlarged head crop
+    SMALL_PERSON = 0.35           # a person shorter than this share of the frame height gets a head crop
 
     def __init__(self, score_threshold: float = 0.6, nms_threshold: float = 0.3):
         p = yunet_path()
@@ -346,24 +353,66 @@ class YuNetFaceDetector:
             raise FileNotFoundError(f"face model missing: {p}")
         self._det = cv2.FaceDetectorYN.create(str(p), "", (320, 320), score_threshold, nms_threshold, 50)
         self._size = (0, 0)
+        self.head_crops = 0       # crops searched in the last frame (stats / tests)
 
-    def detect(self, frame) -> tuple[list[Detection], float]:
+    def _run(self, img: np.ndarray) -> np.ndarray:
+        sh, sw = img.shape[:2]
+        if self._size != (sw, sh):
+            self._det.setInputSize((sw, sh))
+            self._size = (sw, sh)
+        _, faces = self._det.detect(img)
+        return faces if faces is not None else np.zeros((0, 15), np.float32)
+
+    def _head_boxes(self, people, W: int, H: int) -> list[tuple[int, int, int, int]]:
+        small = [d for d in people if d.h < self.SMALL_PERSON * H and d.w >= 4 and d.h >= 8]
+        small.sort(key=lambda d: -d.h)
+        out = []
+        for d in small[: self.HEAD_CROPS]:
+            side = max(d.w, d.h * 0.4) * 1.2                 # head and shoulders: the top of the box, a bit wider
+            cx, top = (d.x0 + d.x1) / 2, d.y0 - d.h * 0.06
+            x0, y0 = max(0, int(cx - side / 2)), max(0, int(top))
+            x1, y1 = min(W, int(np.ceil(cx + side / 2))), min(H, int(np.ceil(top + side)))
+            if x1 - x0 >= 4 and y1 - y0 >= 4:
+                out.append((x0, y0, x1, y1))
+        return out
+
+    def detect(self, frame, people=()) -> tuple[list[Detection], float]:
         t0 = time.perf_counter()
+        W, H = frame.width, frame.height
+        boxes: list[tuple[float, float, float, float, float]] = []
         with frame.bgra() as img:
             h, w = img.shape[:2]
             s = min(1.0, FACE_INPUT_MAX / max(w, h))
             small = cv2.resize(img[..., :3], (max(1, int(w * s)), max(1, int(h * s))),
                                interpolation=cv2.INTER_AREA) if s < 1 else np.ascontiguousarray(img[..., :3])
-        sh, sw = small.shape[:2]
-        if self._size != (sw, sh):
-            self._det.setInputSize((sw, sh))
-            self._size = (sw, sh)
-        _, faces = self._det.detect(small)
-        out = []
-        for f in (faces if faces is not None else []):
-            x, y, bw, bh, score = float(f[0]), float(f[1]), float(f[2]), float(f[3]), float(f[14])
-            x0, y0 = max(0.0, x / s), max(0.0, y / s)
-            x1, y1 = min(float(frame.width), (x + bw) / s), min(float(frame.height), (y + bh) / s)
-            if x1 > x0 and y1 > y0:
-                out.append(Detection(FACE, score, x0, y0, x1, y1, -1, "yunet_face"))
+            for f in self._run(small):
+                boxes.append((f[0] / s, f[1] / s, (f[0] + f[2]) / s, (f[1] + f[3]) / s, float(f[14])))
+            found = list(boxes)
+            heads = [hb for hb in (self._head_boxes(people, w, h) if s < 1 else [])
+                     if not any(hb[0] <= (b[0] + b[2]) / 2 <= hb[2] and hb[1] <= (b[1] + b[3]) / 2 <= hb[3]
+                                for b in found)]       # a face already found there: no second look
+            self.head_crops = len(heads)
+            for x0, y0, x1, y1 in heads:
+                k = self.HEAD_INPUT / max(x1 - x0, y1 - y0)
+                crop = cv2.resize(img[y0:y1, x0:x1, :3], (max(1, int((x1 - x0) * k)), max(1, int((y1 - y0) * k))),
+                                  interpolation=cv2.INTER_LINEAR if k > 1 else cv2.INTER_AREA)
+                for f in self._run(crop):
+                    boxes.append((x0 + f[0] / k, y0 + f[1] / k, x0 + (f[0] + f[2]) / k, y0 + (f[1] + f[3]) / k,
+                                  float(f[14])))
+        out: list[Detection] = []
+        for bx0, by0, bx1, by1, score in sorted(boxes, key=lambda b: -b[4]):
+            x0, y0, x1, y1 = max(0.0, bx0), max(0.0, by0), min(float(W), bx1), min(float(H), by1)
+            if x1 <= x0 or y1 <= y0:
+                continue
+            if any(_iou((x0, y0, x1, y1), (o.x0, o.y0, o.x1, o.y1)) > 0.3 for o in out):
+                continue                                    # the same face from the frame pass and a head crop
+            out.append(Detection(FACE, score, x0, y0, x1, y1, -1, "yunet_face"))
         return out, (time.perf_counter() - t0) * 1000
+
+
+def _iou(a, b) -> float:
+    ix = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    inter = ix * iy
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / union if union > 0 else 0.0

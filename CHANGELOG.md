@@ -14,6 +14,10 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
   70 ms per frame for four people including the detector on the development server, clean outlines (bags and the
   bus behind them stay out). Other classes still use SAM 2.1 or an imported segmentation model; the Replacement
   page says which.
+- **Hide face finds distant faces.** Faces are searched on a 640 px copy of the frame, where a face under ~30 px
+  in 1080p (a person a few metres away) was missed and stayed uncovered. The head of every small person the
+  detector sees is now searched again on its own enlarged crop: a 14 px face in a 1080p test frame — 0 of 2
+  found before, 2 of 2 now; a few ms per frame, and no extra work for people whose face is already found.
 
 ## [0.4.7] — 2026-11-18
 
