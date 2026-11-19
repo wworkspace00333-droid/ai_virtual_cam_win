@@ -425,10 +425,19 @@ class ReplacementPage:
         if is_obj and d.get("mode") == "manual":
             msgs.append("Object replacement needs an Automatic or Hybrid ROI (it follows a tracked object). "
                         "Change the ROI mode on the ROI Editor page.")
+        from vcstudio.ai import person_segmentation
         from vcstudio.ai.open_vocab import sam_available
         has_seg = any(m.task == "segment" for m in self.ctx.models.available().values())
-        if is_obj and not has_seg and not sam_available():
+        people = person_segmentation.available()
+        if is_obj and not has_seg and not sam_available() and not people:
             msgs.append(platform_text("no_seg_model"))
+        elif is_obj and not has_seg and people and not sam_available():
+            msgs.append("Silhouettes of people come from the built-in person segmentation. Other classes need SAM 2.1 "
+                        "(Detection page → Download models) or an imported segmentation model; until then they are "
+                        "skipped.")
+        elif is_obj and not has_seg and people:
+            msgs.append("Silhouettes of people come from the built-in person segmentation (fast); other classes from "
+                        "SAM 2.1 on the detector's boxes, which takes seconds per frame without a graphics card.")
         elif is_obj and not has_seg:
             msgs.append("Silhouettes come from SAM 2.1 on the detector's boxes (no segmentation model installed); "
                         "on a PC without a graphics card that takes seconds per frame.")

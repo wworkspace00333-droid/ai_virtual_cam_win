@@ -701,6 +701,10 @@ RU: dict[str, str] = {
     "error: {e}": "ошибка: {e}",
     "Object replacement needs an Automatic or Hybrid ROI (it follows a tracked object). Change the ROI mode on the ROI Editor page.":
         "Замене объекта нужна автоматическая или гибридная зона (она следует за объектом). Смените режим зоны на странице «Редактор зон».",
+    "Silhouettes of people come from the built-in person segmentation. Other classes need SAM 2.1 (Detection page → Download models) or an imported segmentation model; until then they are skipped.":
+        "Силуэты людей даёт встроенная сегментация человека. Для других классов нужна SAM 2.1 (страница «Распознавание» → «Скачать модели») или импортированная модель сегментации; до этого они пропускаются.",
+    "Silhouettes of people come from the built-in person segmentation (fast); other classes from SAM 2.1 on the detector's boxes, which takes seconds per frame without a graphics card.":
+        "Силуэты людей даёт встроенная сегментация человека (быстро); других классов — SAM 2.1 по рамкам детектора, без видеокарты это секунды на кадр.",
     "No segmentation model installed: run scripts/convert_models.py yolo11n-seg.": "Модель сегментации не установлена: запустите scripts/convert_models.py yolo11n-seg.",
     "While enabled, the AI engine runs the segmentation model (yolo11n-seg) instead of the plain detector.":
         "Пока включено, ИИ-движок использует модель сегментации (yolo11n-seg) вместо обычного детектора.",

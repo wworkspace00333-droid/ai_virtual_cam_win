@@ -7,6 +7,14 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+### Added
+- **Object (silhouette) replacement of people works out of the box.** Without a segmentation model the app cut
+  people out with SAM 2.1 (a separate download, ~4 s per frame without a graphics card) or not at all; now each
+  "person" box from the detector is segmented with the shipped PP-HumanSeg model (the one behind background blur):
+  70 ms per frame for four people including the detector on the development server, clean outlines (bags and the
+  bus behind them stay out). Other classes still use SAM 2.1 or an imported segmentation model; the Replacement
+  page says which.
+
 ## [0.4.7] — 2026-11-18
 
 Camera output crash fixed; CPU compositor 4-5x faster.

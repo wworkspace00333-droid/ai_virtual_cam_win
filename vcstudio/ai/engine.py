@@ -361,8 +361,9 @@ class AIEngine:
         if cfg.open_vocab:
             self._ensure_open_vocab(cfg)
             return
-        if cfg.need_masks and self._use_box_masks(cfg):
-            self._ensure_box_masks(cfg, mode)
+        how = self._box_masks_source(cfg) if cfg.need_masks else None
+        if how:
+            self._ensure_box_masks(cfg, mode, how)
             return
         # Silhouette replacement needs masks: the segmentation model replaces the detector
         # (it also returns boxes and classes), so only one model is resident.
@@ -381,32 +382,47 @@ class AIEngine:
             log.error("Model %s failed (%s); falling back to the automatic choice", name, e)
             self._switch_to(self._wanted(task, "auto", mode), cfg)
 
-    def _use_box_masks(self, cfg: DetectionConfig) -> bool:
-        """No segmentation model installed (YOLO-seg is not shipped) but SAM 2.1 is: masks from detector boxes."""
+    def _box_masks_source(self, cfg: DetectionConfig) -> str | None:
+        """Silhouettes without a segmentation model (YOLO-seg is AGPL and not shipped): masks on the detector's boxes.
+        "person": PP-HumanSeg (shipped, ~3 ms a box) when the silhouette regions replace only people, or when SAM 2.1
+        is not downloaded (then people get silhouettes and other classes are skipped); "sam": SAM 2.1 (any class,
+        seconds per frame without a GPU); None: a segmentation model is installed or chosen, use it."""
         if cfg.segmentation_model not in ("auto", "", None):
-            return False                         # the user picked a segmentation model explicitly
+            return None                          # the user picked a segmentation model explicitly
         if any(m.task == "segment" for m in self.models.available().values()):
-            return False
+            return None
+        from vcstudio.ai import person_segmentation
         from vcstudio.ai.open_vocab import sam_available
-        return sam_available()
+        people_only = bool(cfg.mask_classes) and set(cfg.mask_classes) <= {"person"}
+        if person_segmentation.available() and (people_only or not sam_available()):
+            return "person"
+        return "sam" if sam_available() else None
 
-    def _ensure_box_masks(self, cfg: DetectionConfig, mode: str) -> None:
+    def _ensure_box_masks(self, cfg: DetectionConfig, mode: str, how: str = "sam") -> None:
         from vcstudio.ai.open_vocab import BoxMaskDetector
+        from vcstudio.ai.person_segmentation import PersonMaskDetector
+        kind = PersonMaskDetector if how == "person" else BoxMaskDetector
         want = self._wanted("detect", cfg.detector_model, mode)
         cur = self._detector
-        if isinstance(cur, BoxMaskDetector) and cur.det.name == want.name and \
-                getattr(cur.loaded, "compute_units", cfg.compute_units) == cfg.compute_units:
-            cur.mask_classes = list(cfg.mask_classes)
+        same_units = getattr(cur, "loaded", None) is None or \
+            getattr(cur.loaded, "compute_units", cfg.compute_units) == cfg.compute_units
+        if isinstance(cur, kind) and cur.det.name == want.name and same_units:
+            if isinstance(cur, BoxMaskDetector):
+                cur.mask_classes = list(cfg.mask_classes)
             return
-        if isinstance(cur, BoxMaskDetector):
+        if isinstance(cur, (BoxMaskDetector, PersonMaskDetector)):
             self._detector = cur.det             # _switch_to compares plain detector names
         self._switch_to(want, cfg)
         t0 = time.perf_counter()
-        self._detector = BoxMaskDetector(self._detector, cfg.compute_units, cfg.mask_classes)
+        if how == "person":
+            self._detector = PersonMaskDetector(self._detector, cfg.compute_units)
+        else:
+            self._detector = BoxMaskDetector(self._detector, cfg.compute_units, cfg.mask_classes)
         with self._lock:
             self._stats.model = self._detector.name
             self._stats.model_load_s = round(self._stats.model_load_s + time.perf_counter() - t0, 2)
-        log.info("Silhouettes from %s boxes + SAM 2.1 (no segmentation model installed)", want.name)
+        log.info("Silhouettes from %s boxes + %s (no segmentation model installed)", want.name,
+                 "PP-HumanSeg" if how == "person" else "SAM 2.1")
 
     def _wanted(self, task: str, name, mode: str):
         want = None

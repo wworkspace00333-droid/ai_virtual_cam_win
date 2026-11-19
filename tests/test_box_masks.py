@@ -87,13 +87,20 @@ def test_engine_uses_box_masks_when_no_segmentation_model(tmp_path, monkeypatch)
     monkeypatch.setattr(eng.models, "available", lambda *a, **k: {k2: v for k2, v in real().items() if v.task != "segment"})
     monkeypatch.setattr(open_vocab, "sam_available", lambda: True)
     monkeypatch.setattr(open_vocab, "PromptSegmenter", lambda *a, **k: FakeSam())
+    from vcstudio.ai import person_segmentation
     cfg = DetectionConfig(need_masks=True, mask_classes=["person"], detector_model="yolox_nano")
     eng.configure(cfg, "balanced")
     eng._ensure_models(cfg, "balanced")
-    det = eng._detector
-    assert isinstance(det, open_vocab.BoxMaskDetector) and det.det.name == "yolox_nano"
+    assert isinstance(eng._detector, person_segmentation.PersonMaskDetector)   # people only: the shipped PP-HumanSeg
+    assert eng._detector.det.name == "yolox_nano"
     eng._ensure_models(DetectionConfig(need_masks=True, mask_classes=["dog"], detector_model="yolox_nano"), "balanced")
-    assert eng._detector is det and det.mask_classes == ["dog"]            # no reload for new classes
+    det = eng._detector
+    assert isinstance(det, open_vocab.BoxMaskDetector) and det.det.name == "yolox_nano"   # other classes: SAM 2.1
+    eng._ensure_models(DetectionConfig(need_masks=True, mask_classes=["cat"], detector_model="yolox_nano"), "balanced")
+    assert eng._detector is det and det.mask_classes == ["cat"]            # no reload for new classes
+    monkeypatch.setattr(open_vocab, "sam_available", lambda: False)
+    eng._ensure_models(DetectionConfig(need_masks=True, detector_model="yolox_nano"), "balanced")
+    assert isinstance(eng._detector, person_segmentation.PersonMaskDetector)   # no SAM: people still get silhouettes
     eng._ensure_models(DetectionConfig(detector_model="yolox_nano"), "balanced")
     assert not isinstance(eng._detector, open_vocab.BoxMaskDetector)       # masks no longer needed: plain detector
 
@@ -120,3 +127,50 @@ def test_real_sam_silhouettes_on_the_sample_photo():
         fill = (d.mask > 127).mean()
         assert 0.15 < fill < 0.95, fill                                    # a silhouette, not empty or the whole box
     print(f"\nSAM silhouettes: {len(people)} people, {ms:.0f} ms per frame incl. detector (CPU)")
+
+
+class FakeSeg:
+    def __init__(self):
+        self.crops = []
+
+    def probability(self, img):
+        self.crops.append(img.shape[:2])
+        return np.ones((192, 192), np.float32)
+
+
+def test_person_masks_only_on_people_from_a_crop_each():
+    from vcstudio.ai.person_segmentation import PersonMaskDetector
+    dets = [Detection("person", 0.9 - i * 0.1, 10 + i * 30, 10, 40 + i * 30, 100) for i in range(6)]
+    dets += [Detection("car", 0.95, 200, 120, 300, 200), Detection("person", 0.99, 5, 5, 7, 7)]   # last: too small
+    seg = FakeSeg()
+    pm = PersonMaskDetector(FakeDet(dets), max_masks=4, segmenter=seg)
+    out, _ = pm.detect(frame())
+    assert len(seg.crops) == 3 and pm.masked == 3          # the tiny box takes a slot but gets no mask
+    assert next(d for d in out if d.label == "car").mask is None
+    m = next(d for d in out if d.mask is not None).mask
+    assert m.dtype == np.uint8 and m.shape == (90, 30) and m.min() == 255   # box-local, box-sized, from the crop
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows models")
+def test_real_person_silhouettes_on_the_sample_photo():
+    from vcstudio.ai import person_segmentation
+    if not person_segmentation.available():
+        pytest.skip("PP-HumanSeg missing (scripts/fetch_models.py)")
+    from vcstudio.ai.backend import make_detector
+    from vcstudio.ai.model_manager import ModelManager
+    from vcstudio.ai.testimages import load_bgra
+    from vcstudio.core.frame import Frame
+    from vcstudio.core.resources import models_dir, sample_photo
+    mm = ModelManager(models_dir())
+    det = make_detector(mm.load(mm.available()["yolox_nano"], "cpu"))
+    img = load_bgra(sample_photo())
+    f = Frame(1, 0, 0, img.shape[1], img.shape[0], array=img)
+    pm = person_segmentation.PersonMaskDetector(det, "cpu")
+    pm.detect(f, 0.3, 0.5)
+    out, ms = pm.detect(f, 0.3, 0.5)
+    people = [d for d in out if d.label == "person" and d.mask is not None]
+    assert len(people) >= 3
+    for d in people:
+        fill = (d.mask > 127).mean()
+        assert 0.15 < fill < 0.95, fill                                    # a silhouette, not empty or the whole box
+    print(f"\nPP-HumanSeg silhouettes: {len(people)} people, {ms:.0f} ms per frame incl. detector (CPU)")

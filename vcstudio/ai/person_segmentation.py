@@ -50,6 +50,70 @@ class PersonSegmenter:
         return (e[1] / e.sum(0)).astype(np.float32)                                    # softmax, person class
 
 
+def available() -> bool:
+    return model_path().exists()
+
+
+class PersonMaskDetector:
+    """Silhouettes of people out of the box: the COCO detector's boxes, and a PP-HumanSeg mask on each "person" box
+    (the shipped background model, ~3 ms per box on a CPU), so object replacement works for people without importing
+    a segmentation model or running SAM 2.1 (seconds per frame without a GPU). Each box is cropped with a margin and
+    segmented on its own, which gives far finer edges than one 192x192 pass over the frame. Other classes keep their
+    boxes without a mask (object regions skip them: no fake silhouette)."""
+
+    LABEL = "person"
+    PAD = 0.12                                        # crop margin per side, of the box size: context for the edge
+
+    def __init__(self, detector, compute_units: str = "all", max_masks: int = 4, segmenter=None):
+        self.det = detector
+        self.seg = segmenter if segmenter is not None else PersonSegmenter(compute_units=compute_units)
+        self.max_masks = max_masks
+        self.name = f"{detector.name}+pphumanseg"
+        self.loaded = getattr(detector, "loaded", None)
+        self.backend = getattr(detector, "backend", "")
+        self.masked = 0                               # masks made in the last frame (stats / tests)
+
+    def mask_for(self, img: np.ndarray, box: tuple[float, float, float, float]) -> np.ndarray | None:
+        from vcstudio.ai.segmentation import MASK_MAX
+        H, W = img.shape[:2]
+        x0, y0, x1, y1 = box
+        bw, bh = x1 - x0, y1 - y0
+        if bw < 4 or bh < 4:
+            return None
+        cx0, cy0 = max(0, int(x0 - bw * self.PAD)), max(0, int(y0 - bh * self.PAD))
+        cx1, cy1 = min(W, int(np.ceil(x1 + bw * self.PAD))), min(H, int(np.ceil(y1 + bh * self.PAD)))
+        if cx1 - cx0 < 4 or cy1 - cy0 < 4:
+            return None
+        p = self.seg.probability(img[cy0:cy1, cx0:cx1])                  # (192, 192) over the crop
+        # box inside the crop, in the probability map's pixels; sample it at the box-local mask resolution
+        sx, sy = SIZE / (cx1 - cx0), SIZE / (cy1 - cy0)
+        scale = min(1.0, MASK_MAX / max(bw, bh))
+        ow, oh = max(2, int(round(bw * scale))), max(2, int(round(bh * scale)))
+        M = np.array([[(bw * sx) / ow, 0, (x0 - cx0) * sx], [0, (bh * sy) / oh, (y0 - cy0) * sy]], np.float32)
+        local = cv2.warpAffine(p, M, (ow, oh), flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP,
+                               borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+        return np.clip(local * 255 + 0.5, 0, 255).astype(np.uint8)
+
+    def detect(self, frame, conf: float = 0.25, iou: float = 0.5):
+        from vcstudio.ai.detection import Detection
+        t0 = time.perf_counter()
+        dets, _ = self.det.detect(frame, conf, iou)
+        want = sorted((i for i, d in enumerate(dets) if d.label == self.LABEL),
+                      key=lambda i: -dets[i].confidence)[: self.max_masks]
+        self.masked = 0
+        if want:
+            with frame.bgra() as img:
+                for i in want:
+                    d = dets[i]
+                    m = self.mask_for(img, (d.x0, d.y0, d.x1, d.y1))
+                    if m is None:
+                        continue
+                    dets[i] = Detection(d.label, d.confidence, d.x0, d.y0, d.x1, d.y1, d.class_id,
+                                        f"{d.source}+pphumanseg", mask=m)
+                    self.masked += 1
+        return dets, (time.perf_counter() - t0) * 1000
+
+
 class BackgroundSegmenter:
     """Background thread: newest captured frame -> smoothed person mask (192x192 float), published in `masks`."""
 
