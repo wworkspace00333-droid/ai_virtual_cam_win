@@ -72,6 +72,11 @@ def _system() -> dict:
         d.update(inspect_environment())
     except Exception as e:
         d["environment_error"] = str(e)
+    try:
+        from vcstudio.core.hardware import profile
+        d["hardware_profile"] = profile(refresh=True).as_dict()
+    except Exception as e:
+        d["hardware_profile_error"] = str(e)
     return d
 
 

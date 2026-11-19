@@ -43,6 +43,17 @@ _k32.UnmapViewOfFile.argtypes = [ctypes.c_void_p]
 _k32.CloseHandle.argtypes = [wintypes.HANDLE]
 
 
+READ_CONTROL = 0x00020000
+ERROR_ACCESS_DENIED = 5
+
+
+def trusted_owners() -> set[str]:
+    """This user, this process's default owner (Administrators when elevated), Administrators (OBS run elevated)
+    and SYSTEM."""
+    from vcstudio.platform.win.vcam_writer import token_sids
+    return {*token_sids(), "S-1-5-32-544", "S-1-5-18"}
+
+
 def now_ns() -> int:
     """os_gettime_ns() on Windows is QueryPerformanceCounter in ns, as is perf_counter_ns."""
     return time.perf_counter_ns()
@@ -52,14 +63,33 @@ class ShmView:
     """Read-only view of the plugin's shared memory."""
 
     def __init__(self, name: str = SHM_NAME):
-        self.handle = _k32.OpenFileMappingW(FILE_MAP_READ, False, name)
+        # READ_CONTROL as well, to read the owner: the section's creator (OBS, running as this user) has it.
+        self.handle = _k32.OpenFileMappingW(FILE_MAP_READ | READ_CONTROL, False, name)
         if not self.handle:
+            err = ctypes.get_last_error()
+            if err == ERROR_ACCESS_DENIED:
+                raise PermissionError(f"{name} exists but belongs to someone else; not reading frames from it")
             raise FileNotFoundError(name)
+        owner = self._owner()
+        if owner is not None and owner not in trusted_owners():
+            _k32.CloseHandle(self.handle)
+            self.handle = None
+            # Another process in this session could create the section first and feed the app frames that look
+            # like OBS output (audit 2026-11-19); the camera writer refuses foreign sections the same way.
+            raise PermissionError(f"{name} belongs to {owner}, not to this user; not reading frames from it")
         self.base = _k32.MapViewOfFile(self.handle, FILE_MAP_READ, 0, 0, 0)
         if not self.base:
             err = ctypes.get_last_error()
             _k32.CloseHandle(self.handle)
             raise OSError(f"MapViewOfFile failed ({err})")
+
+    def _owner(self) -> str | None:
+        try:
+            from vcstudio.platform.win.vcam_writer import object_owner
+            return object_owner(self.handle)
+        except OSError as e:                     # cannot read it: do not block OBS on an unexpected API failure
+            log.warning("OBS shared memory owner unknown: %s", e)
+            return None
 
     def u32(self, off: int) -> int:
         return ctypes.c_uint32.from_address(self.base + off).value

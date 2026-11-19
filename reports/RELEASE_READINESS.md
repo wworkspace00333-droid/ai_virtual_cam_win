@@ -53,7 +53,7 @@ machine*, not of quality on users' PCs: every GPU path and every third-party vid
 
 | Task | Status | Files | Done when |
 |---|---|---|---|
-| Hardware Compatibility Layer steps 1–4 (profile, provider verification, admission, budget-aware choice) | partly done after the audit: silent provider fallback labelled (step 2), RAM admission (step 3), first-run baseline for the model choice (step 4); hardware profile (step 1) open | new `core/hardware.py`, `ai/onnx_engine.py`, `ai/auto_profile.py` | unit tests with fake adapters pass; profile in diagnostics |
+| Hardware Compatibility Layer steps 1–4 (profile, provider verification, admission, budget-aware choice) | done after the audit for steps 1–4: hardware profile in the log and diagnostics (`core/hardware.py`, step 1), silent provider fallback labelled (step 2), RAM admission (step 3), first-run baseline for the model choice (step 4); VRAM budget (step 5) needs a GPU | new `core/hardware.py`, `ai/onnx_engine.py`, `ai/auto_profile.py` | unit tests with fake adapters pass; profile in diagnostics |
 | Face accuracy on video (turns, profile, glasses, distance); threshold for backs of heads | partial (photos only) | `ai/onnx_engine.py` | numbers in `docs/ACCURACY.md` from annotated video |
 | Silhouettes for classes other than people without SAM | partial (people built in) | `ai/segmentation.py`, models | permissive instance-segmentation model shipped (download/licence decision) |
 | Open vocabulary completion (stronger model, 20 annotated videos) | partial | `ai/open_vocab.py` | accuracy + speed on GPU |
@@ -63,7 +63,7 @@ machine*, not of quality on users' PCs: every GPU path and every third-party vid
 
 | Task | Files |
 |---|---|
-| Owner check for the OBS shared-memory section (reader side) and an explicit DACL in the OBS plugin | `platform/win/obs_shm.py`, `native/obs-plugin/vcstudio-obs.c` |
+| Owner check for the OBS shared-memory section (reader side: **done after the audit**) and an explicit DACL in the OBS plugin (open) | `platform/win/obs_shm.py`, `native/obs-plugin/vcstudio-obs.c` |
 | Zero-copy GPU readback into the camera slot (D8) | `platform/win/d3d11.py`, `vcam_writer.py` |
 | VRAM monitoring feeding the watchdog | `platform/win/gpu_monitor.py`, `core/watchdog.py` |
 | Plugins out of process (crash/leak isolation) | `plugins/` |

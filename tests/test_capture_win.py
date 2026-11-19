@@ -284,3 +284,28 @@ def test_media_foundation_capture_through_the_apps_own_reader(w, h, fps):
     assert rate >= 0.85 * fps, rate
     b, g, r = got[-1][3]
     assert b < 12 and abs(g - 40) < 12 and abs(r - 200) < 12, got[-1]       # BT.601 declared and honoured
+
+
+def test_obs_shared_memory_from_another_owner_is_refused(monkeypatch):
+    """Audit 2026-11-19: the reader accepted any section with the OBS name; another process in the session could
+    feed frames that look like OBS output. It now reads only sections owned by this user (or admins / SYSTEM)."""
+    import ctypes
+    import uuid
+    from ctypes import wintypes
+    from vcstudio.platform.win import obs_shm
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateFileMappingW.restype = wintypes.HANDLE
+    k32.CreateFileMappingW.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
+                                       wintypes.DWORD, wintypes.LPCWSTR]
+    name = f"Local\vcs-test-obs-{uuid.uuid4().hex}"
+    h = k32.CreateFileMappingW(wintypes.HANDLE(-1), None, 0x04, 0, 65536, name)
+    assert h
+    try:
+        v = obs_shm.ShmView(name)                                          # created by this user: accepted
+        v.close()
+        monkeypatch.setattr(obs_shm, "trusted_owners", lambda: {"S-1-5-21-0-0-0-1001"})
+        with pytest.raises(PermissionError, match="not to this user"):
+            obs_shm.ShmView(name)
+        assert "not to this user" in obs_shm.obs_sharing_status(name)["reason"]
+    finally:
+        k32.CloseHandle(h)

@@ -117,6 +117,11 @@ class AppContext:
             log.warning("%d previous session(s) did not exit cleanly", crashed)
         self.db.log_event("INFO", "app", "started", {"version": __version__})
         log.info("AI Virtual Camera Studio %s started; data dir %s", __version__, self.paths.root)
+        try:
+            from vcstudio.core.hardware import profile
+            log.info("Hardware: %s", profile().summary())
+        except Exception as e:                   # the profile only informs; it must never stop the start
+            log.warning("Hardware profile unavailable: %s", e)
 
     def apply_ai_config(self) -> None:
         from vcstudio.ai.detection import DetectionConfig

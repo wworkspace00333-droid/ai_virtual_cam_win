@@ -104,6 +104,7 @@ installed camera was run; none failed.
 | Run | Result |
 |---|---|
 | Full suite | **624 passed, 0 failed, 40 skipped** (617 + 7 new tests), 5 min 4 s; no `vcs-*` folder left in `%TEMP%` |
+| Full suite after the hardware profile and OBS owner check | **630 passed, 0 failed, 44 skipped** (4 more skips than before: screen-capture/screenshot tests need a drawn desktop, and the RDP session had none during that run) |
 | Live plugin check (`plugin_live.py`, 1080p60) | 40 ms plugin switched off after 1.3 s, output back to 60.0 fps; plugin hanging 30 s inside a call switched off by the watchdog after 2.4 s, output restarted (1 restart), 60.2 fps, 0 render errors |
 
 ## 6. Not tested here, and why

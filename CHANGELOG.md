@@ -7,6 +7,16 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+### Added
+- A hardware profile of the PC (`core/hardware.py`): hardware GPUs and their video memory, cores, RAM, the ONNX
+  Runtime providers that can help, and a tier (gpu, gpu-low-vram, cpu, cpu-low). It is written to the start-up log
+  and to the diagnostics ZIP, so a report from a user's PC says what the app saw. Software adapters (WARP, the
+  Basic Render Driver) are never counted as a GPU.
+
+### Security
+- The OBS direct-frame reader reads only a shared-memory section owned by this user (or administrators / SYSTEM);
+  before, any process in the session could create a section with that name and feed the app frames.
+
 ## [0.5.2] — 2026-11-19
 
 Fixes from the 2026-11-19 audit (reports/). Includes the 0.5.1 installer fix (0.5.1 was not published).
