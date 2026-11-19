@@ -100,11 +100,13 @@ def main():
         hw = {k: env[k] for k in ("cpu", "memory_gb", "macos")}
         input_desc = "1920x1080 BGRA 60 fps, zero-copy IOSurface"
     results = []
-    has_seg = any(m.task == "segment" for m in ctx.models.available().values())
+    from vcstudio.ai import person_segmentation
+    # the installer ships no segmentation model (YOLO-seg is AGPL); people's silhouettes come from the shipped
+    # PP-HumanSeg on the detector's boxes. Without either the scenario would only measure the compositor with no AI
+    # at all, which reads like a result
+    has_seg = person_segmentation.available() or any(m.task == "segment" for m in ctx.models.available().values())
     for scen, rois in scenario_profiles(ctx, logo, clip).items():
         if scen.startswith("segmentation") and not has_seg:
-            # the installer ships no segmentation model (YOLO-seg is AGPL): the scenario would only measure the
-            # compositor with no AI at all, which reads like a result
             print(f"skipped: {scen} (no segmentation model installed)", flush=True)
             continue
         for mode in args.modes.split(","):
