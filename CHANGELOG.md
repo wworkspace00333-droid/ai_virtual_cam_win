@@ -7,6 +7,27 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-11-19
+
+The first full release of the Windows version: every feature of the 0.5 plan is in (docs/WINDOWS_ROADMAP_0.5.md).
+No functional changes since 0.4.8.
+
+### In this version (since 0.4.0)
+- Inputs: webcams (Media Foundation, DirectShow, shared mode), OBS, a screen or window, a video file with pause and
+  seeking; output to the app's own camera (Media Foundation and DirectShow, several apps at once).
+- AI on this PC: YOLOX objects, YuNet faces (distant faces too), person silhouettes, background blur and
+  replacement, optional "any object by text" (OWLv2 + SAM 2.1); a resource scheduler keeps the camera smooth and
+  runs the detector only when something needs it.
+- Scenes with atomic switching, a different replacement for each object, privacy mode, auto-framing, lighting,
+  gestures, recording and instant replay, Python plugins, update check on request.
+
+### Known limitations
+- Developed and tested on a server without a graphics card (software Direct3D): speed on real GPUs, physical
+  webcams and colour in each video app are not verified yet (docs/HARDWARE_CHECKLIST.md).
+- The installer is not code-signed: SmartScreen warns once.
+- "Any object by text" is slow without a GPU (seconds per frame); silhouettes of things other than people need
+  SAM 2.1 or an imported model.
+
 ## [0.4.8] — 2026-11-19
 
 Silhouettes of people without a download; Hide face finds distant faces.
@@ -278,6 +299,7 @@ for real hardware are still to be measured (docs/HARDWARE_CHECKLIST.md).
 
 macOS releases; see the history of the original repository.
 
+[0.5.0]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.5.0
 [0.4.8]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.8
 [0.4.7]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.7
 [0.4.6]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.6

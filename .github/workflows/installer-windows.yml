@@ -111,7 +111,7 @@ jobs:
           Get-Content C:\vcs-build\pc-report\report.md -ErrorAction SilentlyContinue
           if ($r.ExitCode -ne 0) { throw "the installed app's report failed (exit code $($r.ExitCode))" }
 
-      - name: Attach the installer to the tag's release (draft pre-release if it does not exist)
+      - name: Attach the installer to the tag's release (a draft if it does not exist; pre-release for previews)
         if: github.ref_type == 'tag' || inputs.tag != ''
         shell: pwsh
         env:
@@ -134,13 +134,17 @@ jobs:
               for ($i = $start + 1; $i -lt $log.Count -and -not $log[$i].StartsWith("## ["); $i++) { $section += $log[$i] }
             }
             $hash = (Get-Content $sha.FullName).Split(" ")[0]
-            $notes = @("**AI Virtual Camera Studio for Windows $ver (preview)**", "") + $section + @("",
+            # 0.4.x were previews; from 0.5.0 a plain version is a regular release (a suffix like -rc1 stays a preview)
+            $preview = $ver.StartsWith("0.4.") -or $ver.Contains("-")
+            $label = if ($preview) { "$ver (preview)" } else { $ver }
+            $notes = @("**AI Virtual Camera Studio for Windows $label**", "") + $section + @("",
               "### Install", "Download ``$($exe.Name)`` and check it in PowerShell:",
               "``Get-FileHash .\$($exe.Name) -Algorithm SHA256`` must equal ``$hash``.",
               "The installer is not code-signed yet: SmartScreen shows ""Windows protected your PC"" -> More info -> Run anyway.")
             $notes -join "`n" | Out-File -Encoding utf8 notes.md
-            gh release create $env:TAG --repo $env:GITHUB_REPOSITORY --verify-tag --draft --prerelease `
-              --title "$ver (preview)" --notes-file notes.md
+            $pre = if ($preview) { @("--prerelease") } else { @() }
+            gh release create $env:TAG --repo $env:GITHUB_REPOSITORY --verify-tag --draft @pre `
+              --title $label --notes-file notes.md
             if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
           }
           gh release upload $env:TAG $exe.FullName $sha.FullName --clobber --repo $env:GITHUB_REPOSITORY
