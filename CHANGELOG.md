@@ -7,6 +7,10 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+## [0.5.3] — 2026-11-19
+
+Hardware profile and an OBS shared-memory owner check.
+
 ### Added
 - A hardware profile of the PC (`core/hardware.py`): hardware GPUs and their video memory, cores, RAM, the ONNX
   Runtime providers that can help, and a tier (gpu, gpu-low-vram, cpu, cpu-low). It is written to the start-up log
@@ -344,6 +348,7 @@ for real hardware are still to be measured (docs/HARDWARE_CHECKLIST.md).
 
 macOS releases; see the history of the original repository.
 
+[0.5.3]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.5.3
 [0.5.2]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.5.2
 [0.5.1]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.5.1
 [0.5.0]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.5.0
