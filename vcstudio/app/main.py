@@ -7,13 +7,24 @@ import sys
 from pathlib import Path
 
 
+def _out_path(argv: list[str], flag: str) -> str | None:
+    """The report path that must follow a self-test flag; None (after a usage line) when it is missing."""
+    i = argv.index(flag)
+    if i + 1 < len(argv) and not argv[i + 1].startswith("--"):
+        return argv[i + 1]
+    print(f"usage: {flag} <report.json> [options]", file=sys.stderr)
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv if argv is None else argv
     if "--camera-loopback-test" in argv:
         from vcstudio.app.selftest import camera_loopback_selftest
-        i = argv.index("--camera-loopback-test")
+        out = _out_path(argv, "--camera-loopback-test")
+        if out is None:
+            return 2
         opt = lambda k, d: argv[argv.index(k) + 1] if k in argv else d
-        return camera_loopback_selftest(argv[i + 1], float(opt("--seconds", 6)), opt("--device", "AI Virtual Camera"),
+        return camera_loopback_selftest(out, float(opt("--seconds", 6)), opt("--device", "AI Virtual Camera"),
                                         opt("--sink", "AI Virtual Camera Input"), float(opt("--fps", 60)))
     if "--leak-bisect" in argv or "--run-script" in argv:
         # dev: run a scripts/*.py tool inside the app bundle (it needs the bundle's camera permission)
@@ -38,9 +49,11 @@ def main(argv: list[str] | None = None) -> int:
         return main_entry(argv)
     if "--pipeline-e2e-test" in argv:
         from vcstudio.app.selftest import pipeline_e2e_selftest
-        i = argv.index("--pipeline-e2e-test")
+        out = _out_path(argv, "--pipeline-e2e-test")
+        if out is None:
+            return 2
         opt = lambda k, d: argv[argv.index(k) + 1] if k in argv else d
-        return pipeline_e2e_selftest(argv[i + 1], float(opt("--seconds", 8)), opt("--device", "AI Virtual Camera"),
+        return pipeline_e2e_selftest(out, float(opt("--seconds", 8)), opt("--device", "AI Virtual Camera"),
                                      opt("--sink", "AI Virtual Camera Input"), opt("--input", None),
                                      opt("--pixel-format", None))
     if "--self-check" in argv:
@@ -50,11 +63,13 @@ def main(argv: list[str] | None = None) -> int:
         return bundle_selfcheck(nxt)
     if "--capture-selftest" in argv:
         from vcstudio.app.selftest import capture_selftest
-        i = argv.index("--capture-selftest")
+        out = _out_path(argv, "--capture-selftest")
+        if out is None:
+            return 2
         secs = float(argv[argv.index("--seconds") + 1]) if "--seconds" in argv else 10.0
         hint = argv[argv.index("--device") + 1] if "--device" in argv else "OBS Virtual Camera"
         ai = argv[argv.index("--with-ai") + 1] if "--with-ai" in argv else None
-        return capture_selftest(argv[i + 1], secs, hint, ai)
+        return capture_selftest(out, secs, hint, ai)
 
     from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QApplication
