@@ -172,7 +172,12 @@ class VideoPipeline:
         from vcstudio.replacement.lighting import AutoLight
         self.framer = AutoFramer()        # auto-framing: crop to the people, follow them smoothly
         self.light = AutoLight()          # automatic exposure / white balance of the camera picture
+        from vcstudio.replacement.color import ColorGrader
+        self.grader = ColorGrader()       # Colour Studio: grading and LUTs of the scene, once per frame
         self.plugins = None               # PluginManager (vcstudio/plugins): user effects on the finished output
+        self.multicam = None              # MulticamService (vcstudio/core/multicam.py): extra cameras and layouts
+        self.vision = None                # VisionService (vcstudio/ai/vision.py): landmark / pose overlays
+        self.shield = None                # PrivacyShield (vcstudio/replacement/privacy_shield.py): text / areas hidden
         self.taps: list = []              # callables(bgra, pts) given every output frame (recorder, instant replay);
         #                                   they must only queue the frame — they run on the output thread
         self._override_cache: tuple | None = None
@@ -290,6 +295,23 @@ class VideoPipeline:
             log.exception("lighting failed; frame passed unchanged")
             return frame
 
+    def _grade(self, frame: Frame, ccfg) -> Frame:
+        """Colour Studio (vcstudio/replacement/color.py); any failure leaves the picture as it was."""
+        try:
+            with frame.bgra() as a:
+                fps = self.capture.stats().nominal_fps or 30.0
+                res = self.grader.apply(a, ccfg, frame.pts, budget_ms=500.0 / max(1.0, fps))   # half a frame
+                if res is a:
+                    return frame
+            return Frame(frame.seq, frame.pts, frame.arrival, frame.width, frame.height, array=res,
+                         source=f"{frame.source}+color")
+        except Exception as e:
+            self.grader.error = f"{type(e).__name__}: {e}"
+            with self._lock:
+                self._stats.last_error = f"colour: {type(e).__name__}: {e}"
+            log.exception("colour grading failed; frame passed unchanged")
+            return frame
+
     def _run_plugins(self, pm, out: Frame, frame: Frame, sc) -> Frame:
         """User plugins on the finished picture (after framing, before the camera). The manager guards each call;
         anything else going wrong here leaves the frame as it was."""
@@ -312,6 +334,72 @@ class VideoPipeline:
             with self._lock:
                 self._stats.last_error = f"plugins: {type(e).__name__}: {e}"
             log.exception("plugins failed; frame passed unchanged")
+            return out
+
+    def _shield(self, sh, out: Frame) -> Frame:
+        """Privacy shield: hide text boxes and the user's areas (frame coordinates, before framing and layouts).
+        In strict mode a failure here hides the whole picture rather than showing it unprotected."""
+        from vcstudio.core.pixelbuffer import pixel_buffer_for
+        try:
+            with out.bgra() as a:
+                res = sh.apply(a)
+                if res is a:
+                    return out
+            f = Frame(out.seq, out.pts, out.arrival, out.width, out.height, array=res, source=out.source)
+            return Frame(out.seq, out.pts, out.arrival, out.width, out.height, pixel_buffer=pixel_buffer_for(f),
+                         source=f"{out.source}+shield")
+        except Exception as e:
+            with self._lock:
+                self._stats.last_error = f"privacy shield: {type(e).__name__}: {e}"
+            log.exception("privacy shield failed")
+            if not sh.cfg.strict:
+                return out
+            dark = np.zeros((out.height, out.width, 4), np.uint8)
+            dark[..., 3] = 255
+            f = Frame(out.seq, out.pts, out.arrival, out.width, out.height, array=dark, source=out.source)
+            return Frame(out.seq, out.pts, out.arrival, out.width, out.height, pixel_buffer=pixel_buffer_for(f),
+                         source=f"{out.source}+shield-failsafe")
+
+    def _vision_overlay(self, vs, out: Frame, frame: Frame) -> Frame:
+        """Face points, body and hand skeletons (vcstudio/ai/vision.py) drawn in frame coordinates, before
+        auto-framing crops the picture. A result older than STALE_S is not drawn; any failure leaves the frame."""
+        from vcstudio.core.pixelbuffer import pixel_buffer_for
+        try:
+            r = vs.result_for(frame.pts)
+            if r is None or not (r.faces or r.poses or r.hands):
+                return out
+            with out.bgra() as a:
+                arr = np.array(a, copy=True)          # never draw into the capture frame or a pooled buffer
+            from vcstudio.ai.vision import draw
+            draw(arr, r)
+            f = Frame(out.seq, out.pts, out.arrival, out.width, out.height, array=arr, source=out.source)
+            return Frame(out.seq, out.pts, out.arrival, out.width, out.height, pixel_buffer=pixel_buffer_for(f),
+                         source=f"{out.source}+vision")
+        except Exception as e:
+            with self._lock:
+                self._stats.last_error = f"vision overlay: {type(e).__name__}: {e}"
+            log.exception("vision overlay failed; frame passed unchanged")
+            return out
+
+    def _compose_cameras(self, mc, out: Frame, frame: Frame, mcfg) -> Frame:
+        """Multi-camera layout on the finished picture (vcstudio/core/multicam.py). Extra sources are only peeked:
+        a missing or slow camera never delays this frame. Any failure leaves the frame as it was."""
+        from vcstudio.core.pixelbuffer import pixel_buffer_for
+        try:
+            people = sum(1 for o in self.ai.tracked_at(frame.pts) if o.label == "person")
+            with out.bgra() as a:
+                res = mc.process(a, mcfg, people)
+                if res is a:
+                    return out
+            arr = Frame(out.seq, out.pts, out.arrival, out.width, out.height, array=res, source=out.source)
+            return Frame(out.seq, out.pts, out.arrival, out.width, out.height, pixel_buffer=pixel_buffer_for(arr),
+                         source=f"{out.source}+multicam")
+        except Exception as e:
+            mc.stats.errors += 1
+            mc.stats.last_error = f"{type(e).__name__}: {e}"
+            with self._lock:
+                self._stats.last_error = f"multicam: {type(e).__name__}: {e}"
+            log.exception("multi-camera composition failed; frame passed unchanged")
             return out
 
     def _frame_to_people(self, out: Frame, frame: Frame, fcfg) -> Frame:
@@ -373,6 +461,9 @@ class VideoPipeline:
                     work = self._light(frame, lcfg)          # correct the camera picture before anything is drawn
                 elif self.light._t is not None:
                     self.light.reset()
+                ccfg = sc.color if sc is not None else None
+                if ccfg is not None and ccfg.active and not self.passthrough:
+                    work = self._grade(work, ccfg)           # always from this frame's own pixels: never twice
                 bg = self.background
                 snap = (sc.bg_cfg, sc.bg_image) if sc is not None and sc.bg_cfg is not None else None
                 if bg is not None and not self.passthrough and self.replacement_enabled:
@@ -415,11 +506,21 @@ class VideoPipeline:
                 out = rendered if rendered is not None else Frame(
                     frame.seq, frame.pts, frame.arrival, frame.width, frame.height,
                     pixel_buffer=pixel_buffer_for(work), source="passthrough" if work is frame else "background")
+                sh = self.shield
+                if sh is not None and sh.cfg.enabled and (not self.passthrough or sh.cfg.strict):
+                    out = self._shield(sh, out)
+                vs = self.vision
+                if vs is not None and vs.cfg.enabled and vs.cfg.overlay and not self.passthrough:
+                    out = self._vision_overlay(vs, out, frame)
                 fcfg = sc.framing if sc is not None else None
                 if fcfg is not None and fcfg.enabled and not self.passthrough:
                     out = self._frame_to_people(out, frame, fcfg)
                 elif self.framer.rect is not None:
                     self.framer.reset()
+                mc = self.multicam
+                mcfg = sc.multicam if sc is not None else None
+                if mc is not None and mcfg is not None and mcfg.enabled and not self.passthrough:
+                    out = self._compose_cameras(mc, out, frame, sc.multicam)
                 pm = self.plugins
                 if pm is not None and pm.active and not self.passthrough:
                     out = self._run_plugins(pm, out, frame, sc)

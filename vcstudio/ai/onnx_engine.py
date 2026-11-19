@@ -385,14 +385,15 @@ class YuNetFaceDetector:
     def detect(self, frame, people=()) -> tuple[list[Detection], float]:
         t0 = time.perf_counter()
         W, H = frame.width, frame.height
-        boxes: list[tuple[float, float, float, float, float]] = []
+        boxes: list[tuple] = []                     # x0, y0, x1, y1, score, (5, 2) landmarks
         with frame.bgra() as img:
             h, w = img.shape[:2]
             s = min(1.0, FACE_INPUT_MAX / max(w, h))
             small = cv2.resize(img[..., :3], (max(1, int(w * s)), max(1, int(h * s))),
                                interpolation=cv2.INTER_AREA) if s < 1 else np.ascontiguousarray(img[..., :3])
             for f in self._run(small):
-                boxes.append((f[0] / s, f[1] / s, (f[0] + f[2]) / s, (f[1] + f[3]) / s, float(f[14])))
+                boxes.append((f[0] / s, f[1] / s, (f[0] + f[2]) / s, (f[1] + f[3]) / s, float(f[14]),
+                              f[4:14].reshape(5, 2) / s))
             found = list(boxes)
             heads = [hb for hb in (self._head_boxes(people, w, h) if s < 1 else [])
                      if not any(hb[0] <= (b[0] + b[2]) / 2 <= hb[2] and hb[1] <= (b[1] + b[3]) / 2 <= hb[3]
@@ -404,15 +405,16 @@ class YuNetFaceDetector:
                                   interpolation=cv2.INTER_LINEAR if k > 1 else cv2.INTER_AREA)
                 for f in self._run(crop):
                     boxes.append((x0 + f[0] / k, y0 + f[1] / k, x0 + (f[0] + f[2]) / k, y0 + (f[1] + f[3]) / k,
-                                  float(f[14])))
+                                  float(f[14]), f[4:14].reshape(5, 2) / k + np.array([x0, y0], np.float32)))
         out: list[Detection] = []
-        for bx0, by0, bx1, by1, score in sorted(boxes, key=lambda b: -b[4]):
+        for bx0, by0, bx1, by1, score, pts in sorted(boxes, key=lambda b: -b[4]):
             x0, y0, x1, y1 = max(0.0, bx0), max(0.0, by0), min(float(W), bx1), min(float(H), by1)
             if x1 <= x0 or y1 <= y0:
                 continue
             if any(_iou((x0, y0, x1, y1), (o.x0, o.y0, o.x1, o.y1)) > 0.3 for o in out):
                 continue                                    # the same face from the frame pass and a head crop
-            out.append(Detection(FACE, score, x0, y0, x1, y1, -1, "yunet_face"))
+            out.append(Detection(FACE, score, x0, y0, x1, y1, -1, "yunet_face",
+                                 points=np.asarray(pts, np.float32)))
         return out, (time.perf_counter() - t0) * 1000
 
 

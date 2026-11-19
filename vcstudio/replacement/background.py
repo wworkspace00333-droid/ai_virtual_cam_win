@@ -1,6 +1,10 @@
 """Background replacement and blur behind people, for the whole frame (profile section "background").
 
-Modes: off | blur (strength = blur size) | image (an image asset from the profile's asset library). The person mask
+Modes: off | blur (strength = blur size) | image (an image asset from the profile's asset library) | color (one
+colour) | gradient (two colours, vertical / horizontal / diagonal) | video (a video asset, looping; frames come from
+the compositor's player pool, decoded on its own thread). Quality: fast (light temporal smoothing, crisp edge),
+balanced (default), quality (stronger smoothing, and the mask is refined against the picture's own edges with a
+guided filter once per mask: hair and fingers follow the picture instead of the 192 px model grid). The person mask
 comes from vcstudio.ai.person_segmentation.BackgroundSegmenter (own thread, newest mask only); the output thread
 blends the newest mask into each frame before the region replacements are drawn. Without a mask yet (model loading,
 first frames) or after a segmentation error, frames pass unchanged: the camera never waits and never goes black.
@@ -17,7 +21,33 @@ from vcstudio.core.frame import Frame
 
 log = logging.getLogger(__name__)
 
-MODES = ("off", "blur", "image")
+MODES = ("off", "blur", "image", "color", "gradient", "video")
+IMAGE_LIKE = ("image", "color", "gradient")        # drawn from one (generated or decoded) picture
+QUALITY = {"fast": 0.3, "balanced": 0.5, "quality": 0.7}   # temporal smoothing: weight of the previous mask
+DIRECTIONS = ("vertical", "horizontal", "diagonal")
+
+
+def _bgr(hexstr, default=(40, 40, 40)) -> tuple[int, int, int]:
+    try:
+        v = int(str(hexstr).lstrip("#"), 16)
+        return (v & 255, (v >> 8) & 255, (v >> 16) & 255)
+    except (TypeError, ValueError):
+        return default
+
+
+def make_fill(mode: str, c1: str, c2: str, direction: str, w: int = 320, h: int = 180) -> np.ndarray:
+    """A small BGRA picture for colour / gradient backgrounds (scaled to the frame by the blend)."""
+    a, b = np.array(_bgr(c1), np.float32), np.array(_bgr(c2, (200, 120, 40)), np.float32)
+    out = np.empty((h, w, 4), np.uint8)
+    out[..., 3] = 255
+    if mode == "color":
+        out[..., :3] = a.astype(np.uint8)
+        return out
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    t = {"vertical": yy / max(1, h - 1), "horizontal": xx / max(1, w - 1)}.get(
+        direction, (xx / max(1, w - 1) + yy / max(1, h - 1)) / 2)
+    out[..., :3] = (a[None, None] * (1 - t[..., None]) + b[None, None] * t[..., None]).astype(np.uint8)
+    return out
 
 
 @dataclass
@@ -27,6 +57,10 @@ class BackgroundConfig:
     asset_id: str | None = None
     edge: float = 0.5
     fps: float = 15.0
+    color: str = "#202830"
+    color2: str = "#2878c8"
+    direction: str = "vertical"
+    quality: str = "balanced"
 
     @classmethod
     def from_profile(cls, body: dict) -> "BackgroundConfig":
@@ -34,7 +68,10 @@ class BackgroundConfig:
         mode = b.get("mode", "off")
         return cls(mode=mode if mode in MODES else "off", strength=int(min(99, max(1, b.get("strength", 25)))),
                    asset_id=b.get("asset_id"), edge=float(min(0.9, max(0.1, b.get("edge", 0.5)))),
-                   fps=float(min(30, max(2, b.get("fps", 15)))))
+                   fps=float(min(30, max(2, b.get("fps", 15)))), color=str(b.get("color") or "#202830"),
+                   color2=str(b.get("color2") or "#2878c8"),
+                   direction=b.get("direction") if b.get("direction") in DIRECTIONS else "vertical",
+                   quality=b.get("quality") if b.get("quality") in QUALITY else "balanced")
 
 
 class BackgroundService:
@@ -47,14 +84,18 @@ class BackgroundService:
         self._lock = threading.Lock()
         self.applied = 0
         self.error = ""
+        # video backgrounds: callable (asset id, t) -> BGRA frame or None; set by the app (compositor player pool)
+        self.video_frame = None
 
     @property
     def active(self) -> bool:
-        return self.cfg.mode != "off" and (self.cfg.mode != "image" or self._image is not None)
+        return self._snap_active(self.cfg, self._image)
 
     def load_profile(self, body: dict) -> None:
         cfg = BackgroundConfig.from_profile(body)
         image = None
+        if cfg.mode in ("color", "gradient"):
+            image = make_fill(cfg.mode, cfg.color, cfg.color2, cfg.direction)
         if cfg.mode == "image" and cfg.asset_id:
             from vcstudio.replacement.assets import assets_from_profile
             a = assets_from_profile(body).get(cfg.asset_id)
@@ -66,6 +107,7 @@ class BackgroundService:
         with self._lock:
             self.cfg, self._image = cfg, image
         self.seg.fps = cfg.fps
+        self.seg.smoothing = QUALITY[cfg.quality]
         if not self.active:
             self.seg.masks.clear()
 
@@ -101,7 +143,18 @@ class BackgroundService:
 
     @staticmethod
     def _snap_active(cfg: BackgroundConfig, image) -> bool:
-        return cfg.mode != "off" and (cfg.mode != "image" or image is not None)
+        if cfg.mode == "video":
+            return bool(cfg.asset_id)
+        return cfg.mode != "off" and (cfg.mode not in IMAGE_LIKE or image is not None)
+
+    def _picture(self, cfg: BackgroundConfig, image, t: float):
+        """(mode for the blend, background picture); video: the player's frame for output time t (None: not yet)."""
+        if cfg.mode == "video":
+            vf = self.video_frame
+            return "image", (vf(cfg.asset_id, t) if vf is not None else None)
+        if cfg.mode in IMAGE_LIKE:
+            return "image", image
+        return cfg.mode, None
 
     def apply(self, frame: Frame, snap=None) -> Frame:
         """CPU path: the frame with its background blurred / replaced (OpenCV blend), or the frame itself.
@@ -112,10 +165,14 @@ class BackgroundService:
         mask, ver = self.seg.masks.peek()
         if mask is None:
             return frame
+        mode, pic = self._picture(cfg, image, frame.pts)
+        if mode == "image" and pic is None:
+            return frame                                               # video not decoded yet: frame unchanged
         from vcstudio.ai.person_segmentation import composite_background
         with frame.bgra() as img:
-            out = composite_background(img, mask, cfg.mode, cfg.strength, image, cfg.edge,
-                                       mask_key=(id(self), ver))       # same mask version: reuse its blend weights
+            out = composite_background(img, mask, mode, cfg.strength, pic, cfg.edge,
+                                       mask_key=(id(self), ver),       # same mask version: reuse its blend weights
+                                       refine=cfg.quality == "quality")
         self.applied += 1
         return Frame(frame.seq, frame.pts, frame.arrival, frame.width, frame.height, array=out,
                      source=f"{frame.source}+background")
@@ -140,15 +197,19 @@ class BackgroundService:
         lo, hi = max(0.0, cfg.edge - 0.25), min(1.0, cfg.edge + 0.25)
         person = np.clip((mask - lo) / max(1e-6, hi - lo), 0.0, 1.0)
         not_person = np.ascontiguousarray(((1.0 - person) * 255 + 0.5).astype(np.uint8))
-        if cfg.mode == "blur":
+        mode, pic = self._picture(cfg, image, frame.pts)
+        if mode == "image" and pic is None:
+            return []
+        if mode == "blur":
             with frame.bgra() as img:
                 small = cv2.resize(img, (max(1, W // 4), max(1, H // 4)), interpolation=cv2.INTER_AREA)
             src = cv2.GaussianBlur(small, (0, 0), sigmaX=max(0.5, (cfg.strength | 1) / 4))
             src[..., 3] = 255                                           # opaque (premultiplied = straight)
             src_key: tuple = ("bgblur", frame.seq)                      # changes every frame: uploaded per frame
         else:
-            src = image
-            src_key = ("img", "background", cfg.asset_id)               # uploaded once, kept on the GPU
+            src = pic
+            src_key = (("bgvid", cfg.asset_id, frame.seq) if cfg.mode == "video" else      # new picture per frame
+                       ("img", "background", cfg.mode, cfg.asset_id, cfg.color, cfg.color2, cfg.direction))
         sh, sw = src.shape[:2]
         sx, sy = sw / W, sh / H
         inv = np.array([[sx, 0.0, 0.5 * sx - 0.5], [0.0, sy, 0.5 * sy - 0.5]])   # frame px -> src px (pixel centres)

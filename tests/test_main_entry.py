@@ -18,7 +18,7 @@ def test_first_launch_renders_all_pages_in_russian(tmp_path):
                        cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
     assert r.returncode == 0, r.stderr[-2000:]
     pages = sorted(p.stem for p in shots.glob("*.png"))
-    assert len(pages) == 13, pages                       # 13 pages incl. Scenes (P2.2)
+    assert len(pages) == 14, pages                       # 14 pages incl. Scenes (P2.2) and Studio (0.6.0)
     assert (home / "settings.json").exists() and (home / "profiles" / "default.json").exists()
     log = (home / "logs" / "studio.log").read_text()
     assert "Unhandled exception" not in log and "Traceback" not in log

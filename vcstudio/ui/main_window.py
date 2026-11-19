@@ -24,6 +24,7 @@ from vcstudio.ui.pages.roi_page import ROIPage
 from vcstudio.ui.pages.replacement_page import ReplacementPage
 from vcstudio.ui.pages.camera_page import VirtualCameraPage
 from vcstudio.ui.pages.scenes_page import ScenesPage
+from vcstudio.ui.pages.studio_page import StudioPage
 from vcstudio.ui.video_view import PreviewFeeder
 
 log = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ class MainWindow(QMainWindow):
     # Global hotkeys may fire on a non-GUI thread (Windows: the RegisterHotKey thread); a queued signal
     # runs the action on the GUI thread on every platform.
     global_hotkey_fired = Signal(str)
+    _invoke = Signal(object)
 
     def __init__(self, ctx):
         super().__init__()
@@ -44,7 +46,11 @@ class MainWindow(QMainWindow):
         self.actions_.triggered.connect(self.on_action)
         self.global_hotkey_fired.connect(self.on_action, Qt.QueuedConnection)
         # gestures (vcstudio/ai/gestures.py) fire on their own thread: the same queued path as global hotkeys
-        ctx.gestures.listeners.append(lambda aid, _g: self.global_hotkey_fired.emit(aid))
+        ctx.gestures.listeners.append(lambda aid, _g: self.global_hotkey_fired.emit(aid) if aid else None)
+        # actions the app context cannot run on its own (they live in the window: recording UI, preview page)
+        ctx.action_sink = lambda aid: self.global_hotkey_fired.emit(aid)
+        self._invoke.connect(lambda fn: fn(), Qt.QueuedConnection)
+        ctx.ui_call = self._invoke.emit                     # automation / remote API actions run on this thread
         from vcstudio.native.hotkeys import GlobalHotkeys
         self.global_hotkeys = GlobalHotkeys()
         self.apply_hotkeys()
@@ -58,7 +64,7 @@ class MainWindow(QMainWindow):
         self.pages = [self.dashboard, self.input_page,
                       PreviewPage(ctx, self.feeder, lambda: self.goto("input"), self.start_processing),
                       AIEnginePage(ctx), DetectionPage(ctx, self.feeder), ROIPage(ctx, self.feeder),
-                      ReplacementPage(ctx), ScenesPage(ctx), ProfilesPage(ctx, self), VirtualCameraPage(ctx),
+                      ReplacementPage(ctx), ScenesPage(ctx), StudioPage(ctx, self), ProfilesPage(ctx, self), VirtualCameraPage(ctx),
                       self.performance, self.logs, SettingsPage(ctx, self.actions_, self)]
         central = QWidget()
         h = QHBoxLayout(central)
@@ -175,6 +181,9 @@ class MainWindow(QMainWindow):
         self.dashboard.on_pipeline(ps)
         self.performance.on_pipeline(ps, self.ctx.ai.stats(), self.ctx.watchdog.stats)
         self.performance.on_scheduler(self.ctx.scheduler.status)
+        studio = next((p for p in self.pages if p.key == "studio"), None)
+        if studio is not None and self.stack.currentWidget() is studio.widget:
+            studio.tick()
         self.dashboard.on_ai(self.ctx.ai.stats())
         self.status_capture.setText(tr("Capture: {state}", state=tr(cs.state.replace('_', ' ')))
                                     + (f" · {cs.measured_fps:.0f} fps" if cs.state in ("running", "frozen") else "")
@@ -230,6 +239,12 @@ class MainWindow(QMainWindow):
             page = next((p for p in self.pages if p.key == "preview"), None)
             if page is not None:
                 page.toggle_recording() if aid == "record_toggle" else page.save_replay()
+        elif aid.startswith("automation_"):
+            self.ctx.automation.emit("hotkey", slot=int(aid.split("_", 1)[1]))
+        elif aid == "camera_next":
+            log.info("Camera: %s", self.ctx.multicam.next_camera())
+        elif aid == "layout_next":
+            log.info("Camera layout: %s", self.ctx.multicam.next_layout())
         elif aid.startswith("scene_"):
             try:
                 name = self.ctx.scenes.switch_slot(int(aid.split("_", 1)[1]))
@@ -270,6 +285,8 @@ class MainWindow(QMainWindow):
         if self.tray is not None:
             self.tray.hide()
         self.timer.stop()
+        self.ctx.ui_call = None                  # automation / remote API: no window to hand actions to any more
+        self.ctx.action_sink = None
         self.global_hotkeys.clear()
         self.pages[self.page_keys().index("camera")].shutdown()
         self.ctx.stop_capture()

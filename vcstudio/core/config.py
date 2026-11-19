@@ -61,6 +61,8 @@ DEFAULT_HOTKEYS: dict[str, str] = {
     "privacy_toggle": "Ctrl+Alt+H",                                  # vcstudio/replacement/privacy_mode.py
     "record_toggle": "Ctrl+Alt+F9",                                  # vcstudio/core/recorder.py
     "replay_save": "Ctrl+Alt+F10",
+    "camera_next": "Ctrl+Alt+F11",                                   # vcstudio/core/multicam.py
+    "layout_next": "Ctrl+Alt+F12",
     **{f"scene_{n}": f"Ctrl+Alt+{n}" for n in range(1, 10)},        # scene slots 1..9 (vcstudio/core/scene.py)
 }
 
@@ -129,6 +131,23 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "gestures": {"enabled": False, "fps": 8, "hold_s": 0.6,
                  "actions": {"open_palm": "privacy_toggle", "victory": "replay_save", "thumbs_up": "", "fist": "",
                              "point": ""}},
+    # AI Vision (vcstudio/ai/vision.py): face landmarks + head pose, body pose, hand landmarks; overlays on the output
+    # AI Privacy Shield (vcstudio/replacement/privacy_shield.py): text regions and the user's own areas hidden
+    "privacy_shield": {"enabled": False, "text": "all", "effect": "pixelate", "padding": 0.25, "sensitivity": 0.5,
+                       "fps": 2, "hold_s": 1.5, "strict": False, "patterns": ["email", "phone", "card", "account",
+                                                                                "address", "keywords"],
+                       "keywords": [], "regions": [], "exclude": []},
+    # scene automation (vcstudio/core/automation.py): rules "when <trigger> do <action>"
+    "automation": {"enabled": False, "rules": []},
+    # remote control (vcstudio/app/remote.py): off; localhost only unless "lan" is switched on (with a warning)
+    "remote": {"enabled": False, "port": 8799, "lan": False},
+    # Audio Studio (vcstudio/core/audio_fx.py): the microphone chain for recordings; limiter on by default
+    "audio": {"gain_db": 0.0, "mute": False, "denoise": False, "denoise_strength": 0.7, "gate": False,
+              "gate_threshold_db": -50.0, "eq": False, "eq_low_db": 0.0, "eq_mid_db": 0.0, "eq_high_db": 0.0,
+              "comp": False, "comp_threshold_db": -20.0, "comp_ratio": 3.0, "comp_makeup_db": 0.0, "agc": False,
+              "agc_target_db": -20.0, "agc_max_gain_db": 18.0, "limiter": True, "limiter_ceiling_db": -1.0},
+    "color_presets": {},         # Colour Studio presets: name -> colour settings (vcstudio/ui/studio/color_tab.py)
+    "vision": {"enabled": False, "fps": 6, "face": True, "pose": True, "hands": False, "overlay": True},
     "hotkeys": dict(DEFAULT_HOTKEYS),
     "logging": {"level": "INFO", "max_bytes": 5_000_000, "backup_count": 5},
 }
@@ -153,6 +172,7 @@ _RANGES = {
     ("ui", "preview_max_fps"): (1, 60),
     ("performance", "memory_warning_mb"): (256, 262144),
     ("recording", "replay_seconds"): (5, 300),
+    ("remote", "port"): (0, 65535),              # 0: any free port (tests)
 }
 
 

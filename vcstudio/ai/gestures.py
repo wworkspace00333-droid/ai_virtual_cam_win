@@ -103,6 +103,7 @@ class GestureService:
         self.cfg = GestureConfig.from_settings(settings)
         self.recognizer = GestureRecognizer(self.cfg)
         self.last_hands: list = []
+        self.last_hands_pts = 0.0
         self._t: threading.Thread | None = None
         self._stop = threading.Event()
 
@@ -166,6 +167,7 @@ class GestureService:
                         bgr = np.ascontiguousarray(a[..., :3])
                     hs = tracker.hands(bgr)
                     self.last_hands = hs
+                    self.last_hands_pts = getattr(frame, "pts", 0.0)   # for the Vision overlay (vcstudio/ai/vision.py)
                     best = max(hs, key=lambda h: h.confidence, default=None)
                     g = best.gesture if best is not None else ""
                     self.stats.hands, self.stats.gesture = len(hs), g
@@ -182,11 +184,12 @@ class GestureService:
             stop.wait(max(0.0, 1.0 / self.cfg.fps - (time.monotonic() - t0)))
 
     def _fire(self, gesture: str) -> None:
+        """A recognised gesture: listeners get (action id or "" when none is assigned, gesture) — automation rules
+        (vcstudio/core/automation.py) may react to a gesture that has no direct action."""
         aid = self.cfg.actions.get(gesture, "")
-        if not aid:
-            return
-        self.stats.last_action, self.stats.last_action_at = f"{gesture} → {aid}", time.monotonic()
-        self._log("INFO", f"gesture {gesture} → {aid}")
+        if aid:
+            self.stats.last_action, self.stats.last_action_at = f"{gesture} → {aid}", time.monotonic()
+            self._log("INFO", f"gesture {gesture} → {aid}")
         for cb in tuple(self.listeners):
             try:
                 cb(aid, gesture)

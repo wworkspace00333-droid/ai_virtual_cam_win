@@ -5,7 +5,11 @@
 ; (%LOCALAPPDATA%\AIVirtualCameraStudio: settings, profiles, imported assets) is kept on uninstall.
 
 #ifndef AppVersion
-  #define AppVersion "0.5.3"
+  #define AppVersion "0.6.0-preview"
+#endif
+; Windows version resources take numbers only: "0.6.0-preview" -> "0.6.0" (the build script passes it)
+#ifndef AppNumVersion
+  #define AppNumVersion Copy(AppVersion, 1, Pos("-", AppVersion + "-") - 1)
 #endif
 #ifndef SourceDir
   #define SourceDir "..\..\dist\AI Virtual Camera Studio"
@@ -24,7 +28,7 @@ AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 AppPublisher=AI Virtual Camera Studio
-VersionInfoVersion={#AppVersion}
+VersionInfoVersion={#AppNumVersion}
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes

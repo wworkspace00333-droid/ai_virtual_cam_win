@@ -23,7 +23,8 @@ def _table(lang: str) -> dict[str, str]:
     if lang not in _tables:
         if lang == "ru":
             from vcstudio.i18n_ru import RU
-            _tables[lang] = RU
+            from vcstudio.i18n_ru_060 import RU_060
+            _tables[lang] = {**RU_060, **RU}          # 0.6.0 Studio strings; older translations take precedence
         else:
             _tables[lang] = {}
     return _tables[lang]

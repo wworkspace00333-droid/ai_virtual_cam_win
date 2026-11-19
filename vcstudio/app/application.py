@@ -64,6 +64,7 @@ class AppContext:
         from vcstudio.replacement.background import BackgroundService
         self.background = BackgroundService(self.capture, self.assets)       # blur / replace behind people
         self.pipeline.background = self.background
+        self.background.video_frame = self._background_video_frame
         # Resource scheduler: one governor for the optional heavy modules (vcstudio/core/scheduler.py). It watches
         # output vs input rate (only while the pipeline runs) and slows background segmentation first, then the
         # detector. The AI engine's own load probe is off: the scheduler sets its rate factor.
@@ -98,6 +99,10 @@ class AppContext:
         self.plugins = PluginManager(self.paths.root / "plugins", self.settings,
                                      lambda lv, m: self.db.log_event(lv, "plugins", m))
         self.pipeline.plugins = self.plugins
+        # extra cameras and layouts (vcstudio/core/multicam.py): a CaptureSupervisor per extra source
+        from vcstudio.core.multicam import MulticamService, SourceSet
+        self.multicam = MulticamService(SourceSet(self.factory_for, self.db.log_event, self.source_loop_risk))
+        self.pipeline.multicam = self.multicam
         if not os.environ.get("VCS_NO_PLUGINS"):            # safe start: VCS_NO_PLUGINS=1 loads none
             self.plugins.start_approved()
         from vcstudio.ai.gestures import GestureService
@@ -105,6 +110,35 @@ class AppContext:
                                        lambda lv, m: self.db.log_event(lv, "gestures", m),
                                        cache_dir=self.models.cache_dir / "onnx")
         self.gestures.apply_settings()                      # starts it when enabled
+        from vcstudio.ai.vision import VisionService
+        self.vision = VisionService(self.capture, self.settings, self.gestures,
+                                    lambda lv, m: self.db.log_event(lv, "vision", m),
+                                    cache_dir=self.models.cache_dir / "onnx")
+        self.pipeline.vision = self.vision
+        self.scheduler.add(Module(
+            "vision", priority=0, min_scale=1 / 4,
+            active=lambda: self.vision.running,
+            apply=lambda s, why: setattr(self.vision, "rate_scale", s),
+            rate_fps=self.vision.rate_fps, cost_ms=lambda: self.vision.stats.ms,
+            state=lambda: self.vision.stats.state))
+        self.vision.apply_settings()
+        from vcstudio.replacement.privacy_shield import PrivacyShield
+        self.shield = PrivacyShield(self.capture, self.settings,
+                                    lambda lv, m: self.db.log_event(lv, "privacy", m))
+        self.pipeline.shield = self.shield
+        self.shield.apply_settings()
+        # scene automation (vcstudio/core/automation.py): decisions here, actions through the existing services
+        from vcstudio.core.automation import AutomationEngine
+        self.action_sink = None                             # set by the main window: action id -> its handler
+        self.ui_call = None                                 # set by the main window: run fn on the Qt thread
+        self.automation = AutomationEngine(self._automation_snapshot, self.run_action_main,
+                                           lambda lv, m: self.db.log_event(lv, "automation", m))
+        self.gestures.listeners.append(lambda _aid, g: self.automation.emit("gesture", gesture=g))
+        self.automation.configure(self.settings.get("automation"))
+        from vcstudio.app.remote import RemoteServer
+        self.remote = RemoteServer(self, self.paths.root / "remote_token.bin")
+        if not os.environ.get("VCS_NO_REMOTE"):
+            self.remote.apply_settings()
         mode =self.profiles.active()["body"].get("performance_mode")
         if mode and mode != self.settings.get("performance.mode"):
             self.settings.set("performance.mode", mode)
@@ -137,6 +171,8 @@ class AppContext:
                                               body)
             if self.pipeline.running:
                 self.background.sync()
+            if hasattr(self, "multicam"):
+                self.multicam.apply(self.pipeline.scene.multicam, self.pipeline.running)
         self.ai.configure(DetectionConfig.from_profile(body), self.settings.get("performance.mode"),
                           TrackerConfig.from_profile(body))
 
@@ -153,6 +189,23 @@ class AppContext:
             return
         if key.startswith("gestures"):
             self.gestures.apply_settings()
+            if hasattr(self, "vision"):
+                self.vision.apply_settings()                # hands: reuse gestures' result or run its own
+            return
+        if key.startswith("vision"):
+            self.vision.apply_settings()
+            return
+        if key.startswith("privacy_shield"):
+            self.shield.apply_settings()
+            return
+        if key.startswith("automation"):
+            self.automation.configure(self.settings.get("automation"))
+            return
+        if key == "remote" or key.startswith("remote."):
+            self.remote.apply_settings()
+            return
+        if key == "audio" or key.startswith("audio."):
+            self.recording.apply_audio_fx()
             return
         if key.startswith("performance"):
             self.apply_ai_config()
@@ -162,6 +215,116 @@ class AppContext:
         if key.startswith("processing"):
             used = self.replacement.compositor.set_backend(self.settings.get("processing.compositor"))
             log.info("Compositor backend: %s", used)
+
+    def _automation_snapshot(self):
+        from vcstudio.core.automation import Snapshot
+        from vcstudio.core.frame import host_time_s
+        objs = self.ai.tracked_at(host_time_s()) if self.ai.running else []
+        sources = {"main": self.capture.stats().state in ("running", "frozen") or not self.capture.running}
+        for sid, st in self.multicam.sources.stats().items():
+            sources[sid] = st.state in ("running", "frozen", "starting")
+        return Snapshot(sum(o.label == "person" for o in objs), sum(o.label == "face" for o in objs),
+                        frozenset(o.label for o in objs), self.recording.recording, self.profiles.active_name or "",
+                        sources)
+
+    def call_main(self, fn, timeout: float = 10.0):
+        """Run fn on the UI thread when there is a window (profile listeners update widgets), else directly.
+        Used by automation and the remote API, which decide on their own threads."""
+        import threading
+        if self.ui_call is None or threading.current_thread() is threading.main_thread():
+            return fn()                                     # already on the UI thread: never wait for ourselves
+        box: dict = {}
+        done = threading.Event()
+
+        def run():
+            try:
+                box["r"] = fn()
+            except Exception as e:                          # noqa: BLE001 - handed back to the caller
+                box["e"] = e
+            finally:
+                done.set()
+        self.ui_call(run)
+        if not done.wait(timeout):
+            return "timed out"
+        if "e" in box:
+            raise box["e"]
+        return box.get("r")
+
+    def run_action_main(self, act: dict) -> str:
+        return self.call_main(lambda: self.run_action(act))
+
+    def run_action(self, act: dict) -> str:
+        """Run one automation / remote-control action through the existing services; returns a short result."""
+        t = act.get("type")
+        if t == "scene":
+            name = str(act.get("name") or "")
+            if name not in self.profiles.names():
+                return f"no scene named {name!r}"
+            self.scenes.switch(name)                        # atomic: the existing SceneState publishing
+            return f"scene {name}"
+        if t == "privacy":
+            from vcstudio.replacement import privacy_mode as pm
+            lv = act.get("level") if act.get("level") in pm.LEVELS else "faces"
+            self.update_active_profile(lambda b: pm.set_level(b, lv))
+            if lv != "off" and not self.pipeline.replacement_enabled:
+                self.pipeline.set_replacement_enabled(True)
+            return f"privacy {lv}"
+        if t == "record":
+            if act.get("do") == "stop":
+                st = self.recording.stop_recording() if self.recording.recording else None
+                return "recording stopped" if st is not None else "was not recording"
+            if self.recording.recording:
+                return "already recording"
+            return f"recording to {self.recording.start_recording().name}"
+        if t == "replay":
+            if self.recording.replay is None:
+                return "instant replay is off"
+            import threading
+            threading.Thread(target=self.recording.save_replay, name="replay-save", daemon=True).start()
+            return "saving replay"
+        if t == "camera":
+            sid = str(act.get("id") or "main")
+            self.multicam.override = None if sid == "main" else sid
+            return f"camera {sid}"
+        if t == "layout":
+            from vcstudio.core.multicam import LAYOUTS
+            lay = act.get("layout")
+            if lay not in LAYOUTS:
+                return f"unknown layout {lay!r}"
+            self.multicam.layout_override = lay
+            return f"layout {lay}"
+        if t == "color_preset":
+            p = (self.settings.get("color_presets") or {}).get(act.get("name"))
+            if not p:
+                return f"no colour preset {act.get('name')!r}"
+            self.update_active_profile(lambda b: b.__setitem__("color", {**p, "enabled": True}))
+            return f"colour preset {act.get('name')}"
+        if t == "effects":
+            self.pipeline.set_replacement_enabled(bool(act.get("on", True)))
+            return "effects on" if act.get("on", True) else "effects off"
+        if t == "action":
+            aid = str(act.get("id") or "")
+            from vcstudio.ui.actions import ACTION_SPECS
+            if aid not in {a.id for a in ACTION_SPECS} or aid.startswith("automation_"):
+                return f"unknown action {aid!r}"
+            if self.action_sink is None:
+                return "no window to run this action"
+            self.action_sink(aid)
+            return f"action {aid}"
+        return f"unknown action type {t!r}"
+
+    def _background_video_frame(self, asset_id: str, t: float):
+        """A looping video background: the compositor's player pool decodes it on its own thread; this only asks
+        for the frame of output time t (None until the first frame is decoded)."""
+        from vcstudio.replacement.assets import assets_from_profile
+        from vcstudio.replacement.video import PlaybackSettings
+        asset = assets_from_profile(self.profiles.active()["body"]).get(asset_id)
+        if asset is None or asset.kind != "video":
+            return None
+        comp = self.replacement.compositor
+        player = comp.videos.get(("__background__", asset_id), self.assets.path(asset), self.assets.video_info(asset),
+                                 PlaybackSettings(loop=True))
+        return None if player.failed else player.frame_at(t)
 
     def asset_in_use_elsewhere(self, asset_id: str, except_profile: str | None = None) -> bool:
         for n in self.profiles.names():
@@ -194,8 +357,15 @@ class AppContext:
     # ---------------- capture ----------------
     def capture_factory(self):
         """Build a source factory from current input settings."""
+        return self.factory_for(self.settings.get("input"))
+
+    def factory_for(self, spec: dict):
+        """Source factory for an input description (the Input page's settings, or an extra multi-camera source:
+        method + device / screen / file keys; missing size keys default to the main input's preferred format)."""
         from vcstudio.core.video_capture import TestPatternSource, device_source
-        i = self.settings.get("input")
+        main = self.settings.get("input")
+        i = {**{k: main[k] for k in ("preferred_width", "preferred_height", "preferred_fps")},
+             "device_unique_id": None, "device_name_hint": "", **spec}
         w, h, fps = i["preferred_width"], i["preferred_height"], i["preferred_fps"]
         if i["method"] == "test_pattern":
             return lambda: TestPatternSource(w, h, fps)
@@ -232,6 +402,8 @@ class AppContext:
         self.pipeline.start()
         self.watchdog.start()
         self.scheduler.start()
+        sc = self.pipeline.scene
+        self.multicam.apply(sc.multicam if sc is not None else None, True)
 
     def feedback_loop_risk(self) -> str:
         """Non-empty if the configured input is the device we output to (would feed back into itself)."""
@@ -242,7 +414,21 @@ class AppContext:
             return f"Input '{i['device_name_hint']}' is also the output camera: this would feed back into itself."
         return ""
 
+    def source_loop_risk(self, spec: dict) -> str:
+        """Non-empty if an extra source is the output camera itself."""
+        o = self.settings.get("output")
+        from vcstudio.core.devices import is_own_output
+        from vcstudio.platform import is_device_method
+        name = spec.get("device_name_hint") or ""
+        if is_device_method(spec.get("method", "")) and is_own_output(name, ""):
+            return f"'{name}' is this app's own camera: it would show itself."
+        if is_device_method(spec.get("method", "")) and o["camera_enabled"] and \
+                name.casefold() == o["camera_device"].casefold():
+            return f"'{name}' is the output camera: it would feed back into itself."
+        return ""
+
     def stop_capture(self) -> None:
+        self.multicam.stop()
         self.scheduler.stop()
         self.watchdog.stop()
         self.pipeline.stop()
@@ -254,6 +440,11 @@ class AppContext:
     def shutdown(self) -> None:
         log.info("Shutting down")
         self.gestures.stop()
+        self.vision.stop()
+        self.shield.stop()
+        self.automation.stop()
+        self.remote.stop()
+        self.multicam.stop()
         self.scheduler.stop()
         self.watchdog.stop()
         self.pipeline.stop()

@@ -51,7 +51,8 @@ Invoke-Sign $ownBinaries
 
 Step "icon and version resource"
 & $Python "$Root\packaging\make_icon_win.py"; Check "make_icon_win.py"
-$v = ($Version.Split(".") + @("0", "0", "0", "0"))[0..3] -join ", "
+$NumVersion = ($Version -split "-")[0]                 # "0.6.0-preview" -> "0.6.0": version resources take numbers
+$v = ($NumVersion.Split(".") + @("0", "0", "0", "0"))[0..3] -join ", "
 New-Item -ItemType Directory -Force "$Root\build" | Out-Null
 @"
 VSVersionInfo(
@@ -87,7 +88,7 @@ Step "Inno Setup"
 $Iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe") |
     Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $Iscc) { throw "Inno Setup 6 not found (https://jrsoftware.org/isdl.php)" }
-$isccArgs = @("/DAppVersion=$Version", "/DSourceDir=$App", "/DOutputDir=$Out")
+$isccArgs = @("/DAppVersion=$Version", "/DAppNumVersion=$NumVersion", "/DSourceDir=$App", "/DOutputDir=$Out")
 if (Test-SigningConfigured) {
     # Inno Setup signs the uninstaller it generates with this command ($f = the file); the installer is signed below
     $q = { param($s) if ($s -match '\s') { '$q' + $s + '$q' } else { $s } }

@@ -419,6 +419,9 @@ class RecordingService:
         self.last_path: Path | None = None
         self.audio = None                                # AudioSource while a recording / replay needs the mic
         self._audio_factory = audio_factory or AudioSource
+        from vcstudio.core.audio_fx import AudioChain, AudioFxConfig
+        self.fx = AudioChain(AudioFxConfig.from_settings(settings))   # Audio Studio chain (vcstudio/core/audio_fx.py)
+        self.metering = False                            # the Audio Studio page wants live meters without recording
         self._lock = threading.Lock()
         self.apply_settings()
 
@@ -427,6 +430,10 @@ class RecordingService:
         return str(self.settings.get("recording.audio_device") or "").strip()
 
     def _on_audio(self, samples: np.ndarray, t: float) -> None:
+        try:
+            samples = self.fx.process(samples)
+        except Exception:                                # a DSP bug must never cost the recording its sound
+            log.exception("audio processing failed; raw microphone used")
         rec, rp = self.recorder, self.replay
         if rec is not None:
             rec.push_audio(samples, t)
@@ -436,7 +443,7 @@ class RecordingService:
     def _sync_audio(self) -> None:
         """Run the microphone exactly while a recording or the instant replay wants sound."""
         dev = self.audio_device()
-        want = bool(dev) and (self.recording or self.replay is not None)
+        want = bool(dev) and (self.recording or self.replay is not None or self.metering)
         cur = self.audio
         if cur is not None and (not want or cur.device != dev):
             cur.stop()
@@ -499,6 +506,15 @@ class RecordingService:
         return True
 
     # ---- instant replay
+    def set_metering(self, on: bool) -> None:
+        """Live microphone meters for the Audio Studio page (the mic runs only while someone looks)."""
+        self.metering = bool(on)
+        self._sync_audio()
+
+    def apply_audio_fx(self) -> None:
+        from vcstudio.core.audio_fx import AudioFxConfig
+        self.fx.configure(AudioFxConfig.from_settings(self.settings))
+
     def apply_settings(self) -> None:
         on = bool(self.settings.get("recording.replay_enabled"))
         secs = float(self.settings.get("recording.replay_seconds") or 30)

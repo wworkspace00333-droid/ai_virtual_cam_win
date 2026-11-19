@@ -27,6 +27,12 @@ def _qimage_bgra(arr) -> QImage:
     return QImage(arr.data, w, h, arr.strides[0], QImage.Format_ARGB32_Premultiplied).copy()
 
 
+class BackgroundMode:
+    @staticmethod
+    def of(body: dict) -> str:
+        return (body.get("background") or {}).get("mode", "off")
+
+
 class ReplacementPage:
     key, title = "replacement", "Replacement"
 
@@ -147,13 +153,27 @@ class ReplacementPage:
         bgc.layout_.addWidget(bgh)
         bf = QFormLayout()
         self.bg_mode = QComboBox()
-        for k, v in (("off", "Off"), ("blur", "Blur"), ("image", "Image from the library")):
+        for k, v in (("off", "Off"), ("blur", "Blur"), ("image", "Image from the library"), ("color", "Colour"),
+                     ("gradient", "Gradient"), ("video", "Looping video from the library")):
             self.bg_mode.addItem(tr(v), k)
         self.bg_strength = QSlider(Qt.Horizontal); self.bg_strength.setRange(3, 99)
         self.bg_image = QComboBox()
+        self.bg_color = QPushButton()
+        self.bg_color2 = QPushButton()
+        self.bg_dir = QComboBox()
+        for k, v in (("vertical", "Top to bottom"), ("horizontal", "Left to right"), ("diagonal", "Diagonal")):
+            self.bg_dir.addItem(tr(v), k)
+        self.bg_quality = QComboBox()
+        for k, v in (("fast", "Fast"), ("balanced", "Balanced"), ("quality", "Quality (edges follow the picture)")):
+            self.bg_quality.addItem(tr(v), k)
         bf.addRow(tr("Background"), self.bg_mode)
         bf.addRow(tr("Blur strength"), self.bg_strength)
         bf.addRow(tr("Image"), self.bg_image)
+        bf.addRow(tr("Colour"), self.bg_color)
+        bf.addRow(tr("Second colour"), self.bg_color2)
+        bf.addRow(tr("Direction"), self.bg_dir)
+        bf.addRow(tr("Mask quality"), self.bg_quality)
+        self._bg_colors = ["#202830", "#2878c8"]
         bgc.layout_.addLayout(bf)
         self.bg_info = QLabel(); self.bg_info.setObjectName("muted"); self.bg_info.setWordWrap(True)
         bgc.layout_.addWidget(self.bg_info)
@@ -162,6 +182,10 @@ class ReplacementPage:
         self.bg_mode.currentIndexChanged.connect(self._save_background)
         self.bg_image.currentIndexChanged.connect(self._save_background)
         self.bg_strength.valueChanged.connect(self._save_background)
+        self.bg_dir.currentIndexChanged.connect(self._save_background)
+        self.bg_quality.currentIndexChanged.connect(self._save_background)
+        self.bg_color.clicked.connect(lambda: self._pick_bg_color(0))
+        self.bg_color2.clicked.connect(lambda: self._pick_bg_color(1))
 
         pv = Card("Live replacement preview")
         from vcstudio.platform import text
@@ -231,11 +255,18 @@ class ReplacementPage:
         self._bg_loading = True
         try:
             self.bg_image.clear()
-            self.bg_image.addItem(tr("(choose an image)"), None)
+            want = "video" if cfg.mode == "video" else "image"
+            self.bg_image.addItem(tr("(choose a video)") if want == "video" else tr("(choose an image)"), None)
             for a in assets_from_profile(self._body()).values():
-                if a.kind == "image":
+                if a.kind == want:
                     self.bg_image.addItem(a.name, a.id)
             self.bg_mode.setCurrentIndex(max(0, self.bg_mode.findData(cfg.mode)))
+            self.bg_dir.setCurrentIndex(max(0, self.bg_dir.findData(cfg.direction)))
+            self.bg_quality.setCurrentIndex(max(0, self.bg_quality.findData(cfg.quality)))
+            self._bg_colors = [cfg.color, cfg.color2]
+            for btn, c in ((self.bg_color, cfg.color), (self.bg_color2, cfg.color2)):
+                btn.setText(c)
+                btn.setStyleSheet(f"background: {c};")
             self.bg_strength.setValue(cfg.strength)
             self.bg_image.setCurrentIndex(max(0, self.bg_image.findData(cfg.asset_id)))
         finally:
@@ -245,12 +276,18 @@ class ReplacementPage:
     def _background_widgets(self):
         mode = self.bg_mode.currentData()
         self.bg_strength.setEnabled(mode == "blur")
-        self.bg_image.setEnabled(mode == "image")
+        self.bg_image.setEnabled(mode in ("image", "video"))
+        self.bg_color.setEnabled(mode in ("color", "gradient"))
+        self.bg_color2.setEnabled(mode == "gradient")
+        self.bg_dir.setEnabled(mode == "gradient")
+        self.bg_quality.setEnabled(mode != "off")
         from vcstudio.ai.person_segmentation import model_path
         if mode != "off" and not model_path().exists():
             self.bg_info.setText(tr("The person segmentation model is not installed (scripts/fetch_models.py)."))
         elif mode == "image" and not self.bg_image.currentData():
             self.bg_info.setText(tr("Choose an image: add one to the asset library above first."))
+        elif mode == "video" and not self.bg_image.currentData():
+            self.bg_info.setText(tr("Choose a video: add one to the asset library above first."))
         else:
             seg = self.ctx.background.seg
             self.bg_info.setText(tr("Segmentation: {state}", state=seg.error or (
@@ -261,13 +298,33 @@ class ReplacementPage:
         if self._bg_loading:
             return
         b = {"mode": self.bg_mode.currentData(), "strength": self.bg_strength.value(),
-             "asset_id": self.bg_image.currentData()}
+             "asset_id": self.bg_image.currentData(), "color": self._bg_colors[0], "color2": self._bg_colors[1],
+             "direction": self.bg_dir.currentData(), "quality": self.bg_quality.currentData()}
+        prev = BackgroundMode.of(self._body())
+        if (prev == "video") != (b["mode"] == "video"):
+            b["asset_id"] = None                          # an image id is not a video id (and back)
         self._loading = True
         try:
             self.ctx.update_active_profile(lambda body: body.setdefault("background", {}).update(b))
         finally:
             self._loading = False
         self._background_widgets()
+        if (prev == "video") != (b["mode"] == "video"):
+            self._load_background()                       # the asset list switches between images and videos
+
+    def _pick_bg_color(self, i: int, color: str | None = None):
+        if color is None:
+            from PySide6.QtGui import QColor
+            from PySide6.QtWidgets import QColorDialog
+            c = QColorDialog.getColor(QColor(self._bg_colors[i]), self.widget)
+            if not c.isValid():
+                return
+            color = c.name()
+        self._bg_colors[i] = color
+        btn = (self.bg_color, self.bg_color2)[i]
+        btn.setText(color)
+        btn.setStyleSheet(f"background: {color};")
+        self._save_background()
 
     def _refresh_assets(self):
         assets = assets_from_profile(self._body())

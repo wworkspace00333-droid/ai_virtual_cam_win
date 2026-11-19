@@ -7,6 +7,46 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+## [0.6.0-preview] — 2026-11-19
+
+0.6.0 Professional, preview build for testing on real PCs (a pre-release, not offered by "Check for updates" in
+0.5.x). Everything below is in the new **Studio** page (8 tabs, English
+and Russian) and runs through the existing pipeline, scheduler, scene state and action bus. Details, measurements and
+limits: docs/PRO_060_*.md and reports/PRO_060_*.md.
+
+### Added
+- **AI Models**: a compatibility check for any ONNX model in 9 categories (interface validated against the category,
+  sample inference on every execution provider with the provider really used, warm-up / median / p95, SHA-256,
+  licence metadata), a registry of checked models with enable / disable and a tamper check. **Check backends** runs a
+  small model per provider: on the development server DirectML is listed but falls back to the CPU, and now says so.
+- **Multi-Camera**: up to 3 extra sources (camera, screen / window, video file, test pattern), each with its own
+  capture supervisor; layouts single, picture-in-picture, side by side, split, 2×2 grid and custom tiles (crop,
+  rotation, border, rounded corners, opacity); age-limited frames with hold / placeholder / hide; automatic switching
+  when nobody is on the main camera (hysteresis + cooldown); hotkeys for next camera / next layout.
+- **AI Vision**: YuNet's five face landmarks are kept and give head pose (yaw / pitch / roll); body pose (MediaPipe
+  person detector + 39-point landmarker, downloaded on click, 17 MB); hand skeletons reused from gesture control (no
+  second detector); overlays on the output; a lowest-priority scheduler module.
+- **Background**: colour, gradient and looping-video backgrounds; Fast / Balanced / Quality masks (Quality refines
+  the edge against the picture with a guided filter).
+- **Tracking**: lock an object (kept through 10 s of occlusion, re-acquired by position), track history.
+- **Privacy Shield**: local text detection (PP-OCRv3, 3 MB download) hides text regions, plus the user's own areas and
+  exclusions; pixelate / blur / black; padding and sensitivity; sensitive-text patterns (e-mail, phone, card with
+  Luhn check, IBAN-like, address, keywords) for use with a recognition model; strict fail-safe mode.
+- **Color Studio**: exposure, brightness, contrast, saturation, temperature, tint, gamma, highlights (tone mapping),
+  shadows, sharpness, vignette, film grain, soft glow, skin protection; .cube LUTs (1D and 3D) with intensity; per
+  scene, applied once per frame; presets.
+- **Automation**: rules with 12 triggers (people, objects, faces, gestures, camera lost, recording, timer, hotkeys,
+  manual), conditions, 9 actions, cooldown, debounce, priority, history and loop protection.
+- **Audio Studio**: noise suppression, gate, 3-band EQ, compressor, automatic gain, limiter and live meters for the
+  microphone of recordings (about 1.4 % of one core with everything on). Virtual microphone feasibility:
+  reports/VIRTUAL_AUDIO_DEVICE.md (needs a signed driver; not shipped).
+- **Remote Control**: localhost HTTP API, WebSocket live status and a phone page; off by default, DPAPI-protected
+  access code, rate limits, lockout, host / origin checks, LAN only by explicit opt-in.
+
+### Changed
+- Automation and remote-control actions run on the UI thread (profile listeners update widgets).
+- Gesture listeners also get gestures that have no direct action (automation rules can use them).
+
 ## [0.5.3] — 2026-11-19
 
 Hardware profile and an OBS shared-memory owner check.
@@ -348,6 +388,7 @@ for real hardware are still to be measured (docs/HARDWARE_CHECKLIST.md).
 
 macOS releases; see the history of the original repository.
 
+[0.6.0-preview]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.6.0-preview
 [0.5.3]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.5.3
 [0.5.2]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.5.2
 [0.5.1]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.5.1

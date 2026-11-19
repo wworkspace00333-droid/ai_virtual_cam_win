@@ -94,17 +94,20 @@ def test_app_wires_background_and_detector(paths):
     ctx = AppContext(paths, configure_logging=False)
     try:
         names = [m.name for m in ctx.scheduler.modules]
-        assert names == ["background", "detector"]                       # sorted by priority
+        assert names == ["vision", "background", "detector"]             # sorted by priority (0.6.0: vision first)
         assert ctx.ai.load_probe is None                                  # the engine no longer judges load itself
-        det = ctx.scheduler.modules[1]
+        det = ctx.scheduler.modules[2]
         det.apply(0.5, "test")
         assert ctx.ai.adaptive.scale == 0.5 and ctx.ai.stats().rate_scale == 0.5
-        bg = ctx.scheduler.modules[0]
+        vis = ctx.scheduler.modules[0]
+        vis.apply(0.25, "test")
+        assert ctx.vision.rate_scale == 0.25
+        bg = ctx.scheduler.modules[1]
         bg.apply(0.5, "test")
         assert ctx.background.seg.rate_scale == 0.5
         ctx.scheduler.step()
         st = ctx.scheduler.status
-        assert st.load == "idle" and len(st.modules) == 2 and not st.modules[0].active
+        assert st.load == "idle" and len(st.modules) == 3 and not st.modules[0].active
     finally:
         ctx.shutdown()
     assert ctx.ai.adaptive.scale == 1.0 and ctx.background.seg.rate_scale == 1.0   # reset on stop
@@ -120,7 +123,8 @@ def test_performance_page_shows_the_modules(qtbot, paths):
         ctx.scheduler.step()
         w.performance.on_scheduler(ctx.scheduler.status)
         t = w.performance.res_table
-        assert t.rowCount() == 2 and t.item(0, 0).text() == "Background segmentation"
+        assert t.rowCount() == 3 and t.item(0, 0).text() == "AI Vision (face, pose, hands)"
+        assert t.item(1, 0).text() == "Background segmentation"
         assert "no video" in w.performance.res_info.text()
     finally:
         ctx.shutdown()

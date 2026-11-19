@@ -73,8 +73,9 @@ def _system() -> dict:
     except Exception as e:
         d["environment_error"] = str(e)
     try:
-        from vcstudio.core.hardware import profile
+        from vcstudio.core.hardware import profile, verify_backends
         d["hardware_profile"] = profile(refresh=True).as_dict()
+        d["backend_checks"] = verify_backends()            # a real inference per provider, not just the list
     except Exception as e:
         d["hardware_profile_error"] = str(e)
     return d

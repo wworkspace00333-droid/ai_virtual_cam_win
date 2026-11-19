@@ -16,6 +16,8 @@ Matching is class-aware by default (a "car" detection never continues a "person"
 """
 from __future__ import annotations
 
+import collections
+
 import math
 import threading
 from dataclasses import dataclass
@@ -168,6 +170,7 @@ class Track:
     source: str = "yolo"
     lost_since: float | None = None
     mask: object = None
+    history: object = None        # deque of (t, cx, cy): the last HISTORY_LEN updates (track history)
 
     def box(self) -> tuple[float, float, float, float]:
         return xyah_to_xyxy(self.mean)
@@ -190,6 +193,7 @@ class TrackedObject:
     vy: float = 0.0
     source: str = "yolo"
     mask: object = None   # uint8 box-local silhouette from the latest segmentation, re-projected to the box
+    locked: bool = False  # the user locked this object: kept through long losses and re-acquired by position
 
     @property
     def center(self) -> tuple[float, float]:
@@ -210,6 +214,12 @@ class TrackerStats:
     update_ms: float = 0.0
 
 
+HISTORY_LEN = 90                  # centre positions kept per track (3 s at 30 inferences / s)
+LOCK_BUFFER_S = 10.0              # a locked object survives this long without a detection (normal: track_buffer_s)
+REACQUIRE_DIST = 1.5              # a locked lost object is re-acquired by a same-class detection whose centre lies
+#                                   within this many box sizes of its last position (IoU alone fails after a long loss)
+
+
 class ByteTracker:
     def __init__(self, cfg: TrackerConfig | None = None):
         self.cfg = cfg or TrackerConfig()
@@ -220,6 +230,26 @@ class ByteTracker:
         self.stats = TrackerStats()
         self._last_t: float | None = None
         self.frame_size: tuple[int, int] = (0, 0)
+        self.locked: set[int] = set()
+
+    # -------------------------------------------------------------- manual locking
+    def lock(self, track_id: int) -> bool:
+        """Lock an object (manual object locking): its ID survives occlusions up to LOCK_BUFFER_S and it is
+        re-acquired by position. False if no such confirmed track."""
+        with self._lock:
+            if not any(tr.track_id == track_id and tr.state in (TRACKED, LOST) for tr in self._tracks):
+                return False
+            self.locked.add(track_id)
+            return True
+
+    def unlock(self, track_id: int) -> None:
+        with self._lock:
+            self.locked.discard(track_id)
+
+    def history(self, track_id: int) -> list[tuple[float, float, float]]:
+        with self._lock:
+            tr = next((t for t in self._tracks if t.track_id == track_id), None)
+            return list(tr.history) if tr is not None and tr.history is not None else []
 
     def configure(self, cfg: TrackerConfig) -> None:
         with self._lock:
@@ -231,6 +261,7 @@ class ByteTracker:
             self._tracks = []
             self._last_t = None
             self.stats = TrackerStats(ids_created=0)
+            self.locked = set()
 
     # -------------------------------------------------------------- update
     def update(self, dets: list[Detection], t: float, frame_size: tuple[int, int] | None = None) -> None:
@@ -278,6 +309,20 @@ class ByteTracker:
                 tentative[i].state = REMOVED
             rem_high = [rem_high[j] for j in u_det3]
 
+            # locked objects lost for longer: re-acquire by class and distance (automatic re-detection)
+            for tr in [tr for tr in self._tracks if tr.state == LOST and tr.track_id in self.locked]:
+                if not rem_high:
+                    break
+                x0, y0, x1, y1 = tr.box()
+                cx, cy, size = (x0 + x1) / 2, (y0 + y1) / 2, max(x1 - x0, y1 - y0, 1.0)
+                cands = [(((d.x0 + d.x1) / 2 - cx) ** 2 + ((d.y0 + d.y1) / 2 - cy) ** 2) ** 0.5 / size
+                         for d in rem_high]
+                k = min(range(len(rem_high)), key=lambda i: cands[i])
+                if cands[k] <= REACQUIRE_DIST and rem_high[k].label == tr.label:
+                    d = rem_high.pop(k)
+                    tr.mean, tr.cov = self.kf.initiate(xyxy_to_xyah((d.x0, d.y0, d.x1, d.y1)))
+                    self._apply(tr, d, t)
+
             # new tracks
             first_frame = self._last_t is None
             for d in rem_high:
@@ -286,15 +331,18 @@ class ByteTracker:
                 mean, cov = self.kf.initiate(xyxy_to_xyah((d.x0, d.y0, d.x1, d.y1)))
                 tr = Track(self._next_id, d.label, mean, cov, t, t, t, d.confidence,
                            TRACKED if first_frame else TENTATIVE, 1, d.source, mask=d.mask)
+                tr.history = collections.deque([(t, (d.x0 + d.x1) / 2, (d.y0 + d.y1) / 2)], maxlen=HISTORY_LEN)
                 self._next_id += 1
                 self.stats.ids_created += 1
                 self._tracks.append(tr)
 
             # expire lost tracks, drop removed, de-duplicate
             for tr in self._tracks:
-                if tr.state == LOST and t - (tr.lost_since or t) > cfg.track_buffer_s:
+                buf = LOCK_BUFFER_S if tr.track_id in self.locked else cfg.track_buffer_s
+                if tr.state == LOST and t - (tr.lost_since or t) > buf:
                     tr.state = REMOVED
             self._tracks = [tr for tr in self._tracks if tr.state != REMOVED]
+            self.locked &= {tr.track_id for tr in self._tracks}
             self._dedupe()
             self._last_t = t
             st = self.stats
@@ -324,6 +372,9 @@ class ByteTracker:
         tr.score = 0.7 * tr.score + 0.3 * d.confidence
         if d.mask is not None:
             tr.mask = d.mask
+        if tr.history is None:
+            tr.history = collections.deque(maxlen=HISTORY_LEN)
+        tr.history.append((t, (d.x0 + d.x1) / 2, (d.y0 + d.y1) / 2))
         if tr.state == LOST:
             self.stats.recovered += 1
         if tr.state == LOST or (tr.state == TENTATIVE and tr.hits >= self.cfg.min_hits):
@@ -379,7 +430,7 @@ class ByteTracker:
                 out.append(TrackedObject(tr.track_id, tr.label, tr.score, x0, y0, x1, y1,
                                          "tracked" if tr.state == TRACKED else "coasting",
                                          t - tr.first_seen, max(0.0, since), float(m[4]), float(m[5]), tr.source,
-                                         tr.mask))
+                                         tr.mask, tr.track_id in self.locked))
             return out
 
     def tracks(self) -> list[Track]:

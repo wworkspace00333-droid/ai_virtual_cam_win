@@ -118,3 +118,24 @@ def profile(refresh: bool = False) -> HardwareProfile:
     if _cached is None or refresh:
         _cached = probe()
     return _cached
+
+
+def verify_backends(runs: int = 5) -> list[dict]:
+    """Run a small real model (YuNet, 230 KB) on every ONNX Runtime provider of this PC and report what actually ran.
+
+    A provider being listed is not proof: DirectML is in every Windows package but needs a D3D12 device, and ONNX
+    Runtime silently falls back to the CPU without one. Each entry: requested, used (the provider the session really
+    has), ok, warm-up / median / p95 ms, error. Takes about a second; never raises."""
+    try:
+        from vcstudio.ai.model_check import check
+        from vcstudio.ai.onnx_engine import yunet_path
+        rep = check(yunet_path(), "face_detection", runs=runs)
+        out = [{"requested": p.requested, "used": p.used, "ok": p.ok, "real": p.ok and p.used == p.requested,
+                "warmup_ms": p.warmup_ms, "median_ms": p.median_ms, "p95_ms": p.p95_ms, "error": p.error}
+               for p in rep.providers]
+    except Exception as e:                       # noqa: BLE001 - diagnostics must not fail
+        out = [{"requested": "?", "used": "", "ok": False, "real": False, "error": f"{type(e).__name__}: {e}"}]
+    for r in out:
+        log.info("Backend check: %s -> %s, %s", r["requested"], r.get("used") or "-",
+                 f"{r.get('median_ms')} ms" if r.get("ok") else r.get("error", "failed"))
+    return out

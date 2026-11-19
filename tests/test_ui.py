@@ -18,7 +18,7 @@ def win(qtbot, paths):
 
 def test_pages_in_spec_order(win):
     assert [p.title for p in win.pages] == ["Dashboard", "Input", "Preview", "AI Engine", "Detection", "ROI Editor",
-                                            "Replacement", "Scenes", "Profiles", "Virtual Camera", "Performance",
+                                            "Replacement", "Scenes", "Studio", "Profiles", "Virtual Camera", "Performance",
                                             "Logs", "Settings"]
     for i in range(len(win.pages)):
         win.nav.setCurrentRow(i)

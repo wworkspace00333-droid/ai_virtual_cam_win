@@ -8,12 +8,15 @@ can then pick that camera in Zoom, Teams, Chrome, Discord, OBS or the Windows Ca
 
 Everything runs locally. The app sends nothing anywhere. It uses the network only when you click one of three buttons:
 "Download models" for "any object by text" (about 220 MB from huggingface.co), "Download hand models" for gestures
-(about 8 MB, same source; both SHA-256 checked) and "Check for updates" in Settings (one request to this
-project's GitHub releases list). `VCS_NO_NETWORK=1` turns all three off.
+(about 8 MB), the body pose models (17 MB) and the text detector for the privacy shield (3 MB) in the Studio page
+(same source; all SHA-256 checked) and "Check for updates" in Settings (one request to this project's GitHub
+releases list). `VCS_NO_NETWORK=1` turns all of them off. The optional remote control (Studio → Remote Control) is a
+server inside the app for your own phone or browser: off by default and reachable only from this PC unless you
+switch on network access.
 There is no telemetry and no auto-update. Plugins (Settings → Plugins, [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md)) are
 your own code and are not limited by this.
 
-**Status: 0.5.3.** All features of the 0.5 plan are in. Developed and tested on a server without a GPU (Windows Server 2025, software
+**Status: 0.5.3 (latest release); 0.6.0-preview for testing.** All features of the 0.5 plan are in. Developed and tested on a server without a GPU (Windows Server 2025, software
 Direct3D). Speed on real graphics cards, compatibility with every video app and colour in each of them still have
 to be checked on real PCs: [docs/HARDWARE_CHECKLIST.md](docs/HARDWARE_CHECKLIST.md). Changes:
 [CHANGELOG.md](CHANGELOG.md).
@@ -36,6 +39,16 @@ window capture through Windows Graphics Capture needs Windows 10 version 1903 or
 
 Uninstall from *Settings → Apps*: the cameras, the autostart entry and the program folder are removed; your
 settings, profiles and images stay in `%LOCALAPPDATA%\AIVirtualCameraStudio` until you delete that folder.
+
+## Studio (0.6.0 Professional, in development)
+
+The **Studio** page adds, on top of everything below: extra cameras and layouts (picture-in-picture, side by side,
+grid, custom tiles), AI vision (face points and head direction, body pose, hand skeletons), a privacy shield that
+hides text and chosen areas, colour grading with .cube LUTs, automation rules, an audio chain for recordings
+(noise suppression, gate, EQ, compressor, automatic gain, limiter), a local remote-control page for a phone, and a
+checker for your own ONNX models. What was measured and what is still unverified:
+[docs/PRO_060_FEATURE_MATRIX.md](docs/PRO_060_FEATURE_MATRIX.md),
+[reports/PRO_060_RELEASE_READINESS.md](reports/PRO_060_RELEASE_READINESS.md).
 
 ## What it does (Windows)
 

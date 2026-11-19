@@ -125,3 +125,21 @@
 
 Заполненный файл (или копию этой страницы) и папку `pc-report` — в issue репозитория или напрямую разработчику.
 Номер версии программы — в заголовке её окна.
+
+## 0.6.0 Studio — to verify on real PCs
+
+None of these could be checked on the development server (no GPU, no webcam, no speakers):
+
+- [ ] Studio → AI Models → Check backends on an NVIDIA, an AMD and an Intel GPU: DirectML must say "works" (not "listed,
+      but the model ran on CPU") and be faster than the CPU line.
+- [ ] Multi-Camera with two real USB webcams: both run, PiP / side by side at 1080p30 without output drops; unplug the
+      extra camera: placeholder or held frame, main output keeps its rate; plug back: the tile returns.
+- [ ] AI Vision with a real person at 1-3 m: face points on the eyes / nose / mouth, head direction follows turning,
+      skeleton on the body; measure the analyses per second shown on the tab.
+- [ ] Privacy Shield in Zoom / Teams with a document, a phone screen and a whiteboard in view: what is hidden, what is
+      missed (note the text size).
+- [ ] Colour Studio: a real .cube LUT from a colourist tool; compare with the same LUT in OBS / DaVinci on a still.
+- [ ] Audio Studio with a real microphone in a noisy room: record 1 minute with and without noise suppression; check
+      lip sync in the MP4.
+- [ ] Remote Control from a phone on the same Wi-Fi (LAN opt-in): scene buttons, recording, privacy; Windows Firewall
+      prompt appears once and can be declined to keep it local only.

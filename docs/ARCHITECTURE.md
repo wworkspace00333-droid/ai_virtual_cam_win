@@ -94,3 +94,11 @@ To install a CMIOExtension, all of the following are required:
 - **Xcode** for provisioning-profile management. The bundle can be assembled with SwiftPM + `codesign`, but profiles are created through Xcode or the developer portal.
 - The app must run from `/Applications`. The user approves the extension in **System Settings → General → Login Items & Extensions → Camera Extensions**.
 - The DMG must be signed with Developer ID and notarized.
+
+## 0.6.0 Studio additions
+
+See [PRO_060_ARCHITECTURE.md](PRO_060_ARCHITECTURE.md) for the component map and data flow. Per output frame the order
+is now: lighting → colour grading (scene) → background → regions → privacy shield → vision overlay → auto-framing →
+multi-camera layout → plugins → camera / recorder taps. Side threads (newest frame only, scheduler-governed):
+detector + tracker, person segmentation, gestures, vision, privacy-shield text detection, extra capture sources.
+Decisions made off the UI thread (automation, remote API) run their actions on it through `AppContext.call_main`.

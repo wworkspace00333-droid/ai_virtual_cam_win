@@ -51,6 +51,9 @@ it off. Developers can use `scripts/fetch_models.py --open-vocab --hands` instea
 | SAM 2.1 hiera-tiny, 8-bit ONNX (`sam2.1_tiny/`) | Apache-2.0 (Meta, `facebook/sam2.1-hiera-tiny`) | ONNX export `onnx-community/sam2.1-hiera-tiny-ONNX`, commit `814a0666` |
 | MediaPipe palm detection, ONNX (`hands/palm_detection_mediapipe_2023feb.onnx`) | Apache-2.0 (Google MediaPipe; OpenCV Zoo export) | `opencv/palm_detection_mediapipe`, commit `233e619d` |
 | MediaPipe hand landmarks, ONNX (`hands/handpose_estimation_mediapipe_2023feb.onnx`) | Apache-2.0 (Google MediaPipe; OpenCV Zoo export) | `opencv/handpose_estimation_mediapipe`, commit `4b2a0b44`; the hand crop geometry in `vcstudio/ai/hands.py` follows its Apache-2.0 reference code |
+| MediaPipe person detection, ONNX (`pose/person_detection_mediapipe_2023mar.onnx`) | Apache-2.0 (Google MediaPipe; OpenCV Zoo export) | `opencv/person_detection_mediapipe`, commit `531b6da8`; downloaded on the user's click (Studio → AI Vision), 0.6.0 |
+| MediaPipe pose landmarks, ONNX (`pose/pose_estimation_mediapipe_2023mar.onnx`) | Apache-2.0 (Google MediaPipe; OpenCV Zoo export) | `opencv/pose_estimation_mediapipe`, commit `8cd55743`; the person crop geometry in `vcstudio/ai/pose.py` follows its Apache-2.0 reference code |
+| PP-OCRv3 text detection (DB), ONNX (`text/text_detection_en_ppocrv3_2023may.onnx`) | Apache-2.0 (PaddlePaddle PaddleOCR; OpenCV Zoo export) | `opencv/text_detection_ppocr`, commit `c299e81a`; privacy shield, 0.6.0 |
 
 SHA-256 of every file: `scripts/fetch_models.py`. The CLIP text tokenizer is implemented in the program
 (`vcstudio/ai/open_vocab.py`, from the model's `tokenizer.json`); no tokenizer library is shipped.

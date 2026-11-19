@@ -61,6 +61,30 @@ HANDS: dict[str, tuple[str, str, str, int]] = {
 }
 HANDS_APPROX_MB = 8
 
+# Body pose (vcstudio/ai/pose.py): MediaPipe person detector + 39-keypoint pose landmarker, ONNX from the OpenCV Zoo
+# (Apache-2.0), about 17 MB, pinned commits.
+PERSON_REV = "opencv/person_detection_mediapipe/resolve/531b6da87204aa40aa5cc680b4d032dd09b5055e/"
+POSE_REV = "opencv/pose_estimation_mediapipe/resolve/8cd55743af63a8578effaf144a68cb58f6450fe9/"
+POSE: dict[str, tuple[str, str, str, int]] = {
+    "pose/person_detection_mediapipe_2023mar.onnx": (
+        HF + PERSON_REV + "person_detection_mediapipe_2023mar.onnx",
+        "47fd5599d6fa17608f03e0eb0ae230baa6e597d7e8a2c8199fe00abea55a701f", "Apache-2.0", 11990159),
+    "pose/pose_estimation_mediapipe_2023mar.onnx": (
+        HF + POSE_REV + "pose_estimation_mediapipe_2023mar.onnx",
+        "9d89c599319a18fb7d2e28451a883476164543182bafca5f09eb2cf767ed2f3f", "Apache-2.0", 5557238),
+}
+POSE_APPROX_MB = 17
+
+# Text regions for the privacy shield (vcstudio/ai/text_detect.py): PP-OCRv3 DB text detector (PaddlePaddle,
+# Apache-2.0) from the OpenCV Zoo, about 2.4 MB, pinned commit. Finds where text is; recognition is separate.
+TEXTDET_REV = "opencv/text_detection_ppocr/resolve/c299e81aedeaf5d4f741fccccea491fb32db005f/"
+TEXT: dict[str, tuple[str, str, str, int]] = {
+    "text/text_detection_en_ppocrv3_2023may.onnx": (
+        HF + TEXTDET_REV + "text_detection_en_ppocrv3_2023may.onnx",
+        "03f550c6b406fda8bf54bd8327815f6c7e2edd98cea02348c93d879254366587", "Apache-2.0", 2423490),
+}
+TEXT_APPROX_MB = 3
+
 # CLIP ViT-B/32 (OpenAI, MIT), 8-bit ONNX (Xenova, Transformers.js), pinned commit, about 147 MB: checks what OWLv2
 # found against the query text, and finds objects like an example picture (vcstudio/ai/clip.py). The text model uses
 # the CLIP tokenizer that comes with OWLv2 (same vocabulary), so it is only useful with the open-vocabulary models.

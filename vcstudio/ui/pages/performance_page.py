@@ -71,7 +71,8 @@ class PerformancePage:
         lay.addWidget(res)
         lay.addStretch()
 
-    MODULE_LABELS = {"background": "Background segmentation", "detector": "Detection (objects, faces)"}
+    MODULE_LABELS = {"vision": "AI Vision (face, pose, hands)", "background": "Background segmentation",
+                     "detector": "Detection (objects, faces)"}
     LOAD_LABELS = {"idle": "no video", "ok": "keeping up", "overloaded": "overloaded", "recovering": "recovering",
                    "maintenance": "maintenance job running"}
 

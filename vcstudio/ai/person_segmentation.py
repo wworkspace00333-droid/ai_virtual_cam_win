@@ -197,9 +197,32 @@ class BackgroundSegmenter:
 _weights_cache: tuple | None = None
 
 
-def _weights(mask192: np.ndarray, edge: float, w: int, h: int, key) -> tuple[np.ndarray, np.ndarray]:
+GUIDE_SIDE = 480                   # the guided filter runs at this long side (Quality mode)
+
+
+def guided_refine(mask: np.ndarray, guide_bgr: np.ndarray, radius: int = 6, eps: float = 1e-3) -> np.ndarray:
+    """Edge-aware mask refinement (guided filter, He et al. 2010, grey guide): the person mask follows the picture's
+    own edges — hair, shoulders, fingers — instead of the 192x192 model grid. Runs at GUIDE_SIDE (box filters only;
+    ~4 ms on the 2-core server). `mask` float 0..1 of any size; returns float32 0..1 at the guide's size."""
+    gh, gw = guide_bgr.shape[:2]
+    k = GUIDE_SIDE / max(gw, gh)
+    sw, sh = max(8, int(gw * k)), max(8, int(gh * k))
+    I = cv2.cvtColor(cv2.resize(guide_bgr, (sw, sh), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2GRAY)
+    I = I.astype(np.float32) / 255.0
+    P = cv2.resize(np.asarray(mask, np.float32), (sw, sh), interpolation=cv2.INTER_LINEAR)
+    box = (2 * radius + 1, 2 * radius + 1)
+    mI, mP = cv2.boxFilter(I, -1, box), cv2.boxFilter(P, -1, box)
+    cov = cv2.boxFilter(I * P, -1, box) - mI * mP
+    var = cv2.boxFilter(I * I, -1, box) - mI * mI
+    a = cov / (var + eps)
+    b = mP - a * mI
+    q = cv2.boxFilter(a, -1, box) * I + cv2.boxFilter(b, -1, box)
+    return np.clip(q, 0.0, 1.0)
+
+
+def _weights(mask192: np.ndarray, edge: float, w: int, h: int, key, guide=None) -> tuple[np.ndarray, np.ndarray]:
     global _weights_cache
-    ck = (key, round(float(edge), 4), w, h)
+    ck = (key, round(float(edge), 4), w, h, guide is not None)
     c = _weights_cache
     if key is not None and c is not None and c[0] == ck:
         return c[1], c[2]
@@ -207,6 +230,8 @@ def _weights(mask192: np.ndarray, edge: float, w: int, h: int, key) -> tuple[np.
     # remapped, then sampled bilinearly); remapping 2 M full-size values cost ~11 of the ~24 ms per 1080p frame
     lo, hi = max(0.0, edge - 0.25), min(1.0, edge + 0.25)
     small_m = np.clip((np.asarray(mask192, np.float32) - lo) / max(1e-6, hi - lo), 0.0, 1.0)
+    if guide is not None:                              # Quality: refine against the picture's edges first
+        small_m = guided_refine(small_m, guide)
     m = cv2.resize(small_m, (w, h), interpolation=cv2.INTER_LINEAR)
     inv = cv2.resize(1.0 - small_m, (w, h), interpolation=cv2.INTER_LINEAR)
     if key is not None:
@@ -222,17 +247,18 @@ def blur_scale(strength: int) -> int:
 
 def composite_background(frame_bgra: np.ndarray, mask192: np.ndarray, mode: str, strength: int = 25,
                          image_bgra: np.ndarray | None = None, edge: float = 0.5,
-                         out: np.ndarray | None = None, mask_key=None) -> np.ndarray:
+                         out: np.ndarray | None = None, mask_key=None, refine: bool = False) -> np.ndarray:
     """Blend: person from the frame, background blurred (mode "blur") or replaced (mode "image").
 
     The mask is upscaled with a soft edge: values are remapped around `edge` (0..1) so the outline is crisp but not
     aliased. Blur runs on a 1/4 or 1/8 size copy (much cheaper than a full-size Gaussian, visually the same for a
     background). `mask_key` (e.g. the mask's version number) lets frames that share a mask reuse its upscaled blend
-    weights. Returns a new BGRA array (or `out`, written in place)."""
+    weights. `refine` (Quality mode) runs the guided filter against this frame once per mask version.
+    Returns a new BGRA array (or `out`, written in place)."""
     h, w = frame_bgra.shape[:2]
     if mode not in ("blur", "image") or (mode == "image" and image_bgra is None):
         return frame_bgra
-    m, inv = _weights(mask192, edge, w, h, mask_key)
+    m, inv = _weights(mask192, edge, w, h, mask_key, frame_bgra[..., :3] if refine else None)
     if mode == "blur":
         k = max(1, int(strength)) | 1
         f = blur_scale(strength)

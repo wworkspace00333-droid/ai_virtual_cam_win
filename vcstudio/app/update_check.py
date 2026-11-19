@@ -95,5 +95,9 @@ def check(current: str, opener: Callable[[str], object] | None = None) -> Update
     info.url = url if url.startswith(PAGE_PREFIX) else PAGE_PREFIX      # never link anywhere else
     info.prerelease = bool(r.get("prerelease"))
     cur = parse_version(current)
-    info.newer = cur is not None and v > cur
+    if cur is None:                                  # a preview build ("0.6.0-preview"): its final release is newer
+        m = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)-[0-9A-Za-z.]+", (current or "").strip())
+        info.newer = m is not None and v >= tuple(int(x) for x in m.groups())
+    else:
+        info.newer = v > cur
     return info

@@ -44,6 +44,8 @@ class SceneState:
     bg_image: Any = None                     # decoded background image (numpy) or None
     framing: Any = None                      # replacement.framing.FramingConfig
     lighting: Any = None                     # replacement.lighting.LightingConfig
+    multicam: Any = None                     # core.multicam.MulticamConfig (extra sources and layout)
+    color: Any = None                        # replacement.color.ColorConfig (grading, LUT)
 
     @property
     def replacement_active(self) -> bool:
@@ -59,10 +61,21 @@ def build_state(name: str, rois, replacement, background, body: dict | None = No
     """Snapshot of the services after they loaded a profile (called before publishing)."""
     from vcstudio.replacement.framing import FramingConfig
     from vcstudio.replacement.lighting import LightingConfig
+    from vcstudio.core.multicam import MulticamConfig
     specs, assets = replacement.state()
     cfg, image = background.snapshot() if background is not None else (None, None)
+    b = body or {}
+    try:
+        from vcstudio.replacement.color import ColorConfig
+        color = ColorConfig.from_profile(b)
+    except ImportError:                      # colour studio not in this build
+        color = None
+    except Exception:                        # a broken LUT file must not stop the scene from loading
+        log.exception("colour settings of scene %s not loaded", name)
+        color = None
     return SceneState(next(_versions), name or "", tuple(rois.rois()), specs, assets, cfg, image,
-                      FramingConfig.from_profile(body or {}), LightingConfig.from_profile(body or {}))
+                      FramingConfig.from_profile(b), LightingConfig.from_profile(b), MulticamConfig.from_profile(b),
+                      color)
 
 
 def scene_data(body: dict) -> dict:

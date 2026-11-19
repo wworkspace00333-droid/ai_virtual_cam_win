@@ -47,12 +47,17 @@ sys.path.insert(0, str(ROOT))
 from vcstudio.ai.model_download import CLIP as _CLIP  # noqa: E402
 from vcstudio.ai.model_download import HANDS as _HANDS  # noqa: E402
 from vcstudio.ai.model_download import OPEN_VOCAB as _OV  # noqa: E402
+from vcstudio.ai.model_download import POSE as _POSE  # noqa: E402
+from vcstudio.ai.model_download import TEXT as _TEXT  # noqa: E402
 
 OPEN_VOCAB = {name: (url, digest, lic) for name, (url, digest, lic, _size) in _OV.items()}
 # optional, --hands: gesture control (MediaPipe palm + hand landmarks, OpenCV Zoo ONNX, Apache-2.0, ~8 MB)
 HANDS = {name: (url, digest, lic) for name, (url, digest, lic, _size) in _HANDS.items()}
 # optional, --clip: CLIP ViT-B/32 (OpenAI, MIT, Xenova 8-bit ONNX, ~147 MB) for checking OWLv2 finds and image queries
 CLIP = {name: (url, digest, lic) for name, (url, digest, lic, _size) in _CLIP.items()}
+# optional, --pose / --text (0.6.0): MediaPipe person + pose (~17 MB), PP-OCRv3 text detection (~2.4 MB), Apache-2.0
+POSE = {name: (url, digest, lic) for name, (url, digest, lic, _size) in _POSE.items()}
+TEXT = {name: (url, digest, lic) for name, (url, digest, lic, _size) in _TEXT.items()}
 
 
 def sha256(p: Path) -> str:
@@ -70,9 +75,12 @@ def main() -> int:
     ap.add_argument("--open-vocab", action="store_true", help="also the optional OWLv2 + SAM 2.1 models (~220 MB)")
     ap.add_argument("--hands", action="store_true", help="also the optional hand models for gestures (~8 MB)")
     ap.add_argument("--clip", action="store_true", help="also CLIP ViT-B/32 for check + image query (~147 MB)")
+    ap.add_argument("--pose", action="store_true", help="also body pose models for AI Vision (~17 MB)")
+    ap.add_argument("--text", action="store_true", help="also the text detector for the privacy shield (~2.4 MB)")
     a = ap.parse_args()
     bad = 0
-    todo = dict(MODELS, **(OPEN_VOCAB if a.open_vocab else {}), **(HANDS if a.hands else {}), **(CLIP if a.clip else {}))
+    todo = dict(MODELS, **(OPEN_VOCAB if a.open_vocab else {}), **(HANDS if a.hands else {}), **(CLIP if a.clip else {}),
+                **(POSE if a.pose else {}), **(TEXT if a.text else {}))
     for name, (url, digest, lic) in todo.items():
         dst = a.dir / name
         dst.parent.mkdir(parents=True, exist_ok=True)

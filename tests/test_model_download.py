@@ -84,7 +84,9 @@ def test_off_switches(monkeypatch, paths):
 
 def test_no_other_network_code_in_the_app():
     """The release rule: no network without an explicit user action and documentation. Only model_download.py and
-    update_check.py (both on a click) may open a connection; anything new has to be added here on purpose."""
+    update_check.py (both on a click) may open a connection; anything new has to be added here on purpose.
+    app/remote.py (0.6.0) never connects anywhere: it is the opt-in local server for the user's own phone / browser,
+    off by default and bound to 127.0.0.1 unless the user allows the local network (tests/test_remote.py)."""
     import re
     from pathlib import Path
     pkg = Path(md.__file__).resolve().parents[1]
@@ -92,7 +94,7 @@ def test_no_other_network_code_in_the_app():
                      re.M)
     users = sorted(str(p.relative_to(pkg)).replace("\\", "/") for p in pkg.rglob("*.py")
                    if pat.search(p.read_text(encoding="utf-8")))
-    assert users == ["ai/model_download.py", "app/update_check.py"], users
+    assert users == ["ai/model_download.py", "app/remote.py", "app/update_check.py"], users
 
 
 def test_fetch_models_script_uses_the_same_table():

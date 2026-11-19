@@ -113,3 +113,11 @@ def test_settings_button(monkeypatch, qtbot, paths):
         assert not page.update_btn.isEnabled() and page.update_info.text()
     finally:
         ctx.shutdown()
+
+
+def test_a_preview_build_sees_its_final_release_as_newer():
+    info = uc.check("0.6.0-preview", opener_for([rel("v0.5.3"), rel("v0.6.0-preview")]))
+    assert not info.newer and info.latest == "0.5.3"                    # suffixed tags are never offered
+    info = uc.check("0.6.0-preview", opener_for([rel("v0.5.3"), rel("v0.6.0")]))
+    assert info.newer and info.latest == "0.6.0"
+    assert not uc.check("0.5.3", opener_for([rel("v0.6.0-preview")])).newer

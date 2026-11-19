@@ -16,6 +16,8 @@ class Detection:
     source: str = "yolo"   # yolo | yolo-seg | vision_face
     track_id: int | None = None
     mask: object = None    # uint8 (h, w) box-local silhouette (0..255), segmentation models only
+    points: object = None  # (5, 2) float32 face landmarks in frame pixels (YuNet: right eye, left eye, nose tip,
+    #                        right mouth corner, left mouth corner, as seen in the picture), faces only
 
     @property
     def w(self) -> float:

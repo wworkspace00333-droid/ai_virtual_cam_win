@@ -62,3 +62,15 @@ Conclusion: with this model both features would make results worse, so they are 
 (`vcstudio/ai/clip.py`) and the measurement stay, to test a stronger model (full precision or a larger ViT, a new
 download) the same way. Not measured: matching one specific object (your own mug or logo) rather than a class, which
 is easier for CLIP; coco16 has no such labels.
+
+## 0.6.0 Studio analysers (first measurements, small)
+
+- Head pose (`vcstudio/ai/head_pose.py`): exact on synthetic projections of the 3-D face model (±0.5° for yaw ±30°,
+  pitch ±15°, roll 10°); on the two faces of `tests/data/bus.jpg` the angles are plausible (|yaw| < 20°). Not
+  measured against ground truth on video.
+- Body pose (`vcstudio/ai/pose.py`): on `bus.jpg` the nearest person gets a correct skeleton (head above shoulders above
+  hips above ankles, all inside the person); the MediaPipe person detector found 1 of the 4 people there — it is
+  made for 1-2 people near the camera.
+- Text regions (`vcstudio/ai/text_detect.py`): 5 of 5 printed lines (0.6-1.2 OpenCV scale, ~15-35 px high) found on a
+  synthetic page, 0 boxes on a smooth image; ~8 px text is usually missed; on `bus.jpg` the large bus lettering is
+  found, small signs are missed.
