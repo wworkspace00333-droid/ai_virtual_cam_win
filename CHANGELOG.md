@@ -12,6 +12,8 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
   Runtime providers that can help, and a tier (gpu, gpu-low-vram, cpu, cpu-low). It is written to the start-up log
   and to the diagnostics ZIP, so a report from a user's PC says what the app saw. Software adapters (WARP, the
   Basic Render Driver) are never counted as a GPU.
+- The AI Engine page shows what this PC is (graphics card for AI / AI on the processor, cores, RAM), and turning
+  on "any object by text" on a PC without a usable graphics card says at once to expect seconds per frame.
 
 ### Security
 - The OBS direct-frame reader reads only a shared-memory section owned by this user (or administrators / SYSTEM);

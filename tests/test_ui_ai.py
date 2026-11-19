@@ -188,3 +188,21 @@ def test_effect_mode_and_backend_setting(win, qtbot):
         gpu_ok, gpu_name = metal.available(), "metal"
     name = ctx.replacement.compositor.active.name
     assert name.startswith(gpu_name) if gpu_ok else name == "cpu"
+
+
+def test_hardware_tier_shown_and_open_vocab_warns_without_a_gpu(win, monkeypatch):
+    """The AI page says what this PC is (hardware profile); 'any object by text' warns at once on a PC without a GPU
+    the AI can use, instead of only after seconds per frame."""
+    from vcstudio.ai import open_vocab
+    from vcstudio.core import hardware
+    monkeypatch.setattr(hardware, "_cached", hardware.HardwareProfile(tier="cpu-low", physical_cores=2, ram_total_gb=31.4))
+    ai = win.pages[win.page_keys().index("ai")]
+    assert "This PC" in ai._env_text() and "2 cores" in ai._env_text()
+    page = win.pages[win.page_keys().index("detection")]
+    monkeypatch.setattr(open_vocab, "available", lambda: True)
+    page.ov_on.blockSignals(True); page.ov_on.setChecked(True); page.ov_on.blockSignals(False)
+    page._open_vocab_info()
+    assert "several seconds per frame" in page.ov_info.text()
+    monkeypatch.setattr(hardware, "_cached", hardware.HardwareProfile(gpu_ai="DirectML", ram_total_gb=32, tier="gpu"))
+    page._open_vocab_info()
+    assert "several seconds per frame" not in page.ov_info.text()

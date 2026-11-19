@@ -262,6 +262,12 @@ class DetectionPage:
             self.ov_info.setText(tr("Starts with capture."))
         else:
             self.ov_info.setText("")
+        if self.ov_on.isChecked():
+            from vcstudio.core.hardware import profile
+            if not profile().open_vocab_practical:          # say it here, not only after seconds of waiting
+                self.ov_info.setText(self.ov_info.text() + " " + tr(
+                    "This PC has no graphics card the AI can use (or too little memory): expect several seconds per "
+                    "frame; the camera itself stays smooth."))
 
     def _save_open_vocab(self, *_):
         words = [w.strip() for w in self.ov_text.text().replace(";", ",").split(",") if w.strip()]

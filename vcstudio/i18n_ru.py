@@ -955,6 +955,13 @@ RU: dict[str, str] = {
     "Name in the app": "Название в приложении",
     "Two classes would get the same name: {names}": "Два класса получат одинаковое название: {names}",
     "not enough free memory for SAM 2.1 ({gb:.1f} GB): silhouettes for people only": "Мало свободной памяти для SAM 2.1 ({gb:.1f} ГБ): силуэты только для людей",
+    "This PC has no graphics card the AI can use (or too little memory): expect several seconds per frame; the camera itself stays smooth.":
+        "На этом ПК нет видеокарты, которую может использовать ИИ (или мало памяти): ждите несколько секунд на кадр; сама камера остаётся плавной.",
+    "graphics card for AI": "видеокарта для ИИ",
+    "graphics card with little memory": "видеокарта с малой памятью",
+    "AI on the processor": "ИИ на процессоре",
+    "AI on the processor (few cores)": "ИИ на процессоре (мало ядер)",
+    "This PC: {tier} · {cores} cores · {ram} GB RAM": "Этот ПК: {tier} · ядер: {cores} · ОЗУ {ram} ГБ",
     "{model} could not be used ({err}); using the automatic choice": "Модель {model} не удалось использовать ({err}); работает автоматический выбор",
     "choose a .mlpackage or .mlmodel file (Core ML)": "выберите файл .mlpackage или .mlmodel (Core ML)",
     "Install the model": "Установить",

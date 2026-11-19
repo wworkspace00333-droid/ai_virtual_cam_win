@@ -176,7 +176,14 @@ class AIEnginePage:
             import onnxruntime as ort
             gpus = ", ".join(g["name"] for g in hardware_gpus()) or tr("no hardware GPU (CPU inference)")
             provs = ", ".join(p.replace("ExecutionProvider", "") for p in onnx_providers())
-            return tr("GPU: {gpus} · ONNX Runtime {ver}: {provs}", gpus=gpus, ver=ort.__version__, provs=provs)
+            from vcstudio.core.hardware import profile
+            p = profile()
+            tiers = {"gpu": tr("graphics card for AI"), "gpu-low-vram": tr("graphics card with little memory"),
+                     "cpu": tr("AI on the processor"), "cpu-low": tr("AI on the processor (few cores)")}
+            first = tr("GPU: {gpus} · ONNX Runtime {ver}: {provs}", gpus=gpus, ver=ort.__version__, provs=provs)
+            second = tr("This PC: {tier} · {cores} cores · {ram} GB RAM", tier=tiers.get(p.tier, p.tier),
+                        cores=p.physical_cores, ram=f"{p.ram_total_gb:.0f}")
+            return first + "\n" + second
         m, c = metal_info(), coreml_info()
         return tr("Metal: {name} · GPU working set {gb} GB · Core ML: {coreml}", name=m.get('name', tr('unavailable')),
                   gb=m.get('recommended_working_set_gb', '?'),
