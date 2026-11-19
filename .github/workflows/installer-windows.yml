@@ -142,7 +142,9 @@ jobs:
               "``Get-FileHash .\$($exe.Name) -Algorithm SHA256`` must equal ``$hash``.",
               "The installer is not code-signed yet: SmartScreen shows ""Windows protected your PC"" -> More info -> Run anyway.")
             $notes -join "`n" | Out-File -Encoding utf8 notes.md
-            $pre = if ($preview) { @("--prerelease") } else { @() }
+            # an array even for one flag: splatting a plain string passes its characters one by one ("-", "-", ...)
+            [string[]]$pre = @()
+            if ($preview) { $pre += "--prerelease" }
             gh release create $env:TAG --repo $env:GITHUB_REPOSITORY --verify-tag --draft @pre `
               --title $label --notes-file notes.md
             if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
