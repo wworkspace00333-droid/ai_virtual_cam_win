@@ -40,6 +40,15 @@ at **26 fps** (38 ms per frame); with the guard (expensive effects skipped while
 keeps 30.0 / 58.6 fps. Vision and the privacy shield run on their own threads: the output thread only draws their
 newest results, so their cost shows as CPU, not as latency.
 
+## Soak: everything on for 10 minutes
+
+`scripts/pro060_soak.py --minutes 10` (raw: [pro060_soak.json](pro060_soak.json)): 720p30 synthetic input with an
+extra camera in PiP, colour grading, gradient background, vision (face + pose, 4/s), privacy shield (all text, 1/s)
+and an automation timer rule, all at once. Result: **pass** — average 29.9 fps (lowest 10-second window 27.1),
+0 render errors, 0 pipeline restarts, memory 406 → 371 MB (growth after the first 2 minutes by linear fit:
+7.2 MB per 10 minutes, below the 50 MB limit), vision 4.0 analyses/s throughout, 597 text-detection runs, 19 of 20
+expected timer rules fired (the 20th was due at the stop).
+
 ## Component measurements (same machine)
 
 | Component | Measurement |

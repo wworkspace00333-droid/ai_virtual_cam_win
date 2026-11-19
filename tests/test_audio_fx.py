@@ -135,3 +135,61 @@ def test_recording_service_applies_the_chain(paths):
         ctx.recording.recorder = None
     finally:
         ctx.shutdown()
+
+
+class FakeDevice:
+    def __init__(self):
+        self.written, self.released, self.closed = [], [], False
+
+    def write(self, hdr):
+        self.written.append(hdr)
+
+    def release(self, hdr):
+        self.released.append(hdr)
+
+    def close(self):
+        self.closed = True
+
+
+def test_monitor_queue_is_bounded_and_reuses_finished_blocks():
+    from vcstudio.core import audio_monitor as am
+    dev = FakeDevice()
+    m = am.Monitor(device_factory=lambda: dev)
+    assert m.start() and m.running
+    blk = i16(tone(secs=0.02))
+    for _ in range(am.MAX_IN_FLIGHT + 3):                   # the device plays nothing: queue fills, rest dropped
+        m.push(blk)
+    assert m.played == am.MAX_IN_FLIGHT and m.dropped == 3
+    for h in dev.written:
+        h.dwFlags |= am.WHDR_DONE                          # the device finished them
+    m.push(blk)
+    assert m.played == am.MAX_IN_FLIGHT + 1 and len(dev.released) == am.MAX_IN_FLIGHT
+    m.stop()
+    assert dev.closed and not m.running
+
+
+def test_monitor_without_output_device_reports_and_does_not_break_recording(paths):
+    from vcstudio.core import audio_monitor as am
+
+    def no_device():
+        raise OSError("no audio output (waveOutOpen error 2)")
+    m = am.Monitor(device_factory=no_device)
+    assert not m.start() and "no audio output" in m.error
+    m.push(i16(tone(secs=0.01)))                          # ignored, no exception
+    from vcstudio.app.application import AppContext
+    ctx = AppContext(paths, configure_logging=False)
+    try:
+        ctx.recording.monitor = m
+        got = []
+
+        class Rec:
+            active = True
+
+            def push_audio(self, s, t):
+                got.append(s)
+        ctx.recording.recorder = Rec()
+        ctx.recording._on_audio(i16(tone(secs=0.02)), 0.0)
+        assert got                                         # the file still gets its sound
+        ctx.recording.recorder = None
+    finally:
+        ctx.shutdown()

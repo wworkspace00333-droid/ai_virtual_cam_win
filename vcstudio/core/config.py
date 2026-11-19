@@ -145,7 +145,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "audio": {"gain_db": 0.0, "mute": False, "denoise": False, "denoise_strength": 0.7, "gate": False,
               "gate_threshold_db": -50.0, "eq": False, "eq_low_db": 0.0, "eq_mid_db": 0.0, "eq_high_db": 0.0,
               "comp": False, "comp_threshold_db": -20.0, "comp_ratio": 3.0, "comp_makeup_db": 0.0, "agc": False,
-              "agc_target_db": -20.0, "agc_max_gain_db": 18.0, "limiter": True, "limiter_ceiling_db": -1.0},
+              "agc_target_db": -20.0, "agc_max_gain_db": 18.0, "limiter": True, "limiter_ceiling_db": -1.0,
+              "monitor": False},                 # hear the processed microphone (headphones!)
     "color_presets": {},         # Colour Studio presets: name -> colour settings (vcstudio/ui/studio/color_tab.py)
     "vision": {"enabled": False, "fps": 6, "face": True, "pose": True, "hands": False, "overlay": True},
     "hotkeys": dict(DEFAULT_HOTKEYS),

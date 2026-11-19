@@ -14,7 +14,7 @@ from vcstudio.ui.widgets import Card
 
 TRIGGER_LABELS = {"person_detected": "Person appears", "person_lost": "Nobody in view", "people_count":
                   "Number of people (e.g. >= 2)", "object_detected": "Object appears (class name)",
-                  "face_count_changed": "Number of faces changes", "gesture": "Gesture (open_palm, victory, …)",
+                  "face_count_changed": "Number of faces changes", "gesture": "Gesture (open_palm, victory, hand_raised, …)",
                   "camera_disconnected": "Camera lost (main or cam1…)", "recording_started": "Recording starts",
                   "recording_stopped": "Recording stops", "timer": "Every N seconds", "hotkey":
                   "Automation hotkey 1-4", "manual": "Only when run by hand"}

@@ -422,6 +422,8 @@ class RecordingService:
         from vcstudio.core.audio_fx import AudioChain, AudioFxConfig
         self.fx = AudioChain(AudioFxConfig.from_settings(settings))   # Audio Studio chain (vcstudio/core/audio_fx.py)
         self.metering = False                            # the Audio Studio page wants live meters without recording
+        from vcstudio.core.audio_monitor import Monitor
+        self.monitor = Monitor()                         # hear the processed microphone (vcstudio/core/audio_monitor.py)
         self._lock = threading.Lock()
         self.apply_settings()
 
@@ -434,6 +436,8 @@ class RecordingService:
             samples = self.fx.process(samples)
         except Exception:                                # a DSP bug must never cost the recording its sound
             log.exception("audio processing failed; raw microphone used")
+        if self.monitor.running:
+            self.monitor.push(samples)
         rec, rp = self.recorder, self.replay
         if rec is not None:
             rec.push_audio(samples, t)
@@ -443,7 +447,7 @@ class RecordingService:
     def _sync_audio(self) -> None:
         """Run the microphone exactly while a recording or the instant replay wants sound."""
         dev = self.audio_device()
-        want = bool(dev) and (self.recording or self.replay is not None or self.metering)
+        want = bool(dev) and (self.recording or self.replay is not None or self.metering or self.monitor.running)
         cur = self.audio
         if cur is not None and (not want or cur.device != dev):
             cur.stop()
@@ -514,6 +518,13 @@ class RecordingService:
     def apply_audio_fx(self) -> None:
         from vcstudio.core.audio_fx import AudioFxConfig
         self.fx.configure(AudioFxConfig.from_settings(self.settings))
+        want = bool((self.settings.get("audio") or {}).get("monitor", False))
+        if want and not self.monitor.running:
+            if self.monitor.start():
+                self._log("INFO", "microphone monitoring on")
+        elif not want and self.monitor.running:
+            self.monitor.stop()
+        self._sync_audio()
 
     def apply_settings(self) -> None:
         on = bool(self.settings.get("recording.replay_enabled"))
@@ -551,6 +562,7 @@ class RecordingService:
         self.stop_recording()
         if self.replay is not None:
             self.replay.stop()
+        self.monitor.stop()
         if self.audio is not None:
             self.audio.stop()
             self.audio = None

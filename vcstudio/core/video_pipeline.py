@@ -408,7 +408,14 @@ class VideoPipeline:
         from vcstudio.core.pixelbuffer import pixel_buffer_for
         try:
             self.framer.cfg = fcfg
-            rect = self.framer.update(self.ai.tracked_at(frame.pts), frame.width, frame.height, frame.pts)
+            tracked = list(self.ai.tracked_at(frame.pts))
+            vs = self.vision
+            if vs is not None and vs.cfg.enabled and not any(o.label in ("person", "face") for o in tracked):
+                r = vs.result_for(frame.pts)              # detector off or blind: frame by pose / face points
+                if r is not None:
+                    from vcstudio.ai.vision import framing_objects
+                    tracked += framing_objects(r)
+            rect = self.framer.update(tracked, frame.width, frame.height, frame.pts)
             with out.bgra() as a:
                 framed = self.framer.apply(a, rect)
                 if framed is a:

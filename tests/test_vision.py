@@ -188,3 +188,62 @@ def test_pipeline_draws_the_overlay(paths):
     finally:
         ctx.stop_capture()
         ctx.shutdown()
+
+
+def _pose(points: dict, vis_default=0.0):
+    L = np.zeros((39, 3), np.float32)
+    v = np.full(39, vis_default, np.float32)
+    for i, (x, y) in points.items():
+        L[i, :2] = (x, y)
+        v[i] = 0.9
+    return pose.Pose(0.9, L, v, (0, 0, 1, 1))
+
+
+def test_hand_raised_rule():
+    from vcstudio.ai.vision import hand_raised
+    body = {0: (100, 50), 11: (130, 100), 12: (70, 100)}
+    assert not hand_raised([_pose({**body, 15: (140, 160), 16: (60, 160)})])         # hands down
+    assert hand_raised([_pose({**body, 15: (140, 30)})])                             # wrist above the nose
+    no_nose = {11: (130, 100), 12: (70, 100)}
+    assert hand_raised([_pose({**no_nose, 16: (60, 60)})])                           # well above the shoulders
+    assert not hand_raised([_pose({**no_nose, 16: (60, 90)})])                       # just above: not raised
+    assert not hand_raised([])
+
+
+def test_hand_raised_fires_once_per_raise():
+    from vcstudio.ai.vision import HAND_HOLD_S, HAND_RELEASE_S, VisionResult, VisionService
+    vs = VisionService(None, None)
+    got = []
+    vs.listeners.append(got.append)
+    up = VisionResult(0, 100, 100, poses=[_pose({0: (50, 40), 15: (60, 10)})])
+    down = VisionResult(0, 100, 100, poses=[_pose({0: (50, 40), 15: (60, 90)})])
+    t = 0.0
+    for _ in range(10):                                                              # held: fires once
+        vs.body_events(up, t)
+        t += 0.2
+    assert got == ["hand_raised"]
+    vs.body_events(down, t)
+    vs.body_events(down, t + HAND_RELEASE_S / 2)
+    vs.body_events(up, t + HAND_RELEASE_S / 2 + 0.05)                                # down too briefly
+    vs.body_events(up, t + HAND_RELEASE_S / 2 + HAND_HOLD_S + 0.1)
+    assert got == ["hand_raised"]
+    t += 5
+    vs.body_events(down, t)
+    vs.body_events(down, t + HAND_RELEASE_S + 0.01)                                  # re-armed
+    vs.body_events(up, t + 1)
+    vs.body_events(up, t + 1 + HAND_HOLD_S + 0.01)
+    assert got == ["hand_raised", "hand_raised"] and vs.events_fired == 2
+
+
+def test_framing_objects_from_pose_and_faces():
+    from vcstudio.ai.vision import FaceInfo, VisionResult, framing_objects
+    from vcstudio.replacement.framing import AutoFramer, FramingConfig
+    p = _pose({0: (300, 100), 11: (340, 150), 12: (260, 150), 23: (330, 300), 24: (270, 300)})
+    r = VisionResult(0, 640, 360, poses=[p], faces=[FaceInfo((280, 80, 320, 120), np.zeros((5, 2)))])
+    objs = framing_objects(r)
+    person = next(o for o in objs if o.label == "person")
+    assert person.y0 < 100 and person.x0 == 260 and person.y1 == 300               # head room added above the nose
+    f = AutoFramer()
+    f.cfg = FramingConfig(enabled=True)
+    target = f.target(objs, 640, 360)
+    assert target is not None and target[2] < 640                                   # crops in on the person

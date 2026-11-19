@@ -21,6 +21,7 @@ WARP = {"name": "Microsoft Basic Render Driver", "vendor": "0x1414", "vendor_id"
     ([WARP], DML, 2, 31.4, "cpu-low", ""),                              # this server: WARP is not a GPU
     ([], DML, 8, 16.0, "cpu", ""),
     ([NVIDIA], ["CPUExecutionProvider"], 8, 32.0, "cpu", ""),           # a GPU but no GPU provider in the package
+    ([{**NVIDIA, "d3d12": False}], DML, 8, 32.0, "cpu", ""),             # an old GPU without Direct3D 12
 ])
 def test_tiers(gpus, providers, cores, ram, tier, ai):
     t, gpu_ai, notes = classify(gpus, providers, cores, ram)
@@ -45,3 +46,14 @@ def test_probe_reads_this_machine():
     assert p.tier in ("gpu", "gpu-low-vram", "cpu", "cpu-low") and p.tier in p.summary()
     if not p.gpus:
         assert p.gpu_ai == "" and p.tier.startswith("cpu")
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="DXGI / Direct3D")
+def test_adapter_details_driver_and_feature_levels():
+    from vcstudio.platform.win.sysinfo import display_adapters
+    ads = display_adapters(details=True)
+    assert ads                                                            # at least the Basic Render Driver
+    for a in ads:
+        assert a["driver_version"].count(".") == 3
+        assert a["d3d11_feature_level"] in ("12_1", "12_0", "11_1", "11_0", "10_1", "10_0", "9_3", "9_2", "9_1")
+        assert isinstance(a["d3d12"], bool)

@@ -60,8 +60,10 @@ def classify(gpus: list[dict], providers: list[str], physical: int, ram_total_gb
     if best is not None:
         if "CUDAExecutionProvider" in providers and best.get("vendor") == "NVIDIA":
             gpu_ai = "CUDA"
-        elif "DmlExecutionProvider" in providers:
+        elif "DmlExecutionProvider" in providers and best.get("d3d12", True):
             gpu_ai = "DirectML"
+        elif "DmlExecutionProvider" in providers:
+            notes.append(f"{best.get('name', 'the GPU')} has no Direct3D 12 (feature level 11_0): DirectML cannot use it")
         else:
             notes.append("hardware GPU present, but the ONNX Runtime package has no GPU provider")
     if gpu_ai and best is not None:
@@ -97,10 +99,11 @@ def probe() -> HardwareProfile:
         from vcstudio.platform import IS_WINDOWS
         if IS_WINDOWS:
             from vcstudio.platform.win.sysinfo import hardware_gpus
-            gpus = hardware_gpus()               # without WARP / Basic Render Driver (Microsoft, not flagged software)
+            gpus = hardware_gpus(details=True)   # without WARP / Basic Render Driver; + driver, feature levels
     except Exception as e:
         p.notes.append(f"GPU list unavailable: {e}")
-    p.gpus = [{k: g.get(k) for k in ("name", "vendor", "dedicated_vram_mb", "shared_memory_mb")} for g in gpus]
+    p.gpus = [{k: g.get(k) for k in ("name", "vendor", "dedicated_vram_mb", "shared_memory_mb", "driver_version",
+                                     "d3d11_feature_level", "d3d12")} for g in gpus]
     if gpus:
         best = max(gpus, key=lambda g: g.get("dedicated_vram_mb", 0))
         p.best_gpu, p.best_gpu_vram_mb = str(best.get("name", "")), int(best.get("dedicated_vram_mb", 0))

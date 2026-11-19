@@ -9,6 +9,8 @@ docs/TESTING.md; nothing was skipped on purpose to make numbers look better.
 |---|---|---|---|---|
 | Full suite `pytest tests` (offscreen) | **760** | **0** | 40 | 5 min 15 s |
 | Live + stress (`VCS_LIVE=1 VCS_STRESS=1`, camera / capture / integration / packaging / pipeline / vcam / stress files) | **71** | **0** | 16 | 3 min 34 s |
+| Soak, all Studio features at once, 10 min (scripts/pro060_soak.py) | pass | | | 29.9 fps avg, +7.2 MB / 10 min, 0 errors |
+| After the preview build (driver / feature levels, raised hand, pose framing, monitoring): full suite | **768** | **0** | 40 | 5 min 16 s |
 | ruff | clean | | | |
 | mypy (CI scope, 53 files incl. the new core modules) | clean | | | |
 

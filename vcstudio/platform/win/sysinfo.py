@@ -83,6 +83,10 @@ class _GUID(ctypes.Structure):
 
 
 _IID_IDXGIFactory1 = _GUID(0x770AAE78, 0xF26F, 0x4DBA, (ctypes.c_ubyte * 8)(0xA8, 0x29, 0x25, 0x3C, 0x83, 0xD1, 0xB3, 0x87))
+_IID_IDXGIDevice = _GUID(0x54EC77FA, 0x1377, 0x44E6, (ctypes.c_ubyte * 8)(0x8C, 0x32, 0x88, 0xFD, 0x5F, 0x44, 0xC8, 0x4C))
+_IID_ID3D12Device = _GUID(0x189819F1, 0x1DB6, 0x4B57, (ctypes.c_ubyte * 8)(0xBE, 0x54, 0x18, 0x21, 0x33, 0x9B, 0x85, 0xF7))
+FEATURE_LEVELS = {0xC100: "12_1", 0xC000: "12_0", 0xB100: "11_1", 0xB000: "11_0", 0xA100: "10_1", 0xA000: "10_0",
+                  0x9300: "9_3", 0x9200: "9_2", 0x9100: "9_1"}
 VENDORS = {0x10DE: "NVIDIA", 0x1002: "AMD", 0x1022: "AMD", 0x8086: "Intel", 0x1414: "Microsoft", 0x5143: "Qualcomm"}
 DXGI_ADAPTER_FLAG_SOFTWARE = 2
 
@@ -93,8 +97,49 @@ def _vcall(obj, index: int, restype, *argtypes):
     return ctypes.WINFUNCTYPE(restype, ctypes.c_void_p, *argtypes)(vtbl[index])
 
 
-def display_adapters() -> list[dict]:
-    """DXGI adapters in system order: name, vendor, dedicated VRAM, software flag, LUID."""
+def _driver_version(ad) -> str:
+    """User-mode driver version (IDXGIAdapter::CheckInterfaceSupport), e.g. "32.0.15.6094"; "" when unknown."""
+    v = ctypes.c_longlong()
+    fn = _vcall(ad, 9, ctypes.c_long, ctypes.POINTER(_GUID), ctypes.POINTER(ctypes.c_longlong))
+    if fn(ad, ctypes.byref(_IID_IDXGIDevice), ctypes.byref(v)) != 0:
+        return ""
+    x = v.value
+    return f"{(x >> 48) & 0xFFFF}.{(x >> 32) & 0xFFFF}.{(x >> 16) & 0xFFFF}.{x & 0xFFFF}"
+
+
+def _d3d11_feature_level(ad) -> str:
+    """Highest Direct3D 11 feature level of the adapter (a device is created and released at once)."""
+    try:
+        d3d11 = ctypes.WinDLL("d3d11")
+    except OSError:
+        return ""
+    create = d3d11.D3D11CreateDevice
+    for levels in ((0xC100, 0xC000, 0xB100, 0xB000, 0xA100, 0xA000), (0xB000, 0xA100, 0xA000)):
+        arr = (ctypes.c_uint * len(levels))(*levels)
+        dev, ctx, got = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_uint()
+        # D3D_DRIVER_TYPE_UNKNOWN (an explicit adapter), no flags, D3D11_SDK_VERSION 7
+        hr = create(ad, 0, None, 0, arr, len(levels), 7, ctypes.byref(dev), ctypes.byref(got), ctypes.byref(ctx))
+        for obj in (ctx, dev):
+            if obj.value:
+                _vcall(obj, 2, wintypes.ULONG)(obj)
+        if hr == 0:
+            return FEATURE_LEVELS.get(got.value, f"0x{got.value:X}")
+    return ""
+
+
+def _d3d12_ok(ad) -> bool:
+    """Direct3D 12 at feature level 11_0 on this adapter: what DirectML needs (checked without creating a device)."""
+    try:
+        d3d12 = ctypes.WinDLL("d3d12")
+    except OSError:
+        return False
+    hr = d3d12.D3D12CreateDevice(ad, 0xB000, ctypes.byref(_IID_ID3D12Device), None)
+    return hr in (0, 1)                                      # S_FALSE: it would succeed
+
+
+def display_adapters(details: bool = False) -> list[dict]:
+    """DXGI adapters in system order: name, vendor, dedicated VRAM, software flag, LUID; with `details` also the
+    driver version, the Direct3D 11 feature level and Direct3D 12 support (a few ms per adapter)."""
     out: list[dict] = []
     try:
         dxgi = ctypes.WinDLL("dxgi")
@@ -120,6 +165,14 @@ def display_adapters() -> list[dict]:
                                 "shared_memory_mb": int(desc.SharedSystemMemory // 2**20),
                                 "software": bool(desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE),
                                 "luid": (desc.AdapterLuid.HighPart << 32) | desc.AdapterLuid.LowPart})
+                    if details:
+                        for key, fn, default in (("driver_version", _driver_version, ""),
+                                                 ("d3d11_feature_level", _d3d11_feature_level, ""),
+                                                 ("d3d12", _d3d12_ok, False)):
+                            try:
+                                out[-1][key] = fn(ad)
+                            except Exception:            # noqa: BLE001 - details are informative only
+                                out[-1][key] = default
             finally:
                 _vcall(ad, 2, wintypes.ULONG)(ad)              # Release
             i += 1
@@ -128,9 +181,9 @@ def display_adapters() -> list[dict]:
     return out
 
 
-def hardware_gpus() -> list[dict]:
+def hardware_gpus(details: bool = False) -> list[dict]:
     """Adapters that can actually accelerate work (excludes WARP / Basic Render Driver)."""
-    return [a for a in display_adapters()
+    return [a for a in display_adapters(details)
             if not a["software"] and a["vendor_id"] != 0x1414]
 
 

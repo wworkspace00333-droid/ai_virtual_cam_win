@@ -134,6 +134,7 @@ class AppContext:
         self.automation = AutomationEngine(self._automation_snapshot, self.run_action_main,
                                            lambda lv, m: self.db.log_event(lv, "automation", m))
         self.gestures.listeners.append(lambda _aid, g: self.automation.emit("gesture", gesture=g))
+        self.vision.listeners.append(lambda ev: self.automation.emit("gesture", gesture=ev))   # body: hand_raised
         self.automation.configure(self.settings.get("automation"))
         from vcstudio.app.remote import RemoteServer
         self.remote = RemoteServer(self, self.paths.root / "remote_token.bin")

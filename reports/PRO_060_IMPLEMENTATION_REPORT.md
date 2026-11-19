@@ -69,6 +69,13 @@ Files: docs/PRO_060_ARCHITECTURE.md (component map), docs/PRO_060_FEATURE_MATRIX
 - Docs: README, CHANGELOG (Unreleased), THIRD_PARTY_NOTICES (3 new models), scripts/fetch_models.py `--pose --text`,
   scripts/pro060_bench.py.
 
+## After the preview build (same day)
+- `platform/win/sysinfo.py`: per-adapter driver version (CheckInterfaceSupport), Direct3D 11 feature level,
+  Direct3D 12 support; `core/hardware.py` uses them (no DirectML without D3D12).
+- `ai/vision.py`: `hand_raised` + `body_events` (automation trigger), `framing_objects` (pose / face framing when the
+  detector is off); `core/video_pipeline.py` passes them to auto-framing.
+- `core/audio_monitor.py` (new): microphone monitoring through winmm waveOut; Audio Studio checkbox.
+
 ## New dependencies
 None. Everything uses packages already in the venv (numpy, OpenCV, ONNX Runtime, SciPy, PySide6, PyAV) and the
 standard library (http.server, ctypes DPAPI). New downloadable models: MediaPipe person + pose, PP-OCRv3 text

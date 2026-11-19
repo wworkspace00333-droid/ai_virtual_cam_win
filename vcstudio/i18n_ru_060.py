@@ -149,7 +149,8 @@ RU_060: dict[str, str] = {
     # automation
     "Person appears": "Появился человек", "Nobody in view": "Никого нет в кадре",
     "Number of people (e.g. >= 2)": "Число людей (например, >= 2)", "Object appears (class name)": "Появился объект (класс)",
-    "Number of faces changes": "Изменилось число лиц", "Gesture (open_palm, victory, …)": "Жест (open_palm, victory, …)",
+    "Number of faces changes": "Изменилось число лиц",
+    "Gesture (open_palm, victory, hand_raised, …)": "Жест (open_palm, victory, hand_raised, …)",
     "Camera lost (main or cam1…)": "Камера пропала (main или cam1…)", "Recording starts": "Запись началась",
     "Recording stops": "Запись остановлена", "Every N seconds": "Каждые N секунд",
     "Automation hotkey 1-4": "Клавиша автоматизации 1–4", "Only when run by hand": "Только при ручном запуске",
@@ -178,6 +179,9 @@ RU_060: dict[str, str] = {
         "видео, а системному виртуальному микрофону нужен подписанный аудиодрайвер (в этой версии его нет).",
     "Refresh": "Обновить", "No sound": "Без звука", "Show live levels (uses the microphone while on)":
         "Показывать уровни (микрофон включён, пока отмечено)",
+    "Hear the processed microphone (use headphones: speakers feed back)":
+        "Слышать обработанный микрофон (в наушниках: через колонки будет обратная связь)",
+    "monitoring: {e}": "прослушка: {e}",
     "Input": "Вход", "Output": "Выход", "microphone off": "микрофон выключен", "microphone on: {d}": "микрофон: {d}",
     "{state} · input RMS {i} dB · output RMS {o} dB · gate {g} · compressor {c} dB · limiter {lim} dB":
         "{state} · вход RMS {i} дБ · выход RMS {o} дБ · гейт {g} · компрессор {c} дБ · лимитер {lim} дБ",

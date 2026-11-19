@@ -13,6 +13,11 @@ Settings section "vision": enabled, fps (default 6), face (YuNet landmarks + hea
              STALE_S (an overlay from a second ago would be in the wrong place)
   rate       fps × rate_scale; registered with the ResourceScheduler as the lowest-priority module ("vision"), so
              under load it slows first and the camera keeps its frame rate
+  events     "hand_raised": a wrist above the nose (or well above the shoulders) held for HAND_HOLD_S, fired once
+             until the hand comes down for HAND_RELEASE_S; listeners get the event name (automation rules use it
+             as a gesture trigger)
+  framing    framing_objects(result): people (visible pose landmarks, head room added) and faces for auto-framing
+             when the detector is off or sees nobody
 Measured on the 2-core development server without a GPU (CPU, 1080p input): face ≈ 10–15 ms, pose ≈ 30 ms per
 person, hands ≈ 25 ms; together ≈ 60–80 ms per analysed frame, i.e. about 6 fps at most there.
 """
@@ -30,6 +35,8 @@ from vcstudio.core.frame_queue import LatestSlot
 log = logging.getLogger(__name__)
 
 STALE_S = 0.5
+HAND_HOLD_S = 0.6
+HAND_RELEASE_S = 0.5
 
 
 @dataclass(frozen=True)
@@ -96,6 +103,11 @@ class VisionService:
         self.slot: LatestSlot[VisionResult] = LatestSlot()
         self.stats = VisionStats()
         self.rate_scale = 1.0
+        self.listeners: list = []                # callables(event name) for body events ("hand_raised")
+        self._hand_since: float | None = None
+        self._hand_down_since: float | None = None
+        self._hand_armed = True
+        self.events_fired = 0
         self._stop = threading.Event()
         self._t: threading.Thread | None = None
 
@@ -188,6 +200,7 @@ class VisionService:
                 try:
                     res = self.analyse(frame, parts, cfg, Frame)
                     self.slot.put(res)
+                    self.body_events(res, time.monotonic())
                     st = self.stats
                     st.faces, st.poses, st.hands = len(res.faces), len(res.poses), len(res.hands)
                     st.parts_ms = res.ms
@@ -200,6 +213,28 @@ class VisionService:
                 self.stats.fps, n, t_win = n / (time.monotonic() - t_win), 0, time.monotonic()
             target = max(0.5, cfg.fps * max(0.1, self.rate_scale))
             stop.wait(max(0.0, 1.0 / target - (time.monotonic() - t0)))
+
+    def body_events(self, res: VisionResult, now: float) -> None:
+        """Fire "hand_raised" once per raise (held HAND_HOLD_S; re-armed after HAND_RELEASE_S down)."""
+        up = hand_raised(res.poses)
+        if up:
+            self._hand_down_since = None
+            if self._hand_since is None:
+                self._hand_since = now
+            if self._hand_armed and now - self._hand_since >= HAND_HOLD_S:
+                self._hand_armed = False
+                self.events_fired += 1
+                for cb in tuple(self.listeners):
+                    try:
+                        cb("hand_raised")
+                    except Exception:
+                        log.exception("vision listener failed")
+        else:
+            self._hand_since = None
+            if self._hand_down_since is None:
+                self._hand_down_since = now
+            if now - self._hand_down_since >= HAND_RELEASE_S:
+                self._hand_armed = True
 
     def _gesture_hands_live(self) -> bool:
         g = self.gestures
@@ -231,6 +266,48 @@ class VisionService:
             elif self._gesture_hands_live() and abs(self.gestures.last_hands_pts - frame.pts) <= STALE_S:
                 res.hands = list(self.gestures.last_hands)          # reused, not detected twice
         return res
+
+
+def hand_raised(poses, thr: float = 0.5) -> bool:
+    """A wrist (15 / 16) above the nose, or above the shoulder line by half the shoulder width (pure: tested)."""
+    for p in poses:
+        L, vis = p.landmarks, p.visibility
+        sh = [i for i in (11, 12) if vis[i] >= thr]
+        for w in (15, 16):
+            if vis[w] < thr:
+                continue
+            if vis[0] >= thr and L[w, 1] < L[0, 1]:
+                return True
+            if len(sh) == 2:
+                width = abs(L[11, 0] - L[12, 0])
+                if L[w, 1] < min(L[11, 1], L[12, 1]) - 0.5 * width:
+                    return True
+    return False
+
+
+@dataclass(frozen=True)
+class FramingObject:
+    label: str
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+
+
+def framing_objects(r: VisionResult, thr: float = 0.5) -> list[FramingObject]:
+    """People from pose landmarks (with head room) and faces, in the shape auto-framing reads."""
+    out = []
+    for p in r.poses:
+        pts = p.landmarks[p.visibility >= thr, :2]
+        if len(pts) < 3:
+            continue
+        x0, y0 = pts.min(0)
+        x1, y1 = pts.max(0)
+        head = 0.15 * (y1 - y0)                    # landmarks stop at the eyes / nose: leave room above the head
+        out.append(FramingObject("person", float(x0), float(max(0.0, y0 - head)), float(x1), float(y1)))
+    for f in r.faces:
+        out.append(FramingObject("face", *(float(v) for v in f.box)))
+    return out
 
 
 HAND_EDGES = [(0, 1), (1, 2), (2, 3), (3, 4), (0, 5), (5, 6), (6, 7), (7, 8), (5, 9), (9, 10), (10, 11), (11, 12),

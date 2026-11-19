@@ -37,6 +37,8 @@ class AudioTab:
         mic.layout_.addLayout(r)
         self.live = QCheckBox(tr("Show live levels (uses the microphone while on)"))
         mic.layout_.addWidget(self.live)
+        self.monitor = QCheckBox(tr("Hear the processed microphone (use headphones: speakers feed back)"))
+        mic.layout_.addWidget(self.monitor)
         g = QGridLayout()
         self.bars = {}
         for i, (k, lbl) in enumerate((("in", "Input"), ("out", "Output"))):
@@ -79,6 +81,7 @@ class AudioTab:
         self.live.toggled.connect(lambda on: ctx.recording.set_metering(on))
         for cb in self.switches.values():
             cb.toggled.connect(self.save)
+        self.monitor.toggled.connect(self.save)
         for sp in self.nums.values():
             sp.valueChanged.connect(self.save)
 
@@ -109,6 +112,7 @@ class AudioTab:
                 cb.setChecked(bool(getattr(c, k)))
             for k, sp in self.nums.items():
                 sp.setValue(float(getattr(c, k)))
+            self.monitor.setChecked(bool((self.ctx.settings.get("audio") or {}).get("monitor", False)))
         finally:
             self._loading = False
 
@@ -118,6 +122,7 @@ class AudioTab:
         d = dict(self.ctx.settings.get("audio") or {})
         d.update({k: cb.isChecked() for k, cb in self.switches.items()})
         d.update({k: round(sp.value(), 2) for k, sp in self.nums.items()})
+        d["monitor"] = self.monitor.isChecked()
         self.ctx.settings.set("audio", d)
 
     def tick(self) -> None:
@@ -127,6 +132,9 @@ class AudioTab:
         audio = self.ctx.recording.audio
         state = (tr("microphone off") if audio is None else
                  (audio.error or tr("microphone on: {d}", d=audio.device)))
+        mon = self.ctx.recording.monitor
+        if mon.error and self.monitor.isChecked():
+            state += " · " + tr("monitoring: {e}", e=mon.error)
         self.meter_text.setText(tr("{state} · input RMS {i} dB · output RMS {o} dB · gate {g} · compressor {c} dB · "
                                    "limiter {lim} dB", state=state, i=f"{m.in_rms_db:.0f}", o=f"{m.out_rms_db:.0f}",
                                    g=tr("open") if m.gate_open else tr("closed"), c=f"{m.comp_gain_db:.1f}",

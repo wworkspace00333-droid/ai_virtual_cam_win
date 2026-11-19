@@ -7,6 +7,13 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+### Added
+- The hardware profile lists each graphics adapter's driver version, Direct3D 11 feature level and Direct3D 12
+  support; a GPU without Direct3D 12 is no longer counted as usable for DirectML.
+- AI Vision: a raised hand (pose) is an event automation rules can use ("hand_raised"); auto-framing uses pose and
+  face points when the object detector is off or sees nobody.
+- Audio Studio: hear the processed microphone (monitoring, headphones), with a bounded queue so the delay never grows.
+
 ## [0.6.0-preview] — 2026-11-19
 
 0.6.0 Professional, preview build for testing on real PCs (a pre-release, not offered by "Check for updates" in
