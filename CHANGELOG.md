@@ -7,6 +7,10 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+## [0.4.8] — 2026-11-19
+
+Silhouettes of people without a download; Hide face finds distant faces.
+
 ### Added
 - **Object (silhouette) replacement of people works out of the box.** Without a segmentation model the app cut
   people out with SAM 2.1 (a separate download, ~4 s per frame without a graphics card) or not at all; now each
@@ -274,6 +278,7 @@ for real hardware are still to be measured (docs/HARDWARE_CHECKLIST.md).
 
 macOS releases; see the history of the original repository.
 
+[0.4.8]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.8
 [0.4.7]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.7
 [0.4.6]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.6
 [0.4.5]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.5

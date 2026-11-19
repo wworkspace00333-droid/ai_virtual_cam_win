@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 ROOT = Path(SPECPATH).parent
-VERSION = os.environ.get("VCS_VERSION", "0.4.7")
+VERSION = os.environ.get("VCS_VERSION", "0.4.8")
 
 datas = []
 for mp in sorted((ROOT / "models").glob("*.mlpackage")):
