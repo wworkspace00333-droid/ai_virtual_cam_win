@@ -151,7 +151,7 @@ watchdog acts on a longer threshold; the output was unaffected, which is the req
 | Run | Result |
 |---|---|
 | 20 min soak (heavy profile, fault injection every ~37 s, MF client reading 60 fps) | 32/32 faults recovered (max 0.77–1 s), memory 766 → 769 MB (max 1194 during a fault), output median 60 / p05 42 fps, client median 60, 0 render/AI errors, 0 restarts, handles 943–1074 (slope +11/h, inconclusive over 20 min) |
-| 60 min soak | **pending — filled in below when the run finishes** |
+| 60 min soak (same profile and fault injection) | 96/96 faults recovered (max ≈ 1.0 s), memory 764 → 780 MB (slope +2 MB/h, max 1231 during a fault), threads 31–42 (slope −0.5/h), handles 935–1068 (slope −3.6/h: the +11/h of the 20-min run was noise), 0 render/AI errors, 0 restarts, camera 152,732 frames sent / 0 dropped, client median 60 / p05 59 fps. **Output median 42 / p05 29 fps is not representative**: during this run the auditor ran test suites (incl. OWLv2 at 7 s/frame) on the same 2 cores; the clean 20-min run gave median 60 / p05 42 |
 | Stress tests (24 ROIs, profile churn, input flapping, many players, …) | 7/7 pass |
 | Scene switching / module toggling / camera disconnect | covered by stress + soak fault types (input stall, freeze, disconnect, AI fault, render fault) |
 | Resolution / FPS switching | covered by the 9-configuration matrix (restart per configuration) |

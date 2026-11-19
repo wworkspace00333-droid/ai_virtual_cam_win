@@ -47,6 +47,7 @@ class AppContext:
         self.models = ModelManager(self.paths.models_dir)
         self.ai = AIEngine(self.capture, self.models, event_sink=self.db.log_event)
         self.ai.load_mq(self.paths.root / "auto_model.json")
+        self.ai.baseline = lambda: self.settings.get("performance.auto_baseline")
         from vcstudio.roi.resolver import RoiService
         self.rois = RoiService()
         from vcstudio.replacement.assets import AssetLibrary

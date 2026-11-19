@@ -105,6 +105,7 @@ class AIEngine:
         # per task, models measured too slow for some mode's budget on this machine (p95 ms)
         self.mq_rejected: dict[str, dict[str, float]] = {"detect": {}, "segment": {}}
         self.mq_store = None   # Path: remembers too-slow models across launches (no reload ~30 s after start)
+        self.baseline: Callable[[], dict] | None = None   # first-run measurement {"model", "median_ms"} (settings)
         self.model_failures: dict[str, str] = {}   # chosen models that failed to load (cleared on reconfigure)
         self.mq_note = ""
         self.mq_note_tpl, self.mq_note_args = "", {}
@@ -329,9 +330,27 @@ class AIEngine:
         rejected = self.mq_rejected.setdefault(task, {})
         for m in ranked:
             p95 = rejected.get(m.name)
+            if p95 is None and self._clearly_too_slow(m, budget):
+                continue
             if p95 is None or p95 <= budget:
                 return m
         return ranked[-1]                        # everything too slow: use the smallest anyway
+
+    def _clearly_too_slow(self, m, budget: float) -> bool:
+        """Not measured yet, but the first-run measurement of the smallest model, scaled by file size, puts it far over
+        the budget (MQ_FAST_FACTOR): skip it instead of running it first. On a 2-core CPU a fresh profile started on
+        yolox_s (190 ms) for several seconds before stepping down; borderline models are still tried and measured."""
+        b = self.baseline() if self.baseline is not None else None
+        if not b:
+            return False
+        base = self.models.available().get(str(b.get("model")))
+        try:
+            ms = float(b.get("median_ms") or 0)
+        except (TypeError, ValueError):
+            return False
+        if base is None or ms <= 0 or base.size_mb <= 0 or m.size_mb <= base.size_mb:
+            return False
+        return ms * m.size_mb / base.size_mb > MQ_FAST_FACTOR * budget
 
     def _ensure_open_vocab(self, cfg: DetectionConfig) -> None:
         """'Any object' by text: OWLv2 (+ SAM 2.1 masks when an ROI replaces silhouettes) instead of the COCO model."""
@@ -396,7 +415,13 @@ class AIEngine:
         people_only = bool(cfg.mask_classes) and set(cfg.mask_classes) <= {"person"}
         if person_segmentation.available() and (people_only or not sam_available()):
             return "person"
-        return "sam" if sam_available() else None
+        if not sam_available():
+            return None
+        from vcstudio.ai.open_vocab import NEED_GB, free_gb
+        if person_segmentation.available() and free_gb() < NEED_GB["sam"]:
+            self._note("not enough free memory for SAM 2.1 ({gb:.1f} GB): silhouettes for people only", gb=free_gb())
+            return "person"                      # people still get silhouettes; other classes are skipped
+        return "sam"
 
     def _ensure_box_masks(self, cfg: DetectionConfig, mode: str, how: str = "sam") -> None:
         from vcstudio.ai.open_vocab import BoxMaskDetector

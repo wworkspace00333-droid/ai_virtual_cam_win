@@ -212,7 +212,7 @@ def problems(rep: dict) -> list[str]:
     """What --strict fails on: the parts that must work on any PC, a CI runner included — AI on the CPU and the
     pipeline benchmark. GPU providers and the camera depend on the machine and are only reported."""
     out = []
-    cpu = [r for r in rep.get("ai") or [] if r.get("provider") == "CPU"]
+    cpu = [r for r in rep.get("ai") or [] if str(r.get("provider", "")).startswith("CPU")]
     if not cpu:
         out.append("ai: no model ran on the CPU (models missing from the app folder?)")
     out += [f"ai {r['model']} on CPU: {r['error']}" for r in cpu if r.get("error")]

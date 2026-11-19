@@ -156,11 +156,17 @@ def create_session(path: Path, compute_units: str = "all", cache_dir: Path | Non
             elif save is not None:
                 _remove_quietly(save)
         used = sess.get_providers()[0]
-        label = {"CUDAExecutionProvider": "CUDA", "DmlExecutionProvider": "DirectML",
-                 "CPUExecutionProvider": "CPU"}.get(used, used)
+        names = {"CUDAExecutionProvider": "CUDA", "DmlExecutionProvider": "DirectML", "CPUExecutionProvider": "CPU"}
+        label = names.get(used, used)
         if used == "DmlExecutionProvider":
             _, gname = _best_dml_device()
             label += f" ({gname})" if gname else ""
+        elif used != name:
+            # A GPU provider was requested and the session was created, but ONNX Runtime put the graph on another
+            # provider without an error (seen with DirectML on a PC without a usable adapter). Say so instead of
+            # letting "GPU" settings run on the CPU unnoticed.
+            label += f" ({names.get(name, name)} unavailable)"
+            log.warning("ONNX Runtime: %s requested for %s, but the session runs on %s", name, path.name, used)
         return sess, label
     raise RuntimeError("no ONNX Runtime execution provider could load the model: " + "; ".join(errors))
 

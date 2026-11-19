@@ -67,6 +67,30 @@ def sam_available() -> bool:
     return (d / "vision_encoder_int8.onnx").exists() and (d / "prompt_encoder_mask_decoder_int8.onnx").exists()
 
 
+# Free memory the heavy models need while loading and running (process growth measured on the development server,
+# 2026-11-19: SAM 2.1 tiny ~1.4 GB, OWLv2 base ~2.8 GB). Loading them into too little memory made the whole PC swap.
+NEED_GB = {"owlv2": 2.5, "sam": 1.5}
+
+
+class NotEnoughMemory(RuntimeError):
+    pass
+
+
+def free_gb() -> float:
+    import psutil
+    return psutil.virtual_memory().available / 2**30
+
+
+def check_memory(*parts: str) -> None:
+    """Raise NotEnoughMemory (with a message for the user) unless there is room for the given models."""
+    need = sum(NEED_GB[p] for p in parts)
+    have = free_gb()
+    if have < need:
+        names = " + ".join({"owlv2": "OWLv2", "sam": "SAM 2.1"}[p] for p in parts)
+        raise NotEnoughMemory(f"not enough free memory for {names}: needs about {need:.1f} GB, {have:.1f} GB free. "
+                              "Close other programs or use the built-in detector")
+
+
 class ClipTokenizer:
     """CLIP byte-level BPE from the model's tokenizer.json, in plain Python (no tokenizers / huggingface_hub
     dependency: those bring network code and MPL-licensed parts into the app for a few lines of work).
@@ -274,6 +298,8 @@ class BoxMaskDetector:
     def __init__(self, detector, compute_units: str = "all", mask_classes: list[str] | None = None,
                  max_masks: int = 4, segmenter=None):
         self.det = detector
+        if segmenter is None:
+            check_memory("sam")
         self.sam = segmenter if segmenter is not None else PromptSegmenter(compute_units)
         self.mask_classes = list(mask_classes or [])
         self.max_masks = max_masks
@@ -306,8 +332,10 @@ class OpenVocabPipeline:
 
     def __init__(self, queries: list[str], compute_units: str = "all", cache_dir: Path | None = None,
                  masks: bool = False):
+        with_sam = masks and sam_available()
+        check_memory("owlv2", *(["sam"] if with_sam else []))
         self.owl = OpenVocabDetector(queries, compute_units, cache_dir)
-        self.sam = PromptSegmenter(compute_units) if masks and sam_available() else None
+        self.sam = PromptSegmenter(compute_units) if with_sam else None
         self.masks = self.sam is not None
         self.name = "owlv2-base" + ("+sam2.1" if self.masks else "")
         self.backend = self.owl.backend

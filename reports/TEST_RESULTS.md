@@ -88,7 +88,23 @@ installed camera was run; none failed.
 
 ## 5. 60-minute soak
 
-Filled in from `scripts/analyse_soak.py` after the run (see FULL_PROJECT_AUDIT §7).
+`python -m vcstudio.app.main --soak <dir> --minutes 60` + `scripts/analyse_soak.py <dir>`:
+
+| Metric | Result |
+|---|---|
+| Faults injected / recovered | 96 / 96 (input stall, freeze, passthrough, disconnect, AI and render faults; max recovery ≈ 1.0 s) |
+| Memory | 764 → 780 MB, slope +2 MB/h (no growth); max 1231 MB during a fault |
+| Threads / handles | 31–42 (slope −0.5/h) / 935–1068 (slope −3.6/h) — stable |
+| Errors / restarts | 0 render, 0 AI, 0 pipeline restarts, 0 AI restarts; 12 capture reconnects (injected) |
+| Camera | 152,732 frames sent, 0 dropped; MF client median 60, p05 59 fps |
+| Output fps | median 42, p05 29 — **contaminated**: test suites ran on the same 2 cores during this hour (see FULL_PROJECT_AUDIT §7) |
+
+## 5a. After the post-audit fixes
+
+| Run | Result |
+|---|---|
+| Full suite | **624 passed, 0 failed, 40 skipped** (617 + 7 new tests), 5 min 4 s; no `vcs-*` folder left in `%TEMP%` |
+| Live plugin check (`plugin_live.py`, 1080p60) | 40 ms plugin switched off after 1.3 s, output back to 60.0 fps; plugin hanging 30 s inside a call switched off by the watchdog after 2.4 s, output restarted (1 restart), 60.2 fps, 0 render errors |
 
 ## 6. Not tested here, and why
 

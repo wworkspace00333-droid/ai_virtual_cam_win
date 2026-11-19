@@ -954,6 +954,7 @@ RU: dict[str, str] = {
     "Model's name": "Название в модели",
     "Name in the app": "Название в приложении",
     "Two classes would get the same name: {names}": "Два класса получат одинаковое название: {names}",
+    "not enough free memory for SAM 2.1 ({gb:.1f} GB): silhouettes for people only": "Мало свободной памяти для SAM 2.1 ({gb:.1f} ГБ): силуэты только для людей",
     "{model} could not be used ({err}); using the automatic choice": "Модель {model} не удалось использовать ({err}); работает автоматический выбор",
     "choose a .mlpackage or .mlmodel file (Core ML)": "выберите файл .mlpackage или .mlmodel (Core ML)",
     "Install the model": "Установить",

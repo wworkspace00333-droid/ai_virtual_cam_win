@@ -192,11 +192,11 @@ def pipeline_e2e_selftest(out_path: str, seconds: float = 8.0, out_device: str =
     silhouettes of people magenta; the client verifies magenta pixels where people are.
     """
     import os
-    import tempfile
     import threading
     import numpy as np
     import cv2
-    os.environ["VCSTUDIO_HOME"] = tempfile.mkdtemp(prefix="vcs-e2e-")
+    from vcstudio.core.paths import throwaway_home
+    throwaway_home("vcs-e2e-")                # removed at exit (model cache, ~180 MB)
     from vcstudio.app.application import AppContext
     from vcstudio.core.capture_supervisor import CaptureSupervisor
     from vcstudio.core.frame import Frame

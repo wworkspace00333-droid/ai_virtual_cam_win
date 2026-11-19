@@ -325,3 +325,24 @@ def test_too_slow_models_are_remembered(tmp_path):
     assert b.mq_rejected["detect"] == {"yolo11m": 26.9}
     assert b._max_quality_choice("detect", 25.0).name != "yolo11m"
     AIEngine(None, ModelManager(REPO_MODELS)).load_mq(tmp_path / "missing.json")   # absent file is fine
+
+
+def test_auto_choice_skips_models_the_first_run_measurement_rules_out(tmp_path):
+    """Audit 2026-11-19: a fresh profile on a 2-core CPU started on yolox_s (190 ms per frame against a 25 ms budget)
+    for several seconds. With the first-run measurement of the smallest model, models that scale far over the
+    budget are skipped without running; borderline ones are still tried."""
+    from types import SimpleNamespace
+    from vcstudio.ai.engine import AIEngine
+    from vcstudio.core.capture_supervisor import CaptureSupervisor
+    ms = {"nano": SimpleNamespace(name="nano", size_mb=3.5), "tiny": SimpleNamespace(name="tiny", size_mb=19.3),
+          "s": SimpleNamespace(name="s", size_mb=34.2)}
+    models = SimpleNamespace(available=lambda *a, **k: ms,
+                             ranked=lambda task, include_user=False: [ms["s"], ms["tiny"], ms["nano"]])
+    eng = AIEngine(CaptureSupervisor(), models)
+    assert eng._max_quality_choice("detect", 25.0).name == "s"              # no measurement: largest first, as before
+    eng.baseline = lambda: {"model": "nano", "median_ms": 15.8}           # this server
+    assert eng._max_quality_choice("detect", 25.0).name == "nano"
+    eng.baseline = lambda: {"model": "nano", "median_ms": 3.0}            # a GPU-class PC: s ~29 ms is borderline
+    assert eng._max_quality_choice("detect", 25.0).name == "s"
+    eng.baseline = lambda: {"model": "missing", "median_ms": "x"}         # bad data never blocks the choice
+    assert eng._max_quality_choice("detect", 25.0).name == "s"

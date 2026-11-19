@@ -60,3 +60,25 @@ class AppPaths:
     @classmethod
     def default(cls) -> "AppPaths":
         return cls(_default_root())
+
+
+def throwaway_home(prefix: str) -> Path:
+    """A temporary app data folder for a self-test, soak or benchmark run: sets VCSTUDIO_HOME to it and removes it
+    when the process exits (it holds the optimised-model cache, 170-280 MB, and was left behind by every run).
+    Log files inside are closed first: Windows cannot delete a file that is still open."""
+    import atexit
+    import shutil
+    import tempfile
+    home = Path(tempfile.mkdtemp(prefix=prefix))
+    os.environ["VCSTUDIO_HOME"] = str(home)
+
+    def _remove() -> None:
+        import logging
+        root = logging.getLogger()
+        for h in list(root.handlers):
+            if str(home) in str(getattr(h, "baseFilename", "")):
+                root.removeHandler(h)
+                h.close()
+        shutil.rmtree(home, ignore_errors=True)
+    atexit.register(_remove)
+    return home

@@ -94,3 +94,19 @@ def test_selfcheck_leaves_no_temp_folder(tmp_path, monkeypatch):
     leftovers = [p.name for p in tmp_path.iterdir() if p.name.startswith("vcs-selfcheck-")]
     assert leftovers == []
     assert (tmp_path / "out" / "selfcheck.json").exists()
+
+
+def test_throwaway_home_is_removed_at_exit_even_with_an_open_log(tmp_path):
+    """Soak, pipeline e2e and the GUI scripts used to leave their 170-280 MB data folder in %TEMP% on every run."""
+    import subprocess
+    import sys
+    from pathlib import Path
+    code = ("import logging, sys; from vcstudio.core.paths import throwaway_home; h = throwaway_home('vcs-t-'); "
+            "(h / 'cache').mkdir(); (h / 'cache' / 'm.onnx').write_bytes(b'x' * 1000); "
+            "logging.getLogger().addHandler(logging.FileHandler(h / 'app.log')); logging.getLogger().warning('hi'); "
+            "print(h)")
+    root = Path(__file__).resolve().parents[1]
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=root, timeout=60)
+    home = Path(out.stdout.strip())
+    assert out.returncode == 0 and home.name.startswith("vcs-t-"), out.stderr
+    assert not home.exists()

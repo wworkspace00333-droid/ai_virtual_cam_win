@@ -204,3 +204,56 @@ def test_distant_faces_are_found_in_enlarged_head_crops():
     f, people = scene(0.6)
     faces, _ = fd.detect(f, people)
     assert len(faces) == 2 and fd.head_crops == 0                          # found already: no crops, no duplicates
+
+
+def test_heavy_models_are_not_loaded_into_too_little_memory(monkeypatch):
+    """Audit 2026-11-19: OWLv2 + SAM 2.1 grew the process by ~4 GB on a CPU; without room they now refuse to load with
+    a message, before any model file is opened."""
+    from vcstudio.ai import open_vocab
+    monkeypatch.setattr(open_vocab, "free_gb", lambda: 2.0)
+    with pytest.raises(open_vocab.NotEnoughMemory, match=r"OWLv2 \+ SAM 2.1: needs about 4.0 GB, 2.0 GB free"):
+        open_vocab.check_memory("owlv2", "sam")
+    open_vocab.check_memory("sam")                                         # 1.5 GB fits
+    monkeypatch.setattr(open_vocab, "OpenVocabDetector", lambda *a, **k: pytest.fail("loaded without room"))
+    with pytest.raises(open_vocab.NotEnoughMemory):
+        open_vocab.OpenVocabPipeline(["cup"], "cpu", None, masks=False)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows models")
+def test_low_memory_falls_back_to_people_silhouettes(tmp_path, monkeypatch):
+    from vcstudio.ai import open_vocab, person_segmentation
+    from vcstudio.ai.engine import AIEngine
+    from vcstudio.ai.model_manager import ModelManager
+    from vcstudio.core.capture_supervisor import CaptureSupervisor
+    eng = AIEngine(CaptureSupervisor(), ModelManager(tmp_path))
+    real = eng.models.available
+    monkeypatch.setattr(eng.models, "available", lambda *a, **k: {k2: v for k2, v in real().items() if v.task != "segment"})
+    monkeypatch.setattr(open_vocab, "sam_available", lambda: True)
+    monkeypatch.setattr(open_vocab, "free_gb", lambda: 0.5)
+    cfg = DetectionConfig(need_masks=True, mask_classes=["dog"], detector_model="yolox_nano")
+    assert eng._box_masks_source(cfg) == ("person" if person_segmentation.available() else "sam")
+    assert "people only" in eng.mq_note or not person_segmentation.available()
+
+
+def test_a_silent_provider_fallback_is_labelled(monkeypatch, caplog):
+    """Audit 2026-11-19: a DirectML session on a PC without a usable adapter ran on the CPU without an error. The label
+    now says so, and a warning is logged."""
+    import onnxruntime as ort
+    from vcstudio.ai import onnx_engine
+    from vcstudio.core.resources import models_dir
+    model = models_dir() / "yolox_nano.onnx"
+    if not model.exists():
+        pytest.skip("yolox_nano missing")
+
+    class FakeSession:
+        def __init__(self, *a, **k):
+            pass
+
+        def get_providers(self):
+            return ["CPUExecutionProvider"]
+    monkeypatch.setattr(onnx_engine, "provider_plan", lambda cu: [("DmlExecutionProvider", {"device_id": 0})])
+    monkeypatch.setattr(ort, "InferenceSession", FakeSession)
+    with caplog.at_level("WARNING"):
+        _, label = onnx_engine.create_session(model, "all", None)
+    assert label == "CPU (DirectML unavailable)"
+    assert any("runs on CPUExecutionProvider" in r.getMessage() for r in caplog.records)

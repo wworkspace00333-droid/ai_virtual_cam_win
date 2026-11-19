@@ -20,6 +20,9 @@ log = logging.getLogger(__name__)
 API_VERSION = 1
 MAX_FAILURES = 3                 # in a row: the plugin is switched off
 SLOW_MS = 15.0                   # average above this is shown as "slow" (the output has ~16 ms per frame at 60 fps)
+BUDGET_MS = 25.0                 # average above this (after BUDGET_CALLS calls) switches the plugin off: it would
+BUDGET_CALLS = 30                # hold the camera below ~40 fps (measured: a 40 ms plugin took 1080p60 to 20 fps)
+HANG_MS = 1000.0                 # one call longer than this switches the plugin off at once
 ID_RE = re.compile(r"^[A-Za-z0-9_\-]{1,64}$")
 
 
@@ -108,6 +111,7 @@ class PluginManager:
     the UI thread. Settings: plugins.approved = {id: sha256}, plugins.options = {id: {...}}."""
 
     def __init__(self, folder: Path, settings, log_event: Callable[[str, str], None] | None = None):
+        self.current: tuple[str, float] | None = None   # (plugin id, perf_counter start) of the call in progress
         self.folder = Path(folder)
         self.settings = settings
         self._log = log_event or (lambda lv, m: None)
@@ -264,6 +268,7 @@ class PluginManager:
             view = cur.view()
             view.flags.writeable = False
             t0 = time.perf_counter()
+            self.current = (lp.info.id, t0)
             try:
                 res = lp.obj.process(view, info)
                 if res is not None:
@@ -276,11 +281,45 @@ class PluginManager:
                 if isinstance(e, KeyboardInterrupt):
                     raise
                 self._failed(lp, e)
+            self.current = None
             ms = (time.perf_counter() - t0) * 1000
             i = lp.info
             i.calls += 1
             i.avg_ms = ms if i.calls == 1 else 0.95 * i.avg_ms + 0.05 * ms
+            if i.state == "running" and (ms > HANG_MS or (i.calls >= BUDGET_CALLS and i.avg_ms > BUDGET_MS)):
+                self._too_slow(lp, ms)
         return cur
+
+    def _too_slow(self, lp: _Loaded, ms: float) -> None:
+        """A plugin runs on the output thread: one that does not fit the frame budget lowers the camera's frame rate
+        for every app, so it is switched off (the user can switch it on again after fixing it)."""
+        i = lp.info
+        what = f"one frame took {ms:.0f} ms" if ms > HANG_MS else f"{i.avg_ms:.0f} ms per frame on average"
+        i.error = f"too slow for the camera: {what} (budget {BUDGET_MS:.0f} ms)"
+        self._switch_off(lp, f"plugin {i.id} switched off: {i.error}")
+
+    def stalled(self, seconds: float) -> str | None:
+        """Id of a plugin whose current call has run longer than `seconds` (the watchdog then switches it off before
+        restarting the output, so the new output thread does not call it again)."""
+        cur = self.current
+        if cur is not None and time.perf_counter() - cur[1] > seconds:
+            return cur[0]
+        return None
+
+    def switch_off_stalled(self, pid: str) -> None:
+        for lp in self._active:
+            if lp.info.id == pid:
+                lp.info.error = "stopped responding: its call never returned"
+                self._switch_off(lp, f"plugin {pid} switched off: it stopped responding and froze the camera output")
+                self.current = None
+                return
+
+    def _switch_off(self, lp: _Loaded, message: str) -> None:
+        with self._lock:
+            self._active = tuple(x for x in self._active if x is not lp)
+        lp.info.state = "error"
+        self._log("ERROR", message)
+        log.error(message)
 
     def _failed(self, lp: _Loaded, e: BaseException) -> None:
         lp.consecutive += 1

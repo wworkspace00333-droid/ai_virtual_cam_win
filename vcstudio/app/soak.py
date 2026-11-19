@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 import threading
 import time
 from pathlib import Path
@@ -58,7 +57,8 @@ def run_soak(out_dir: str, minutes: float, out_device: str | None, out_sink: str
     for name in ("SIGTERM", "SIGHUP", "SIGINT", "SIGBREAK"):       # SIGHUP: POSIX only; SIGBREAK: Windows only
         if hasattr(signal, name):
             signal.signal(getattr(signal, name), on_term)
-    os.environ["VCSTUDIO_HOME"] = tempfile.mkdtemp(prefix="vcs-soak-")
+    from vcstudio.core.paths import throwaway_home
+    throwaway_home("vcs-soak-")               # removed at exit (model cache, ~280 MB)
     from vcstudio.app.application import AppContext
     from vcstudio.camera.output import list_cmio_devices
     from vcstudio.core.bench_source import BenchSource, bus_scene

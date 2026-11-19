@@ -7,6 +7,24 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+Fixes from the 2026-11-19 audit (reports/).
+
+### Fixed
+- **A slow plugin no longer drags the camera down.** Plugins run on the output thread; one taking 40 ms per frame
+  held 1080p60 at 20 fps and stayed on. A plugin whose average exceeds 25 ms per frame, or one frame over 1 s, is
+  now switched off with the reason shown; a call that never returns is switched off by the watchdog before the
+  output restarts.
+- The soak, pipeline self-test and GUI test modes never removed their temporary data folder (170-280 MB each, mostly
+  the model cache); dozens of them had filled the development server's disk. They are now removed on exit.
+- "Any object by text" (OWLv2, +SAM 2.1) and SAM silhouettes check free memory first (about 2.5 and 1.5 GB were
+  measured) and refuse with a message instead of pushing the PC into swap; silhouettes then fall back to the
+  built-in person segmentation.
+- A fresh profile no longer starts on a model the PC clearly cannot run: the first-run measurement of the smallest
+  model, scaled by model size, skips models far over the speed mode's budget (on the 2-core server: straight to
+  yolox_nano instead of several seconds on yolox_s at 190 ms per frame).
+- When a GPU provider was requested but ONNX Runtime silently ran the model on the CPU, the AI backend now reads
+  "CPU (DirectML unavailable)" and the log says so.
+
 ## [0.5.1] — 2026-11-19
 
 Fixes updating over an installed version.

@@ -262,3 +262,51 @@ def test_settings_card(qtbot, paths, trust):
         assert (page.plugin_list.item(0).checkState() == Qt.CheckState.Checked) is trust
     finally:
         ctx.shutdown()
+
+
+SLEEPY = """
+    import time
+    API_VERSION = 1
+    NAME = "Sleepy"
+    def create(host):
+        return P()
+    class P:
+        delay = {delay}
+        def process(self, frame, info):
+            time.sleep(P.delay)
+            return None
+"""
+
+
+def test_a_plugin_that_does_not_fit_the_frame_budget_is_switched_off(tmp_path, monkeypatch):
+    """Audit 2026-11-19: a 40 ms plugin held 1080p60 output at 20 fps and stayed on. Over the budget on average it is
+    now switched off; a single call over HANG_MS switches it off at once."""
+    from vcstudio.plugins import host
+    monkeypatch.setattr(host, "BUDGET_CALLS", 5)
+    write(tmp_path, "slow", SLEEPY.format(delay=0.035))
+    logs = []
+    pm = PluginManager(tmp_path, FakeSettings(), lambda lv, m: logs.append((lv, m)))
+    pm.discover(); pm.enable("slow")
+    for _ in range(8):
+        pm.run(frame(), INFO)
+    i = pm.infos["slow"]
+    assert i.state == "error" and "too slow" in i.error and not pm.active
+    assert any(lv == "ERROR" and "slow switched off" in m for lv, m in logs)
+    monkeypatch.setattr(host, "HANG_MS", 50.0)
+    write(tmp_path, "hang", SLEEPY.format(delay=0.08))
+    pm.discover(); pm.enable("hang")
+    pm.run(frame(), INFO)
+    assert pm.infos["hang"].state == "error" and "one frame took" in pm.infos["hang"].error
+
+
+def test_a_plugin_call_that_never_returns_is_reported_and_dropped(tmp_path):
+    import threading
+    write(tmp_path, "stuck", SLEEPY.format(delay=0.6))
+    pm = PluginManager(tmp_path, FakeSettings())
+    pm.discover(); pm.enable("stuck")
+    t = threading.Thread(target=pm.run, args=(frame(), INFO), daemon=True); t.start()
+    time.sleep(0.3)
+    assert pm.stalled(0.1) == "stuck" and pm.stalled(5.0) is None
+    pm.switch_off_stalled("stuck")
+    assert not pm.active and pm.infos["stuck"].state == "error" and "stopped responding" in pm.infos["stuck"].error
+    t.join(2)

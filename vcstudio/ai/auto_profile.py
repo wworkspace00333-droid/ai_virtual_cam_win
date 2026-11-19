@@ -85,5 +85,6 @@ def apply_result(ctx, r: dict) -> bool:
         ctx.settings.set("performance.mode", r["mode"], persist=False)
         ctx.update_active_profile(lambda b: b.__setitem__("performance_mode", r["mode"]))
     ctx.settings.set("performance.auto_mode_note", r["note"], persist=False)
+    ctx.settings.set("performance.auto_baseline", {"model": r["model"], "median_ms": r["median_ms"]}, persist=False)
     ctx.settings.set("performance.auto_mode_done", True)
     return changed

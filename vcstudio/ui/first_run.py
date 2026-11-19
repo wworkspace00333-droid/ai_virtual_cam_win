@@ -214,6 +214,8 @@ class _ModePage(QWizardPage):
             s.set("performance.auto_mode_done", True, persist=False)
             s.set("performance.auto_mode_note", f"{self.result['model']} on {self.result['backend']}: "
                   f"{self.result['median_ms']} ms per frame (first-run wizard)", persist=False)
+            s.set("performance.auto_baseline", {"model": self.result["model"], "median_ms": self.result["median_ms"]},
+                  persist=False)
         return True
 
 

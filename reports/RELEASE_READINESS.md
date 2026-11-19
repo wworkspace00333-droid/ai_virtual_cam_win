@@ -40,20 +40,20 @@ machine*, not of quality on users' PCs: every GPU path and every third-party vid
 
 | Task | Status | Complexity | Files | Done when | Tests |
 |---|---|---|---|---|---|
-| Plugin time budget: a plugin whose average exceeds the frame budget is switched off (or run every n-th frame) | missing (measured: 40 ms plugin → 20 fps) | S | `vcstudio/plugins/host.py` | output stays ≥ 55 fps with a 40 ms plugin; user sees why it was switched off | `fault_isolation.py` turned into `test_plugins` case |
-| Plugin hang protection (watchdog detects a plugin call longer than N s, disables plugins, restarts output) | missing | M | `plugins/host.py`, `core/watchdog.py` | a `time.sleep(60)` plugin does not freeze the camera > 2 s | new test |
-| Resource admission for OWLv2/SAM (RAM, no-GPU warning) | missing (measured +3–4 GB, 7.6–12 s/frame) | S | `ai/open_vocab.py`, `ui/pages/detection_page.py` | clear refusal/warning on low RAM; no OOM | test with fake hardware profile |
+| Plugin time budget: a plugin whose average exceeds the frame budget is switched off (or run every n-th frame) | **done after the audit** (25 ms average / 1 s single call; tests in `test_plugins.py`) | S | `vcstudio/plugins/host.py` | output stays ≥ 55 fps with a 40 ms plugin; user sees why it was switched off | `fault_isolation.py` turned into `test_plugins` case |
+| Plugin hang protection (watchdog detects a plugin call longer than N s, disables plugins, restarts output) | **done after the audit** (`PluginManager.stalled`, watchdog) | M | `plugins/host.py`, `core/watchdog.py` | a `time.sleep(60)` plugin does not freeze the camera > 2 s | new test |
+| Resource admission for OWLv2/SAM (RAM, no-GPU warning) | **done after the audit** for RAM (2.5 / 1.5 GB free required; SAM silhouettes fall back to people); VRAM still open | S | `ai/open_vocab.py`, `ui/pages/detection_page.py` | clear refusal/warning on low RAM; no OOM | test with fake hardware profile |
 | Physical webcams: MF/DirectShow on 3+ models, MJPG/YUY2/NV12, USB reconnect | blocked (no hardware) | M | `platform/win/capture.py`, `native/win/capture` | webcam matrix filled | `VCS_LIVE=1` on that PC |
 | Colour BT.709 vs BT.601 decision | waiting for client tests | S–M | `native/win/vcam/vcam_frames.cpp` | same colour in Zoom/Teams/OBS | colour test |
-| Fresh-profile model choice: start from the first-run measurement instead of the largest model | behaviour by design, costs the first seconds | S | `ai/engine.py`, `ai/auto_profile.py` | no yolox_s phase on a 2-core PC | e2e test on fresh profile |
-| Remove the temp data folder after `--soak`, `--pipeline-e2e-test`, `gui_e2e.py`, `gui_soak.py` (like D21) | missing (55 leftover folders, ~10 GB found here) | S | `app/soak.py`, `app/selftest.py`, `scripts/gui_e2e.py`, `scripts/gui_soak.py` | no `vcs-*` folder left after each mode | extend `test_p0_robustness.py` |
+| Fresh-profile model choice: start from the first-run measurement instead of the largest model | **done after the audit** (models scaling > 3× over budget skipped) | S | `ai/engine.py`, `ai/auto_profile.py` | no yolox_s phase on a 2-core PC | e2e test on fresh profile |
+| Remove the temp data folder after `--soak`, `--pipeline-e2e-test`, `gui_e2e.py`, `gui_soak.py` (like D21) | **done after the audit** (`core/paths.throwaway_home`) | S | `app/soak.py`, `app/selftest.py`, `scripts/gui_e2e.py`, `scripts/gui_soak.py` | no `vcs-*` folder left after each mode | extend `test_p0_robustness.py` |
 | Handle growth check (+11/h over 20 min) | inconclusive | S | — | 60-min/4-h soak slope ≈ 0 | soak (60-min result in FULL_PROJECT_AUDIT) |
 
 ### P2 — quality and function
 
 | Task | Status | Files | Done when |
 |---|---|---|---|
-| Hardware Compatibility Layer steps 1–4 (profile, provider verification, admission, budget-aware choice) | proposed (HARDWARE_COMPATIBILITY_REPORT §5) | new `core/hardware.py`, `ai/onnx_engine.py`, `ai/auto_profile.py` | unit tests with fake adapters pass; profile in diagnostics |
+| Hardware Compatibility Layer steps 1–4 (profile, provider verification, admission, budget-aware choice) | partly done after the audit: silent provider fallback labelled (step 2), RAM admission (step 3), first-run baseline for the model choice (step 4); hardware profile (step 1) open | new `core/hardware.py`, `ai/onnx_engine.py`, `ai/auto_profile.py` | unit tests with fake adapters pass; profile in diagnostics |
 | Face accuracy on video (turns, profile, glasses, distance); threshold for backs of heads | partial (photos only) | `ai/onnx_engine.py` | numbers in `docs/ACCURACY.md` from annotated video |
 | Silhouettes for classes other than people without SAM | partial (people built in) | `ai/segmentation.py`, models | permissive instance-segmentation model shipped (download/licence decision) |
 | Open vocabulary completion (stronger model, 20 annotated videos) | partial | `ai/open_vocab.py` | accuracy + speed on GPU |

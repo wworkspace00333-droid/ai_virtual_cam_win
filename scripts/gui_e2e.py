@@ -10,10 +10,8 @@ that it exits and the camera falls back to its waiting card. Needs OBS with the 
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -25,8 +23,8 @@ from integration_faults import (Client, desktop_env, make_app, obs_close, obs_pi
 
 
 def main(out_path: str, shot: str | None) -> int:
-    home = tempfile.mkdtemp(prefix="vcs-gui-e2e-")
-    os.environ["VCSTUDIO_HOME"] = home
+    from vcstudio.core.paths import throwaway_home
+    home = str(throwaway_home("vcs-gui-e2e-"))   # removed at exit
     res: dict = {"ok": False, "home": home}
     proc = None
     client = Client()

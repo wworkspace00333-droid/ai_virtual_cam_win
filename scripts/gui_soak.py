@@ -18,7 +18,6 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -32,7 +31,8 @@ def main() -> int:
     out = Path(a[a.index("--out") + 1]); out.mkdir(parents=True, exist_ok=True)
     minutes = float(a[a.index("--minutes") + 1]) if "--minutes" in a else 60.0
     restarts = [float(x) for x in a[a.index("--obs-restarts") + 1].split(",")] if "--obs-restarts" in a else [20.0, 40.0]
-    home = Path(tempfile.mkdtemp(prefix="vcs-guisoak-"))
+    from vcstudio.core.paths import throwaway_home
+    home = throwaway_home("vcs-guisoak-")          # removed at exit
     real = Path.home() / "Library" / "Application Support" / "AIVirtualCameraStudio"
     if (real / "settings.json").exists():                       # the user's own settings and profiles, as a copy
         shutil.copy(real / "settings.json", home / "settings.json")

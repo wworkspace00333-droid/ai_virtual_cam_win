@@ -97,6 +97,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "mode": "balanced",
         "auto_mode_done": False,     # first GUI start measures this PC once and picks the mode (vcstudio/ai/auto_profile.py)
         "auto_mode_note": "",
+        "auto_baseline": {},         # first-run measurement {"model", "median_ms"}: the auto model choice skips models
+                                     # that cannot fit the budget on this PC instead of trying them first
         "memory_limits": "auto",     # auto: thresholds scale with installed RAM | manual: use memory_warning_mb
         "memory_warning_mb": 3072,   # manual mode only; critical (load shedding) is 2x
         "monitor_interval_ms": 1000,
