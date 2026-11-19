@@ -107,7 +107,7 @@ class Watchdog:
         if pipe._thread is not None and cap_running and now - pipe.heartbeat > PIPELINE_STALL_S:
             pm = getattr(pipe, "plugins", None)
             stuck = pm.stalled(PIPELINE_STALL_S) if pm is not None and hasattr(pm, "stalled") else None
-            if stuck:                    # a plugin call that never returns: drop it, or the new thread hangs too
+            if stuck and pm is not None:  # a plugin call that never returns: drop it, or the new thread hangs too
                 pm.switch_off_stalled(stuck)
                 self._event("ERROR", f"plugin {stuck} froze the camera output; switched off")
             self.stats.pipeline_restarts += 1
