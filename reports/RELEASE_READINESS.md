@@ -32,7 +32,7 @@ machine*, not of quality on users' PCs: every GPU path and every third-party vid
 
 | Task | Status | Complexity | Depends on | Files | Done when | Confirming tests |
 |---|---|---|---|---|---|---|
-| Verify the update fix (0.4.1/0.5.0 → 0.5.1 with browsers open) | fixed in source + v0.5.1 draft; not run | S | publishing or downloading the draft | `packaging/windows/installer.iss` | silent update succeeds with Chrome/Claude open; camera registered afterwards; forced abort re-registers the old camera | manual run here; add a CI step that holds the camera DLL open during an update |
+| Verify the update fix (0.4.1/0.5.0 → 0.5.1 with browsers open) | **verified after the audit with 0.5.2**: update over 0.4.1 with Chrome and Claude holding the camera DLL succeeded, camera registered, installed self-check 13/13; forced-abort path still only tested by compilation | S | publishing or downloading the draft | `packaging/windows/installer.iss` | silent update succeeds with Chrome/Claude open; camera registered afterwards; forced abort re-registers the old camera | manual run here; add a CI step that holds the camera DLL open during an update |
 | Real PC with a GPU: `windows_pc_report`, 1–4 h soak, camera in Zoom / Teams / Discord / Chrome, colour | not started (no hardware) | S + fixes | owner's / tester's PC | `docs/HARDWARE_CHECKLIST.md` | checklist filled; fps/latency/VRAM on GPU; each client works | pc-report folder, checklist |
 | Code signing (installer, camera DLLs) | script ready, no certificate | S + external | certificate purchase | `scripts/sign_win.ps1`, CI secrets | `Get-AuthenticodeSignature` Valid | CI check |
 
