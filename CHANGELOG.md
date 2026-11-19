@@ -7,6 +7,19 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-11-19
+
+Fixes updating over an installed version.
+
+### Fixed
+- **Updating could leave the PC without its camera.** The installer asked Windows to close every app that had the
+  camera's files open — and any browser, Zoom or messenger that lists cameras has them open. It cannot close those,
+  so a silent update stopped, after it had already removed the installed camera. Now only the app itself is
+  closed (the camera files are replaced after a restart, as before), and an update that stops for any reason
+  registers the previous camera again.
+- `--camera-loopback-test`, `--pipeline-e2e-test` and `--capture-selftest` without their report path print a usage
+  line instead of failing with IndexError.
+
 ## [0.5.0] — 2026-11-19
 
 The first full release of the Windows version: every feature of the 0.5 plan is in (docs/WINDOWS_ROADMAP_0.5.md).
@@ -299,6 +312,7 @@ for real hardware are still to be measured (docs/HARDWARE_CHECKLIST.md).
 
 macOS releases; see the history of the original repository.
 
+[0.5.1]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.5.1
 [0.5.0]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.5.0
 [0.4.8]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.8
 [0.4.7]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.4.7

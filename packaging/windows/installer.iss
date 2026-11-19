@@ -5,7 +5,7 @@
 ; (%LOCALAPPDATA%\AIVirtualCameraStudio: settings, profiles, imported assets) is kept on uninstall.
 
 #ifndef AppVersion
-  #define AppVersion "0.5.0"
+  #define AppVersion "0.5.1"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\..\dist\AI Virtual Camera Studio"
@@ -41,6 +41,10 @@ Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
+; only the app itself is closed for an update. The camera DLLs are loaded by any app that lists cameras (browsers,
+; Zoom, Claude...); Restart Manager cannot close those, and a silent update then aborted. Those DLLs are replaced
+; after a restart instead (restartreplace below).
+CloseApplicationsFilter={#AppExe}
 RestartApplications=no
 SetupLogging=yes
 LicenseFile=..\..\LICENSE
@@ -144,6 +148,10 @@ begin
   Log('vcam-setup.exe ' + Params + ' -> ' + IntToStr(Result));
 end;
 
+var
+  OldCamDir: String;            { camera of the installed version, unregistered for the update }
+  InstallDone: Boolean;
+
 { Updating: unregister the camera of the installed version first, so Frame Server lets go of its DLLs }
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
@@ -151,14 +159,38 @@ var
 begin
   Result := '';
   if RegQueryStringValue(HKLM64, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{6B0E7C1A-3F5D-4B8E-9A61-2C4D8E0F7A35}_is1',
-                         'InstallLocation', OldDir) then
-    RunSetupTool(AddBackslash(OldDir) + '_internal\native', '--uninstall');
+                         'InstallLocation', OldDir) then begin
+    OldCamDir := AddBackslash(OldDir) + '_internal\native';
+    RunSetupTool(OldCamDir, '--uninstall');
+  end;
+end;
+
+{ An update that stops after the old camera was unregistered (cancelled, files in use, an error) must not leave the
+  PC without its camera: register it again from whichever copy of the tool is there. }
+procedure DeinitializeSetup;
+var
+  Params: String;
+begin
+  if (OldCamDir = '') or InstallDone then
+    exit;
+  if IsWindows11 then Params := '--install --both' else Params := '--install';
+  if FileExists(AddBackslash(OldCamDir) + 'vcam-setup.exe') then
+    RunSetupTool(OldCamDir, Params)
+  else
+    try
+      if FileExists(ExpandConstant('{#Native}\vcam-setup.exe')) then
+        RunSetupTool(ExpandConstant('{#Native}'), Params);
+    except
+      Log('camera not restored: ' + GetExceptionMessage);   // the app folder is unknown: setup stopped before it
+    end;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   rc: Integer;
 begin
+  if CurStep = ssPostInstall then
+    InstallDone := True;        { files are in place: the new version registers (or skips) its own camera }
   if (CurStep = ssPostInstall) and WizardIsTaskSelected('camera') then begin
     WizardForm.StatusLabel.Caption := CustomMessage('Registering');
     if WizardIsTaskSelected('camera\dshowtoo') then
