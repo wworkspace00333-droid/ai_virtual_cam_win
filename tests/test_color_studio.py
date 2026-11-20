@@ -177,3 +177,65 @@ def test_frame_rate_guard_reduces_expensive_effects_and_retries():
     for i in range(50):
         g2.apply(a, cfg, i, budget_ms=1e9)                       # within budget: never reduced
     assert not g2.reduced
+
+
+def _d3d11_lut():
+    import sys
+    if sys.platform != "win32":
+        return None
+    from vcstudio.platform.win import d3d11
+    if not d3d11.available():
+        return None
+    ctx = d3d11.D3D11Context()
+    return ctx if ctx.has_lut else None
+
+
+def test_gpu_lut_matches_exact_trilinear_better_than_the_cpu_path(tmp_path):
+    ctx = _d3d11_lut()
+    if ctx is None:
+        pytest.skip("vcs_d3d11.dll with the LUT pass not built")
+    p = cube3(tmp_path / "look.cube", lambda r, g, b: (r ** 0.8, g, b ** 1.2), n=17)
+    kind, tab = cs.load_lut(str(p), p.stat().st_mtime)
+    ctx.upload_lut(tab, cs.LUT_GRID)
+    a = np.random.default_rng(5).integers(0, 256, (90, 160, 4), dtype=np.uint8)
+    out = ctx.apply_lut(a, 1.0)
+    _, data, _ = cs.parse_cube(p.read_text())
+    ref = (cs._trilinear(data, a[..., [2, 1, 0]].reshape(-1, 3) / 255.0) * 255).reshape(90, 160, 3)[..., ::-1]
+    gpu_err = np.abs(out[..., :3].astype(float) - ref).mean()
+    cpu = cs.ColorGrader()
+    cpu.gpu_mode = "off"
+    cpu_err = np.abs(cpu.apply(a, cs.ColorConfig(enabled=True, lut=str(p)))[..., :3].astype(float) - ref).mean()
+    assert gpu_err < 1.0 and gpu_err < cpu_err and np.array_equal(out[..., 3], a[..., 3])
+    half = ctx.apply_lut(a, 0.0)
+    assert np.abs(half.astype(int) - a.astype(int)).max() <= 1          # intensity 0: the input
+    ctx.close()
+
+
+def test_grader_gpu_modes_and_fallback(tmp_path):
+    p = cube3(tmp_path / "id.cube", lambda r, g, b: (r, g, b), n=9)
+    a = np.full((40, 60, 4), 100, np.uint8)
+    cfg = cs.ColorConfig(enabled=True, lut=str(p))
+    g = cs.ColorGrader()                                  # auto: WARP is skipped, hardware would be used
+    g.apply(a, cfg)
+    if _d3d11_lut() is not None:
+        forced = cs.ColorGrader()
+        forced.gpu_mode = "on"
+        out = forced.apply(a, cfg)
+        assert forced.gpu_used and abs(int(out[20, 30, 0]) - 100) <= 1
+
+        class Broken:
+            has_lut, software = True, False
+
+            def upload_lut(self, *a):
+                raise RuntimeError("device lost")
+
+            def close(self):
+                pass
+        bad = cs.ColorGrader()
+        bad._gpu = Broken()
+        out = bad.apply(a, cfg)                          # GPU error: CPU result, GPU off from now on
+        assert not bad.gpu_used and bad._gpu_failed and abs(int(out[20, 30, 0]) - 100) <= 3
+    off = cs.ColorGrader()
+    off.gpu_mode = "off"
+    off.apply(a, cfg)
+    assert not off.gpu_used

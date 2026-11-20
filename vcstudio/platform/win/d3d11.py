@@ -57,6 +57,13 @@ def _load():
         lib.vcs_flush.argtypes = [ctypes.c_void_p, ctypes.c_int]
         lib.vcs_is_warp.argtypes = [ctypes.c_void_p]
         lib.vcs_is_warp.restype = ctypes.c_int
+        if hasattr(lib, "vcs_apply_lut"):              # 0.6.0 Colour Studio LUT pass (older DLLs lack it)
+            lib.vcs_upload_lut.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
+            lib.vcs_upload_lut.restype = ctypes.c_int
+            lib.vcs_apply_lut.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                          ctypes.c_void_p, ctypes.c_int, ctypes.c_float,
+                                          ctypes.POINTER(ctypes.c_double)]
+            lib.vcs_apply_lut.restype = ctypes.c_int
         if hasattr(lib, "vcs_device_status"):          # older builds of the DLL lack it
             lib.vcs_device_status.argtypes = [ctypes.c_void_p]
             lib.vcs_device_status.restype = ctypes.c_long
@@ -153,6 +160,32 @@ class D3D11Context:
         if rc != 0:
             self._fail("render", rc)
         self.last_cpu_ms, self.last_gpu_ms = timing[0], timing[1]
+
+    @property
+    def has_lut(self) -> bool:
+        return hasattr(self._lib, "vcs_apply_lut")
+
+    def upload_lut(self, table: np.ndarray, n: int) -> None:
+        """(n**3, 4) BGRA uint8, index b * n * n + g * n + r (vcstudio/replacement/color.load_lut's table)."""
+        t = np.ascontiguousarray(table, dtype=np.uint8)
+        if t.shape != (n ** 3, 4):
+            raise ValueError("LUT table must be (n**3, 4) uint8")
+        rc = self._lib.vcs_upload_lut(self._h, t.ctypes.data, n)
+        if rc != 0:
+            self._fail("LUT upload", rc)
+
+    def apply_lut(self, src: np.ndarray, intensity: float = 1.0, dst: np.ndarray | None = None) -> np.ndarray:
+        """The frame graded with the uploaded LUT (trilinear on the GPU), mixed by `intensity`; alpha kept."""
+        s = np.ascontiguousarray(src)
+        out = dst if dst is not None and dst.shape == s.shape and dst.flags.c_contiguous else np.empty_like(s)
+        h, w = s.shape[:2]
+        timing = (ctypes.c_double * 2)()
+        rc = self._lib.vcs_apply_lut(self._h, s.ctypes.data, w, h, s.strides[0], out.ctypes.data, out.strides[0],
+                                     float(intensity), timing)
+        if rc != 0:
+            self._fail("LUT", rc)
+        self.last_cpu_ms = timing[0]
+        return out
 
     def flush(self, drop_slots: bool = False) -> None:
         self._lib.vcs_flush(self._h, 1 if drop_slots else 0)

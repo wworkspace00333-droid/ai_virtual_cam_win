@@ -10,8 +10,11 @@ grades twice: the stage is stateless apart from caches keyed by the settings):
   3. 3D LUT      a .cube file (LUT_3D_SIZE 2..129, or LUT_1D_SIZE): resampled once to 64³; applied at half size
                  (a third above 720p) and added as a colour difference to the full picture (like 4:2:0 chroma: sharp
                  detail stays from the full-size frame). `lut_intensity` blends it. The direct per-pixel lookup cost
-                 40 ms per 1080p frame on the 2-core server. A Direct3D 11 shader path is not implemented: this stage
-                 runs on the CPU on every PC
+                 40 ms per 1080p frame on the 2-core server.
+                 GPU path: with a hardware Direct3D 11 device the LUT runs in vcs_d3d11.dll instead (Texture3D,
+                 hardware trilinear filtering, full resolution: mean error 0.19 levels against an exact trilinear
+                 lookup, the CPU path 3.3). On WARP (no GPU) it is not faster than the CPU path (20.8 vs 18.4 ms at
+                 1080p here), so "auto" uses it only on hardware; any GPU error falls back to the CPU path for good
   4. sharpness   unsharp mask (Gaussian at quarter size, upscaled)
   5. effects     vignette (cached radial gain), soft glow (blurred highlights added), film grain (cached noise
                  tiles, moved every frame), tone mapping is the highlights control (soft shoulder)
@@ -272,6 +275,11 @@ class ColorGrader:
         self.ms = 0.0
         self.error = ""
         self.reduced = False                  # frame-rate guard: expensive effects skipped
+        self.gpu_mode = "auto"                # 3-D LUT on Direct3D 11: auto (hardware GPU only) | on | off
+        self.gpu_used = False                 # the last LUT frame ran on the GPU
+        self._gpu = None                      # D3D11Context, created on the output thread on first use
+        self._gpu_failed = ""
+        self._gpu_lut_key = None
         self._over = 0
         self._since_reduced = 0
 
@@ -351,6 +359,40 @@ class ColorGrader:
         self._guard(ms, budget_ms)
         return out
 
+    def _gpu_ctx(self):
+        if self.gpu_mode == "off" or self._gpu_failed:
+            return None
+        if self._gpu is None:
+            try:
+                from vcstudio.platform import IS_WINDOWS
+                if not IS_WINDOWS:
+                    self._gpu_failed = "not Windows"
+                    return None
+                from vcstudio.platform.win.d3d11 import D3D11Context, available
+                if not available():
+                    self._gpu_failed = "vcs_d3d11.dll not available"
+                    return None
+                ctx = D3D11Context()
+                if not ctx.has_lut or (ctx.software and self.gpu_mode != "on"):
+                    ctx.close()
+                    self._gpu_failed = "software device (WARP): the CPU path is as fast" if ctx.has_lut else \
+                        "this vcs_d3d11.dll has no LUT pass"
+                    return None
+                self._gpu = ctx
+                log.info("colour LUT on the GPU: %s", ctx.device_name)
+            except Exception as e:                           # noqa: BLE001
+                self._gpu_failed = f"{type(e).__name__}: {e}"
+                return None
+        return self._gpu
+
+    def _close_gpu(self) -> None:
+        if self._gpu is not None:
+            try:
+                self._gpu.close()
+            except Exception:
+                pass
+        self._gpu, self._gpu_lut_key = None, None
+
     def _lut(self, bgra: np.ndarray, cfg: ColorConfig) -> np.ndarray:
         try:
             kind, tab = load_lut(cfg.lut, Path(cfg.lut).stat().st_mtime)
@@ -363,6 +405,20 @@ class ColorGrader:
         if kind == "1d":
             graded = cv2.LUT(bgra, _alpha_table(tab))
         else:
+            gpu = self._gpu_ctx()
+            if gpu is not None:
+                try:
+                    key = (cfg.lut, Path(cfg.lut).stat().st_mtime)
+                    if self._gpu_lut_key != key:
+                        gpu.upload_lut(tab, LUT_GRID)
+                        self._gpu_lut_key = key
+                    self.gpu_used = True
+                    return gpu.apply_lut(bgra, k)
+                except Exception as e:                       # noqa: BLE001 - never lose the frame over the GPU
+                    self._gpu_failed = f"{type(e).__name__}: {e}"
+                    log.warning("GPU LUT failed, using the CPU path from now on: %s", self._gpu_failed)
+                    self._close_gpu()
+            self.gpu_used = False
             h, w = bgra.shape[:2]
             f = 2 if h <= 720 else 3                        # 1080p: a third of the size (~11 ms instead of ~24)
             small = cv2.resize(bgra, (max(1, w // f), max(1, h // f)), interpolation=cv2.INTER_AREA)

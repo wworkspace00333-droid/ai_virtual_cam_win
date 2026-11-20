@@ -40,7 +40,7 @@ hardware GPU or a physical webcam (the development server has neither).
 | Privacy | ID cards / passports / plates as objects | ⬜ | no such classes; found only as text | — |
 | Colour | exposure … sharpness, vignette, grain, glow, skin protection | ✅ | replacement/color.py | synthetic (values, direction) |
 | Colour | .cube 1D / 3D import, intensity, per scene, presets | ✅ | replacement/color.py, color_tab | synthetic |
-| Colour | GPU (D3D11) LUT path | ⬜ | CPU only, measured | — |
+| Colour | GPU (D3D11) 3-D LUT pass: Texture3D, hardware trilinear, full resolution; used on hardware GPUs, CPU fallback | ✅ | native/win/d3d11 (lut_cs), replacement/color.py | correctness on WARP (error 0.19 vs exact, CPU path 3.3); speed on a hardware GPU not measured |
 | Automation | 12 triggers, 9 actions, conditions, cooldown, debounce, priority, history | ✅ | core/automation.py | unit + app |
 | Automation | loop protection, bounded queue, dedup, UI-thread execution | ✅ | automation + AppContext.call_main | unit |
 | Audio | gain, mute, denoise, gate, EQ, compressor, AGC, limiter, meters | ✅ | core/audio_fx.py | synthetic signals (measured) |

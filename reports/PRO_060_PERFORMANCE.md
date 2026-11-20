@@ -57,6 +57,7 @@ expected timer rules fired (the 20th was due at the stop).
 | Vision at 1080p (CPU): face + head pose / body pose (1 person) / hands | 20.9 / 36.1 / 17.1 ms p50; all three ≈ 74 ms per analysed frame |
 | Text detection (PP-OCRv3, 736 px) | ≈ 110 ms per run, run 2×/s on its own thread |
 | Colour stage 1080p: tone / saturation / skin / 3D LUT / vignette+grain+glow | 4.2 / 6.2 / 17.8 / 18.4 / 18.5 ms (720p: 2.1 / 3.1 / 10.0 / 11.9 / 8.5) |
+| 3-D LUT 1080p: CPU path / D3D11 pass on WARP | 18.4 / 20.8 ms; GPU pass error vs exact trilinear 0.19 levels (CPU 3.3); hardware GPU not measured |
 | Audio chain, everything on | 10 s of 48 kHz stereo in 140 ms (1.4 % of one core) |
 | Model check, e.g. YuNet / pose / YOLO11n-seg on CPU | 4.2 / 7.6 / 51 ms median per inference |
 

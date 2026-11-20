@@ -14,6 +14,10 @@
 // The Python side (vcstudio/platform/win/d3d11.py) passes a 28-float layer record per draw op, the same
 // layout the Metal backend uses (bg colour in BGRA order here).
 //
+// Colour Studio (0.6.0): vcs_upload_lut + vcs_apply_lut grade a whole frame with a 3-D LUT held in a Texture3D
+// (R8G8B8A8, entries in BGRA byte order, laid out [b][g][r]); hardware trilinear filtering, mixed with the input
+// by `intensity`.
+//
 // C API (ctypes): see the extern "C" block at the end. Thread use: one context per thread.
 
 #define WIN32_LEAN_AND_MEAN
@@ -108,6 +112,19 @@ void layer_cs(uint3 id : SV_DispatchThreadID) {
     work[p] = pack(res, dv);
 }
 
+// 3-D LUT over the whole frame: lut coordinates (r, g, b) at texel centres; misc.x = intensity
+Texture3D<float4> lut3d : register(t5);
+[numthreads(16, 16, 1)]
+void lut_cs(uint3 id : SV_DispatchThreadID) {
+    if (id.x >= frameSize.x || id.y >= frameSize.y) return;
+    uint v = srcFrame.Load(int3(id.xy, 0));
+    float3 c = unpack(v).rgb;                                // B, G, R
+    float n = L.params.x;                                    // LUT size
+    float3 uvw = c.zyx * ((n - 1.0) / n) + 0.5 / n;          // x = R, y = G, z = B
+    float3 g = lut3d.SampleLevel(lin, uvw, 0).rgb;           // stored as B, G, R
+    work[id.xy] = pack(lerp(c, g, L.misc.x), v);
+}
+
 // normalised Gaussian weights for offsets 0..radius (computed once per layer on the CPU)
 float gauss_w(int i) { uint a = (uint)abs(i); return wts[a >> 2][a & 3]; }
 
@@ -173,7 +190,10 @@ struct Slot {
 struct Ctx {
     ComPtr<ID3D11Device> dev;
     ComPtr<ID3D11DeviceContext> ctx;
-    ComPtr<ID3D11ComputeShader> layerCS, blurH, blurV;
+    ComPtr<ID3D11ComputeShader> layerCS, blurH, blurV, lutCS;
+    ComPtr<ID3D11Texture3D> lutTex;
+    ComPtr<ID3D11ShaderResourceView> lutSRV;
+    int lutN = 0;
     ComPtr<ID3D11Buffer> cb;
     ComPtr<ID3D11SamplerState> sampler;
     // frame-size resources
@@ -249,7 +269,8 @@ static bool create_device(Ctx *c, int adapterIndex) {
 
 static bool init(Ctx *c, int adapterIndex) {
     if (!create_device(c, adapterIndex)) return false;
-    if (!compile(c, "layer_cs", c->layerCS) || !compile(c, "blur_h_cs", c->blurH) || !compile(c, "blur_v_cs", c->blurV))
+    if (!compile(c, "layer_cs", c->layerCS) || !compile(c, "blur_h_cs", c->blurH) || !compile(c, "blur_v_cs", c->blurV) ||
+        !compile(c, "lut_cs", c->lutCS))
         return false;
     D3D11_BUFFER_DESC bd = {};
     bd.ByteWidth = sizeof(CB);
@@ -322,9 +343,9 @@ static void write_cb(Ctx *c, const float *layer, float sigma, int radius) {
 }
 
 static void unbind(Ctx *c) {
-    ID3D11ShaderResourceView *nullSRV[5] = {};
+    ID3D11ShaderResourceView *nullSRV[6] = {};
     ID3D11UnorderedAccessView *nullUAV[2] = {};
-    c->ctx->CSSetShaderResources(0, 5, nullSRV);
+    c->ctx->CSSetShaderResources(0, 6, nullSRV);
     c->ctx->CSSetUnorderedAccessViews(0, 2, nullUAV, nullptr);
 }
 
@@ -483,6 +504,62 @@ __declspec(dllexport) void vcs_flush(void *h, int dropSlots) {
     if (!c) return;
     if (dropSlots) c->slots.clear();
     c->ctx->Flush();
+}
+
+// n x n x n BGRA uint8 entries laid out [b][g][r] (b slowest) -> the frame LUT (replaces the previous one)
+__declspec(dllexport) int vcs_upload_lut(void *h, const uint8_t *data, int n) {
+    Ctx *c = (Ctx *)h;
+    if (!c || !data || n < 2 || n > 256) return -1;
+    c->lutTex.Reset(); c->lutSRV.Reset(); c->lutN = 0;
+    D3D11_TEXTURE3D_DESC td = {};
+    td.Width = td.Height = td.Depth = (UINT)n; td.MipLevels = 1; td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    D3D11_SUBRESOURCE_DATA init = {data, (UINT)n * 4, (UINT)(n * n * 4)};
+    HRESULT hr = c->dev->CreateTexture3D(&td, &init, &c->lutTex);
+    if (FAILED(hr)) { set_error(c, "LUT texture", hr); return -2; }
+    hr = c->dev->CreateShaderResourceView(c->lutTex.Get(), nullptr, &c->lutSRV);
+    if (FAILED(hr)) { set_error(c, "LUT view", hr); return -3; }
+    c->lutN = n;
+    return 0;
+}
+
+// grade a whole BGRA frame with the uploaded LUT; timing as vcs_render
+__declspec(dllexport) int vcs_apply_lut(void *h, const uint8_t *src, int w, int hgt, int srcStride, uint8_t *dst,
+                                        int dstStride, float intensity, double *timing) {
+    Ctx *c = (Ctx *)h;
+    if (!c || !src || !dst) return -1;
+    if (!c->lutSRV) { c->error = "no LUT uploaded"; return -6; }
+    auto t0 = std::chrono::steady_clock::now();
+    if (!ensure_frame(c, w, hgt)) return -2;
+    c->ctx->UpdateSubresource(c->srcTex.Get(), 0, nullptr, src, srcStride, 0);
+    float L[28] = {};
+    L[16] = (float)c->lutN;                                  // params.x
+    L[24] = std::min(1.0f, std::max(0.0f, intensity));       // misc.x
+    write_cb(c, L, 0.0f, 0);
+    ID3D11SamplerState *smp = c->sampler.Get();
+    ID3D11Buffer *cb = c->cb.Get();
+    c->ctx->CSSetSamplers(0, 1, &smp);
+    c->ctx->CSSetConstantBuffers(0, 1, &cb);
+    ID3D11ShaderResourceView *s0 = c->srcSRV.Get(), *s5 = c->lutSRV.Get();
+    ID3D11UnorderedAccessView *wu = c->workUAV.Get();
+    c->ctx->CSSetShaderResources(0, 1, &s0);
+    c->ctx->CSSetShaderResources(5, 1, &s5);
+    c->ctx->CSSetUnorderedAccessViews(0, 1, &wu, nullptr);
+    c->ctx->CSSetShader(c->lutCS.Get(), nullptr, 0);
+    c->ctx->Dispatch((UINT)((w + 15) / 16), (UINT)((hgt + 15) / 16), 1);
+    unbind(c);
+    c->ctx->CopyResource(c->staging.Get(), c->workTex.Get());
+    D3D11_MAPPED_SUBRESOURCE m;
+    HRESULT hr = c->ctx->Map(c->staging.Get(), 0, D3D11_MAP_READ, 0, &m);
+    if (FAILED(hr)) { set_error(c, "readback Map failed", hr); return -5; }
+    const uint8_t *s = (const uint8_t *)m.pData;
+    for (int y = 0; y < hgt; ++y) memcpy(dst + (size_t)y * dstStride, s + (size_t)y * m.RowPitch, (size_t)w * 4);
+    c->ctx->Unmap(c->staging.Get(), 0);
+    if (timing) {
+        timing[0] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        timing[1] = 0;
+    }
+    return 0;
 }
 
 __declspec(dllexport) int vcs_is_warp(void *h) { return h && ((Ctx *)h)->warp ? 1 : 0; }

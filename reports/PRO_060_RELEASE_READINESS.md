@@ -35,9 +35,10 @@ are not verified on real hardware yet.
    front of a camera for vision, privacy shield in Zoom / Teams, real microphone, phone over LAN).
 4. Done: the 16 MB text recognition model is a download in the Privacy Shield tab; "only sensitive text" is
    tested with the real models.
-5. Optional but announced in the prompt and not done: GPU LUT shader, depth effects, dense face mesh,
+5. Optional but announced in the prompt and not done: depth effects, dense face mesh,
    active-speaker switching, virtual microphone (driver; see reports/VIRTUAL_AUDIO_DEVICE.md). Done after the
-   preview build: adapter driver / feature levels, raised-hand event, pose-aware framing, microphone monitoring.
+   preview build: adapter driver / feature levels, raised-hand event, pose-aware framing, microphone monitoring,
+   GPU LUT pass, choose-who-is-framed.
 
 ## Known limitations (also in the UI where they matter)
 

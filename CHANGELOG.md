@@ -15,6 +15,9 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 - Privacy Shield "only sensitive text" works: the text recognition model (CRNN, English, 16 MB, downloaded on click)
   reads each detected line word by word; phone, card, account-like numbers, addresses and your keywords are hidden,
   other text stays visible. At most 12 lines are read per pass; any others stay hidden.
+- Colour Studio: 3-D LUTs run on the GPU (Direct3D 11 compute pass with a 3-D texture and hardware trilinear
+  filtering) when a hardware graphics card is present; closer to an exact lookup than the CPU path (mean error 0.19
+  vs 3.3 levels). On a PC without a GPU the CPU path stays (WARP was not faster: 20.8 vs 18.4 ms at 1080p).
 - Choose who is framed: Studio → AI Vision lists the tracked people with Lock / Unlock, and auto-framing can follow
   only the locked person(s).
 - CI uploads the stack dump of a test stuck in native code (build/test-hang.log); one CI run of 14c0f07 hung once
