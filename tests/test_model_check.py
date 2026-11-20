@@ -111,3 +111,44 @@ def test_backend_check_reports_what_really_ran():
     for r in res:                                       # a listed provider that fell back is not "real"
         if r["ok"] and r["used"] != r["requested"]:
             assert not r["real"]
+
+
+def test_custom_models_take_their_role_and_fall_back_when_changed(tmp_path):
+    src = M / "human_segmentation_pphumanseg_2023mar.onnx"
+    rep = mc.check(src, "background_segmentation", providers=["CPUExecutionProvider"], runs=1)
+    dest = mc.register(rep, tmp_path, "my-seg")
+    meta = mc.list_custom(tmp_path)[0]
+    assert mc.usable_for(meta) == "background"
+    assert mc.active_path(tmp_path, "background", "my-seg") == dest
+    assert mc.active_path(tmp_path, "text", "my-seg") is None          # wrong role
+    assert mc.active_path(tmp_path, "background", "") is None
+    mc.set_enabled(tmp_path, "my-seg", False)
+    assert mc.active_path(tmp_path, "background", "my-seg") is None    # disabled
+    mc.set_enabled(tmp_path, "my-seg", True)
+    dest.write_bytes(dest.read_bytes()[:-1] + b"\x01")
+    assert mc.active_path(tmp_path, "background", "my-seg") is None    # changed after registration
+    face = mc.check(M / "face_detection_yunet_2023mar.onnx", "face_detection", providers=["CPUExecutionProvider"], runs=1)
+    assert mc.usable_for({"report": face.as_dict()}) == ""             # no module decodes this layout
+
+
+def test_app_uses_the_chosen_custom_background_and_text_models(paths):
+    from vcstudio.app.application import AppContext
+    ctx = AppContext(paths, configure_logging=False)
+    try:
+        rep = mc.check(M / "human_segmentation_pphumanseg_2023mar.onnx", "background_segmentation",
+                       providers=["CPUExecutionProvider"], runs=1)
+        dest = mc.register(rep, ctx.paths.models_dir, "seg2")
+        ctx.settings.set("models", {"background": "seg2", "text": ""})
+        assert ctx.custom_model_path("background") == dest
+        seg = ctx.background.person_factory()
+        assert seg is not None and ctx.background.seg._factory is ctx.background.person_factory
+        if (M / "text/text_detection_en_ppocrv3_2023may.onnx").exists():
+            trep = mc.check(M / "text/text_detection_en_ppocrv3_2023may.onnx", "ocr", providers=["CPUExecutionProvider"],
+                            runs=1)
+            tdest = mc.register(trep, ctx.paths.models_dir, "det2")
+            ctx.settings.set("models", {"background": "seg2", "text": "det2"})
+            assert ctx.shield.custom_model() == tdest
+        ctx.settings.set("models", {"background": "", "text": ""})
+        assert ctx.custom_model_path("background") is None
+    finally:
+        ctx.shutdown()

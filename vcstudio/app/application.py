@@ -127,6 +127,8 @@ class AppContext:
                                     lambda lv, m: self.db.log_event(lv, "privacy", m))
         self.pipeline.shield = self.shield
         self.shield.face_outlines = self._face_outlines
+        self.shield.custom_model = lambda: self.custom_model_path("text")
+        self.apply_custom_models()
         self.shield.apply_settings()
         # scene automation (vcstudio/core/automation.py): decisions here, actions through the existing services
         from vcstudio.core.automation import AutomationEngine
@@ -203,6 +205,9 @@ class AppContext:
         if key.startswith("automation"):
             self.automation.configure(self.settings.get("automation"))
             return
+        if key == "models" or key.startswith("models."):
+            self.apply_custom_models()
+            return
         if key == "remote" or key.startswith("remote."):
             self.remote.apply_settings()
             return
@@ -217,6 +222,25 @@ class AppContext:
         if key.startswith("processing"):
             used = self.replacement.compositor.set_backend(self.settings.get("processing.compositor"))
             log.info("Compositor backend: %s", used)
+
+    def custom_model_path(self, role: str):
+        from vcstudio.ai.model_check import active_path
+        return active_path(self.paths.models_dir, role, str((self.settings.get("models") or {}).get(role) or ""))
+
+    def apply_custom_models(self) -> None:
+        """Use the chosen custom models: background segmentation (PP-HumanSeg layout), privacy-shield text detection
+        (PP-OCR DB layout). A model that is missing, disabled or changed falls back to the built-in one."""
+        from vcstudio.ai.person_segmentation import PersonSegmenter
+        bg = self.custom_model_path("background")
+        factory = (lambda p=bg: PersonSegmenter(path=p)) if bg is not None else PersonSegmenter
+        if getattr(self.background, "_custom_bg", None) != bg:
+            self.background._custom_bg = bg
+            self.background.person_factory = factory
+            if self.background.cfg.source == "person":
+                self.background.seg.use(factory)
+        if self.shield.running:                            # the text detector is created when the thread starts
+            self.shield.stop()
+            self.shield.apply_settings()
 
     def _face_outlines(self, W: int, H: int) -> list:
         """Privacy shield "faces": face-mesh ovals (or face boxes) of the newest fresh AI Vision result, in output

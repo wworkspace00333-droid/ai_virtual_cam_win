@@ -84,6 +84,12 @@ class ModelsTab:
         self.toggle_btn.clicked.connect(self.toggle)
         self.remove_btn = QPushButton(tr("Remove"))
         self.remove_btn.clicked.connect(self.remove)
+        self.use_btn = QPushButton(tr("Use in the app"))
+        self.use_btn.clicked.connect(lambda: self.use(True))
+        self.unuse_btn = QPushButton(tr("Back to the built-in model"))
+        self.unuse_btn.clicked.connect(lambda: self.use(False))
+        r4.addWidget(self.use_btn)
+        r4.addWidget(self.unuse_btn)
         r4.addWidget(self.toggle_btn)
         r4.addWidget(self.remove_btn)
         r4.addStretch(1)
@@ -177,7 +183,10 @@ class ModelsTab:
             rep = m.get("report", {})
             ok = [p for p in rep.get("providers", []) if p.get("ok")]
             best = min(ok, key=lambda p: p["median_ms"]) if ok else None
-            vals = [m["name"], tr(mc.CATEGORIES.get(m.get("category", ""), m.get("category", ""))),
+            role = mc.usable_for(m)
+            in_use = role and (self.ctx.settings.get("models") or {}).get(role) == m["name"]
+            vals = [m["name"] + (" ✓ " + tr("in use") if in_use else ""),
+                    tr(mc.CATEGORIES.get(m.get("category", ""), m.get("category", ""))),
                     f"{_p(best['used'])} {best['median_ms']} ms" if best else "—",
                     rep.get("used_by") or tr("kept only"),
                     (tr("yes") if m.get("enabled") else tr("no")) + ("" if m.get("present") else
@@ -185,10 +194,30 @@ class ModelsTab:
             for col, v in enumerate(vals):
                 self.table.setItem(row, col, QTableWidgetItem(str(v)))
 
+    def use(self, on: bool, name: str | None = None) -> str:
+        """Make the selected model the one its role uses (background segmentation / text detection), or go back to
+        the built-in model; returns a short result shown under the list."""
+        name = name or self._selected()
+        meta = next((m for m in mc.list_custom(self.models_dir) if m["name"] == name), None) if name else None
+        if meta is None:
+            return ""
+        role = mc.usable_for(meta)
+        if not role:
+            msg = tr("No module of the app decodes this layout yet: the model is kept and measured only.")
+        else:
+            d = dict(self.ctx.settings.get("models") or {})
+            d[role] = name if on else ""
+            self.ctx.settings.set("models", d)
+            msg = (tr("{name} is used for {role}.", name=name, role=tr(role)) if on else
+                   tr("The built-in model is used for {role}.", role=tr(role)))
+        self.result.setText(msg)
+        self.refresh_list()
+        return msg
+
     def _selected(self) -> str | None:
         r = self.table.currentRow()
         it = self.table.item(r, 0) if r >= 0 else None
-        return it.text() if it else None
+        return it.text().split(" ✓ ")[0] if it else None
 
     def toggle(self) -> None:
         name = self._selected()

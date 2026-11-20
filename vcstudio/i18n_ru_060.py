@@ -36,7 +36,11 @@ RU_060: dict[str, str] = {
         "Пока ни один модуль приложения не разбирает такой формат выходов: модель хранится и замерена, но не "
         "используется.",
     "Check failed: {e}": "Проверка не удалась: {e}", "{p}: works · {ms} ms": "{p}: работает · {ms} мс",
-    "kept only": "только хранится", "Cannot check: {e}": "Не удаётся проверить: {e}",
+    "kept only": "только хранится",
+    "Use in the app": "Использовать в приложении", "Back to the built-in model": "Вернуть встроенную модель",
+    "in use": "используется", "{name} is used for {role}.": "{name} используется для: {role}.",
+    "The built-in model is used for {role}.": "Для «{role}» используется встроенная модель.",
+    "background": "фон", "text": "текст", "Cannot check: {e}": "Не удаётся проверить: {e}",
     "{p}: listed, but the model ran on {used}": "{p}: есть в списке, но модель выполнилась на {used}",
     "{p}: does not work ({e})": "{p}: не работает ({e})", "fails": "ошибка", "file missing": "нет файла",
     "Category": "Категория", "Fastest backend": "Самый быстрый бэкенд", "Used by": "Используется",

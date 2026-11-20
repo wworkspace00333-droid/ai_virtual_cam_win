@@ -7,6 +7,11 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+### Added
+- Studio → AI Models → "Use in the app": a checked custom model can replace the built-in background segmentation
+  (PP-HumanSeg layout) or the privacy-shield text detector (PP-OCR DB layout). Its SHA-256 is checked each time it is
+  loaded; a disabled, changed or removed model falls back to the built-in one.
+
 ## [0.6.0-preview2] — 2026-11-20
 
 Second 0.6.0 Professional preview (a pre-release, not offered by "Check for updates" in 0.5.x). Since

@@ -240,3 +240,18 @@ def test_vision_mesh_checkbox_and_background_depth_source(win):
     page.bg_source.setCurrentIndex(page.bg_source.findData("depth"))
     assert win.ctx.profiles.active()["body"]["background"]["source"] == "depth"
     assert win.ctx.background.cfg.source == "depth"
+
+
+def test_models_tab_use_and_unuse(win, qtbot):
+    from vcstudio.core.resources import models_dir as md
+    tab = studio(win).part("AI Models")
+    tab.run_check(str(md() / "human_segmentation_pphumanseg_2023mar.onnx"), "background_segmentation")
+    qtbot.waitUntil(lambda: tab.check_btn.isEnabled(), timeout=30000)
+    tab.name.setText("seg")
+    tab.register()
+    tab.table.setCurrentCell(0, 0)
+    assert "seg" in tab.use(True) and win.ctx.settings.get("models")["background"] == "seg"
+    assert "✓" in tab.table.item(0, 0).text()
+    tab.table.setCurrentCell(0, 0)
+    tab.use(False)
+    assert win.ctx.settings.get("models")["background"] == ""

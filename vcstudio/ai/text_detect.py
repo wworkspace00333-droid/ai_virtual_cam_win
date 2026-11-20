@@ -52,8 +52,8 @@ class TextBox:
 
 
 class TextDetector:
-    def __init__(self, side: int = 736, bin_thresh: float = 0.3, poly_thresh: float = 0.5):
-        self.model = cv2.dnn.TextDetectionModel_DB(str(models_dir() / DET_FILE))
+    def __init__(self, side: int = 736, bin_thresh: float = 0.3, poly_thresh: float = 0.5, path: Path | None = None):
+        self.model = cv2.dnn.TextDetectionModel_DB(str(path or models_dir() / DET_FILE))     # path: a custom model
         self.model.setBinaryThreshold(bin_thresh)
         self.model.setPolygonThreshold(poly_thresh)
         self.model.setUnclipRatio(2.0)

@@ -182,6 +182,7 @@ class PrivacyShield:
         self._t: threading.Thread | None = None
         # faces by outline: callable(W, H) -> list of (n, 2) int32 polygons in output pixels (set by the app)
         self.face_outlines = None
+        self.custom_model = None              # callable() -> Path of a chosen custom text detector, or None
 
     @property
     def running(self) -> bool:
@@ -218,6 +219,8 @@ class PrivacyShield:
         try:
             if self.detector_factory is not None:
                 det = self.detector_factory()
+            elif self.custom_model is not None and self.custom_model() is not None:
+                det = td.TextDetector(path=self.custom_model())
             elif td.available():
                 det = td.TextDetector()
             else:

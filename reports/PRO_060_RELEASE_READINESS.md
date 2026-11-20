@@ -41,8 +41,8 @@ and installed-app check passed). 0.5.3 stays the latest release, so 0.5.x users 
    reports/VIRTUAL_AUDIO_DEVICE.md), SAM 2.1 video propagation (not in the ONNX export), identity documents / plates
    as objects (no such detector classes; their printing is found as text), active-speaker camera switching (one
    microphone gives no per-camera signal).
-4. Partly: registered custom models of categories other than detection / YOLO-seg are checked, measured and kept,
-   but no pipeline module loads them yet.
+4. Partly: registered custom models can now be used for background segmentation (PP-HumanSeg layout) and text
+   detection (PP-OCR DB layout); other layouts (pose, face, hands, semantic segmentation) are checked and kept only.
 
 Everything else in docs/PRO_060_FEATURE_MATRIX.md is implemented, in the GUI, in the pipeline and in the tests
 (full suite 783 passed, 0 failed, 40 skipped on 2026-11-20).

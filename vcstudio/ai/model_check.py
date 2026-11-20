@@ -329,6 +329,31 @@ def verify(models_dir: Path, name: str) -> bool:
     return f.exists() and sha256_file(f) == meta["report"]["sha256"]
 
 
+ROLES = {"background": "background", "text": "privacy shield text"}   # role -> the used_by prefix it needs
+
+
+def usable_for(meta: dict) -> str:
+    """The role a registered model can take ("background" / "text"), or "" (pure: tested)."""
+    used = str(meta.get("report", {}).get("used_by", ""))
+    return next((role for role, prefix in ROLES.items() if used.startswith(prefix)), "")
+
+
+def active_path(models_dir: Path, role: str, chosen: str) -> Path | None:
+    """The file of the custom model chosen for `role` if it is registered, enabled, fits the role and still has its
+    recorded SHA-256; None otherwise (the built-in model is used)."""
+    if not chosen:
+        return None
+    d = custom_dir(models_dir)
+    try:
+        meta = json.loads((d / f"{chosen}.model.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not meta.get("enabled") or usable_for(meta) != role or not verify(models_dir, chosen):
+        log.warning("custom model %s not used for %s (disabled, changed or not fitting)", chosen, role)
+        return None
+    return d / f"{chosen}.onnx"
+
+
 def unregister(models_dir: Path, name: str) -> None:
     d = custom_dir(models_dir)
     (d / f"{name}.onnx").unlink(missing_ok=True)
