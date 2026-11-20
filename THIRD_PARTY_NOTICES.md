@@ -55,6 +55,8 @@ it off. Developers can use `scripts/fetch_models.py --open-vocab --hands` instea
 | MediaPipe pose landmarks, ONNX (`pose/pose_estimation_mediapipe_2023mar.onnx`) | Apache-2.0 (Google MediaPipe; OpenCV Zoo export) | `opencv/pose_estimation_mediapipe`, commit `8cd55743`; the person crop geometry in `vcstudio/ai/pose.py` follows its Apache-2.0 reference code |
 | PP-OCRv3 text detection (DB), ONNX (`text/text_detection_en_ppocrv3_2023may.onnx`) | Apache-2.0 (PaddlePaddle PaddleOCR; OpenCV Zoo export) | `opencv/text_detection_ppocr`, commit `c299e81a`; privacy shield, 0.6.0 |
 | CRNN text recognition (English, 8-bit), ONNX (`text/text_recognition_CRNN_EN_2022oct_int8.onnx`) | Apache-2.0 (OpenCV Zoo) | `opencv/text_recognition_crnn`, commit `6487ac54`; privacy shield "only sensitive text", downloaded on click, 0.6.0 |
+| Depth Anything V2 Small, 8-bit ONNX (`depth/depth_anything_v2_small_int8.onnx`) | Apache-2.0 (the Small model only; Base / Large are CC-BY-NC-4.0 and not used) | `onnx-community/depth-anything-v2-small`, commit `4472b736`; depth background source, downloaded on click, 0.6.0 |
+| MediaPipe Face Landmarker v2 mesh, ONNX (`facemesh/face_mesh_468.onnx`, 478 points) | file published as MIT by its uploader; the original MediaPipe model is Apache-2.0 | `astaileyyoung/FaceMeshONNX`, commit `71a6de21`; conversion not documented by the uploader (tf2onnx export), checked against YuNet on photos by tests/test_depth_mesh.py; downloaded on click, 0.6.0 |
 
 SHA-256 of every file: `scripts/fetch_models.py`. The CLIP text tokenizer is implemented in the program
 (`vcstudio/ai/open_vocab.py`, from the model's `tokenizer.json`); no tokenizer library is shipped.

@@ -173,6 +173,12 @@ class ReplacementPage:
         bf.addRow(tr("Second colour"), self.bg_color2)
         bf.addRow(tr("Direction"), self.bg_dir)
         bf.addRow(tr("Mask quality"), self.bg_quality)
+        self.bg_source = QComboBox()
+        for k, v in (("person", "People (segmentation)"), ("depth", "Distance (depth: nearer than the edge setting)")):
+            self.bg_source.addItem(tr(v), k)
+        bf.addRow(tr("Separate by"), self.bg_source)
+        self.bg_depth_dl = QPushButton(tr("Download the depth model (27 MB)"))
+        bf.addRow("", self.bg_depth_dl)
         self._bg_colors = ["#202830", "#2878c8"]
         bgc.layout_.addLayout(bf)
         self.bg_info = QLabel(); self.bg_info.setObjectName("muted"); self.bg_info.setWordWrap(True)
@@ -184,6 +190,8 @@ class ReplacementPage:
         self.bg_strength.valueChanged.connect(self._save_background)
         self.bg_dir.currentIndexChanged.connect(self._save_background)
         self.bg_quality.currentIndexChanged.connect(self._save_background)
+        self.bg_source.currentIndexChanged.connect(self._save_background)
+        self.bg_depth_dl.clicked.connect(self._download_depth)
         self.bg_color.clicked.connect(lambda: self._pick_bg_color(0))
         self.bg_color2.clicked.connect(lambda: self._pick_bg_color(1))
 
@@ -263,6 +271,7 @@ class ReplacementPage:
             self.bg_mode.setCurrentIndex(max(0, self.bg_mode.findData(cfg.mode)))
             self.bg_dir.setCurrentIndex(max(0, self.bg_dir.findData(cfg.direction)))
             self.bg_quality.setCurrentIndex(max(0, self.bg_quality.findData(cfg.quality)))
+            self.bg_source.setCurrentIndex(max(0, self.bg_source.findData(cfg.source)))
             self._bg_colors = [cfg.color, cfg.color2]
             for btn, c in ((self.bg_color, cfg.color), (self.bg_color2, cfg.color2)):
                 btn.setText(c)
@@ -281,6 +290,11 @@ class ReplacementPage:
         self.bg_color2.setEnabled(mode == "gradient")
         self.bg_dir.setEnabled(mode == "gradient")
         self.bg_quality.setEnabled(mode != "off")
+        self.bg_source.setEnabled(mode != "off")
+        from vcstudio.ai import depth as _depth
+        from vcstudio.ai.model_download import network_allowed
+        self.bg_depth_dl.setVisible(self.bg_source.currentData() == "depth" and not _depth.available()
+                                    and network_allowed(self.ctx.settings))
         from vcstudio.ai.person_segmentation import model_path
         if mode != "off" and not model_path().exists():
             self.bg_info.setText(tr("The person segmentation model is not installed (scripts/fetch_models.py)."))
@@ -299,7 +313,8 @@ class ReplacementPage:
             return
         b = {"mode": self.bg_mode.currentData(), "strength": self.bg_strength.value(),
              "asset_id": self.bg_image.currentData(), "color": self._bg_colors[0], "color2": self._bg_colors[1],
-             "direction": self.bg_dir.currentData(), "quality": self.bg_quality.currentData()}
+             "direction": self.bg_dir.currentData(), "quality": self.bg_quality.currentData(),
+             "source": self.bg_source.currentData()}
         prev = BackgroundMode.of(self._body())
         if (prev == "video") != (b["mode"] == "video"):
             b["asset_id"] = None                          # an image id is not a video id (and back)
@@ -311,6 +326,38 @@ class ReplacementPage:
         self._background_widgets()
         if (prev == "video") != (b["mode"] == "video"):
             self._load_background()                       # the asset list switches between images and videos
+
+    def _download_depth(self):
+        import threading
+
+        from vcstudio.ai import model_download as md
+        from vcstudio.ai.open_vocab import user_models_dir
+        self.bg_depth_dl.setEnabled(False)
+        self.bg_info.setText(tr("Downloading…"))
+
+        def work():
+            try:
+                md.download(user_models_dir(), table=md.DEPTH)
+                self._depth_dl_result = ""
+            except Exception as e:                  # noqa: BLE001 - shown to the user
+                self._depth_dl_result = str(e)
+        self._depth_dl_result = None
+        self._depth_thread = threading.Thread(target=work, name="depth-download", daemon=True)
+        self._depth_thread.start()
+        from PySide6.QtCore import QTimer
+
+        def poll():
+            if self._depth_thread.is_alive():
+                QTimer.singleShot(300, poll)
+                return
+            self.bg_depth_dl.setEnabled(True)
+            if self._depth_dl_result:
+                self.bg_info.setText(tr("Download failed: {e}", e=self._depth_dl_result))
+            else:
+                self.ctx.background.seg.stop()
+                self.ctx.background.sync()
+            self._background_widgets()
+        QTimer.singleShot(300, poll)
 
     def _pick_bg_color(self, i: int, color: str | None = None):
         if color is None:

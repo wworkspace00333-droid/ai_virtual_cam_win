@@ -141,6 +141,18 @@ class BackgroundSegmenter:
     def rate_fps(self) -> float:
         return self._rate.rate()
 
+    def use(self, factory) -> None:
+        """Switch what produces the masks (person segmentation <-> depth); restarts the thread if it runs."""
+        if factory is self._factory:
+            return
+        running = self.running
+        if running:
+            self.stop()
+        self._factory, self._seg = factory, None
+        self.masks.clear()
+        if running:
+            self.start()
+
     def start(self) -> None:
         if self.running:
             return

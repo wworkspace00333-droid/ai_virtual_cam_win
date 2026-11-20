@@ -50,6 +50,8 @@ from vcstudio.ai.model_download import OPEN_VOCAB as _OV  # noqa: E402
 from vcstudio.ai.model_download import POSE as _POSE  # noqa: E402
 from vcstudio.ai.model_download import TEXT as _TEXT  # noqa: E402
 from vcstudio.ai.model_download import TEXT_REC as _TEXT_REC  # noqa: E402
+from vcstudio.ai.model_download import DEPTH as _DEPTH  # noqa: E402
+from vcstudio.ai.model_download import FACE_MESH as _FACE_MESH  # noqa: E402
 
 OPEN_VOCAB = {name: (url, digest, lic) for name, (url, digest, lic, _size) in _OV.items()}
 # optional, --hands: gesture control (MediaPipe palm + hand landmarks, OpenCV Zoo ONNX, Apache-2.0, ~8 MB)
@@ -59,6 +61,9 @@ CLIP = {name: (url, digest, lic) for name, (url, digest, lic, _size) in _CLIP.it
 # optional, --pose / --text (0.6.0): MediaPipe person + pose (~17 MB), PP-OCRv3 text detection (~2.4 MB), Apache-2.0
 POSE = {name: (url, digest, lic) for name, (url, digest, lic, _size) in _POSE.items()}
 TEXT = {name: (url, digest, lic) for name, (url, digest, lic, _size) in {**_TEXT, **_TEXT_REC}.items()}
+# optional, --depth (27 MB) / --mesh (5 MB): depth background source, dense face mesh
+DEPTH = {name: (url, digest, lic) for name, (url, digest, lic, _size) in _DEPTH.items()}
+MESH = {name: (url, digest, lic) for name, (url, digest, lic, _size) in _FACE_MESH.items()}
 
 
 def sha256(p: Path) -> str:
@@ -78,10 +83,13 @@ def main() -> int:
     ap.add_argument("--clip", action="store_true", help="also CLIP ViT-B/32 for check + image query (~147 MB)")
     ap.add_argument("--pose", action="store_true", help="also body pose models for AI Vision (~17 MB)")
     ap.add_argument("--text", action="store_true", help="also the text detector and recogniser for the privacy shield (~19 MB)")
+    ap.add_argument("--depth", action="store_true", help="also Depth Anything V2 Small for depth backgrounds (~27 MB)")
+    ap.add_argument("--mesh", action="store_true", help="also the dense face mesh model (~5 MB)")
     a = ap.parse_args()
     bad = 0
     todo = dict(MODELS, **(OPEN_VOCAB if a.open_vocab else {}), **(HANDS if a.hands else {}), **(CLIP if a.clip else {}),
-                **(POSE if a.pose else {}), **(TEXT if a.text else {}))
+                **(POSE if a.pose else {}), **(TEXT if a.text else {}), **(DEPTH if a.depth else {}),
+                **(MESH if a.mesh else {}))
     for name, (url, digest, lic) in todo.items():
         dst = a.dir / name
         dst.parent.mkdir(parents=True, exist_ok=True)

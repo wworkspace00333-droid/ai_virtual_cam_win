@@ -15,6 +15,10 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 - Privacy Shield "only sensitive text" works: the text recognition model (CRNN, English, 16 MB, downloaded on click)
   reads each detected line word by word; phone, card, account-like numbers, addresses and your keywords are hidden,
   other text stays visible. At most 12 lines are read per pass; any others stay hidden.
+- Background by distance: Replacement → Background → "Separate by: distance" uses a depth model (Depth Anything V2
+  Small, Apache-2.0, 27 MB download): what is nearer than the edge setting stays, the rest is blurred or replaced.
+  About 0.4 s per depth map on a 2-core CPU, so it updates ~2 times a second there.
+- AI Vision: dense face mesh (478 points with irises, 5 MB download) for up to two faces, drawn with the overlay.
 - Colour Studio: 3-D LUTs run on the GPU (Direct3D 11 compute pass with a 3-D texture and hardware trilinear
   filtering) when a hardware graphics card is present; closer to an exact lookup than the CPU path (mean error 0.19
   vs 3.3 levels). On a PC without a GPU the CPU path stays (WARP was not faster: 20.8 vs 18.4 ms at 1080p).

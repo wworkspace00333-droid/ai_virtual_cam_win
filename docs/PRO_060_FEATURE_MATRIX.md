@@ -25,10 +25,10 @@ hardware GPU or a physical webcam (the development server has neither).
 | Vision | overlays, scheduler module (lowest priority), stale rejection | ✅ | ai/vision.py, VideoPipeline | synthetic pipeline |
 | Vision | body gesture "hand_raised" (pose) as an automation trigger | ✅ | ai/vision.hand_raised, body_events | synthetic poses |
 | Vision | body / face-aware auto-framing when the detector is off or blind | ✅ | ai/vision.framing_objects, VideoPipeline | synthetic |
-| Vision | dense face mesh (468 points) | ⬜ | no model approved | — |
+| Vision | dense face mesh (478 points incl. irises, up to 2 faces), overlay, face outline | ✅ | ai/face_mesh.py, ai/vision.py | real photo: agrees with YuNet (nose / mouth within 20-25 % of the face size; measured 1-4 px), rejects a wall; model provenance only partly documented |
 | Background | colour, gradient, looping video layers | ✅ | replacement/background.py | synthetic + bundled clip |
 | Background | Fast / Balanced / Quality (guided-filter edge refinement) | ✅ | ai/person_segmentation.guided_refine | synthetic edge test |
-| Background | depth-aware blur | ⬜ | no depth model approved | — |
+| Background | depth source: blur / replace what is farther than the focus (Depth Anything V2 Small, ≤ 4 maps / s) | ✅ | ai/depth.py, replacement/background.py | real photo: people nearer than the building; ~0.4 s per map on this CPU |
 | Background | per-person masks / effects | ✅ (0.5.x) | PersonMaskDetector + per-object regions | — |
 | Tracking | manual lock, re-acquisition by position, 10 s buffer, track history | ✅ | ai/tracking.py | synthetic |
 | Tracking | people list with Lock / Unlock; auto-framing of only the locked person(s) (choose who is framed) | ✅ | ui/studio/vision_tab.py, replacement/framing.py | synthetic + GUI test |

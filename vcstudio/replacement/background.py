@@ -4,7 +4,9 @@ Modes: off | blur (strength = blur size) | image (an image asset from the profil
 colour) | gradient (two colours, vertical / horizontal / diagonal) | video (a video asset, looping; frames come from
 the compositor's player pool, decoded on its own thread). Quality: fast (light temporal smoothing, crisp edge),
 balanced (default), quality (stronger smoothing, and the mask is refined against the picture's own edges with a
-guided filter once per mask: hair and fingers follow the picture instead of the 192 px model grid). The person mask
+guided filter once per mask: hair and fingers follow the picture instead of the 192 px model grid). Source: person
+(PP-HumanSeg, default) or depth (Depth Anything V2 Small, vcstudio/ai/depth.py: what is nearer than the focus — the
+edge setting — stays, the rest is blurred or replaced; at most 4 maps / s). The person mask
 comes from vcstudio.ai.person_segmentation.BackgroundSegmenter (own thread, newest mask only); the output thread
 blends the newest mask into each frame before the region replacements are drawn. Without a mask yet (model loading,
 first frames) or after a segmentation error, frames pass unchanged: the camera never waits and never goes black.
@@ -61,6 +63,7 @@ class BackgroundConfig:
     color2: str = "#2878c8"
     direction: str = "vertical"
     quality: str = "balanced"
+    source: str = "person"        # person | depth
 
     @classmethod
     def from_profile(cls, body: dict) -> "BackgroundConfig":
@@ -71,7 +74,8 @@ class BackgroundConfig:
                    fps=float(min(30, max(2, b.get("fps", 15)))), color=str(b.get("color") or "#202830"),
                    color2=str(b.get("color2") or "#2878c8"),
                    direction=b.get("direction") if b.get("direction") in DIRECTIONS else "vertical",
-                   quality=b.get("quality") if b.get("quality") in QUALITY else "balanced")
+                   quality=b.get("quality") if b.get("quality") in QUALITY else "balanced",
+                   source="depth" if b.get("source") == "depth" else "person")
 
 
 class BackgroundService:
@@ -80,6 +84,8 @@ class BackgroundService:
         self.assets = assets
         self.cfg = BackgroundConfig()
         self.seg = BackgroundSegmenter(capture, segmenter_factory=segmenter_factory)
+        self.person_factory = self.seg._factory
+        self.depth_factory = self._make_depth                 # tests replace it
         self._image: np.ndarray | None = None
         self._lock = threading.Lock()
         self.applied = 0
@@ -106,10 +112,18 @@ class BackgroundService:
                 log.warning(self.error)
         with self._lock:
             self.cfg, self._image = cfg, image
-        self.seg.fps = cfg.fps
+        self.seg.use(self.depth_factory if cfg.source == "depth" else self.person_factory)
+        self.seg.fps = min(cfg.fps, 4.0) if cfg.source == "depth" else cfg.fps
         self.seg.smoothing = QUALITY[cfg.quality]
         if not self.active:
             self.seg.masks.clear()
+
+    @staticmethod
+    def _make_depth():
+        from vcstudio.ai import depth
+        if not depth.available():
+            raise FileNotFoundError("depth model not downloaded (Replacement → Background → Download)")
+        return depth.DepthSegmenter()
 
     def start(self) -> None:
         if self.active:

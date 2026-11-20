@@ -90,6 +90,12 @@ RU_060: dict[str, str] = {
     "AI Vision (face, pose, hands)": "ИИ-зрение (лицо, поза, руки)",
     "People in view": "Люди в кадре", "Object": "Объект", "Confidence": "Уверенность", "Locked": "Закреплён",
     "Lock": "Закрепить", "Unlock": "Открепить",
+    "Dense face mesh (478 points, up to 2 faces)": "Плотная сетка лица (478 точек, до 2 лиц)",
+    "Face mesh: downloaded.": "Сетка лица: скачана.", "Face mesh: not downloaded.": "Сетка лица: не скачана.",
+    "Download missing models ({mb} MB)": "Скачать недостающие модели ({mb} МБ)",
+    "People (segmentation)": "Люди (сегментация)",
+    "Distance (depth: nearer than the edge setting)": "Расстояние (глубина: ближе порога края)",
+    "Separate by": "Отделять по", "Download the depth model (27 MB)": "Скачать модель глубины (27 МБ)",
     "Auto-framing follows only locked people": "Автокадрирование следит только за закреплёнными",
     "Tracked people (object detection must be on). A locked person keeps their number through short occlusions (up "
     "to 10 s) and is found again by position; auto-framing can follow only the locked people.":

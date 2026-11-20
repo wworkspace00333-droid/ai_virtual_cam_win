@@ -35,6 +35,7 @@ from vcstudio.core.frame_queue import LatestSlot
 log = logging.getLogger(__name__)
 
 STALE_S = 0.5
+MESH_FACES = 2
 HAND_HOLD_S = 0.6
 HAND_RELEASE_S = 0.5
 
@@ -47,6 +48,7 @@ class VisionConfig:
     pose: bool = True
     hands: bool = False
     overlay: bool = True
+    mesh: bool = False                           # dense face mesh (478 points) for up to MESH_FACES faces
 
     @staticmethod
     def from_settings(settings) -> VisionConfig:
@@ -59,7 +61,7 @@ class VisionConfig:
         except (TypeError, ValueError):
             fps = 6.0
         return VisionConfig(bool(d.get("enabled", False)), fps, bool(d.get("face", True)), bool(d.get("pose", True)),
-                            bool(d.get("hands", False)), bool(d.get("overlay", True)))
+                            bool(d.get("hands", False)), bool(d.get("overlay", True)), bool(d.get("mesh", False)))
 
 
 @dataclass
@@ -67,6 +69,7 @@ class FaceInfo:
     box: tuple[float, float, float, float]
     points: np.ndarray
     pose: object = None                         # head_pose.HeadPose | None
+    mesh: object = None                         # face_mesh.Mesh | None
 
 
 @dataclass
@@ -165,6 +168,9 @@ class VisionService:
         if part == "hands":
             from vcstudio.ai import hands
             return hands.HandTracker("all", self.cache_dir) if hands.available() else None
+        if part == "mesh":
+            from vcstudio.ai import face_mesh
+            return face_mesh.FaceMesh(self.cache_dir) if face_mesh.available() else None
         return None
 
     def _run(self, stop: threading.Event) -> None:
@@ -172,7 +178,8 @@ class VisionService:
         parts: dict = {}
         missing = []
         try:
-            for part, on in (("face", cfg.face), ("pose", cfg.pose), ("hands", cfg.hands)):
+            for part, on in (("face", cfg.face or cfg.mesh), ("pose", cfg.pose), ("hands", cfg.hands),
+                             ("mesh", cfg.mesh)):
                 if not on or (part == "hands" and self._gesture_hands_live()):
                     continue
                 a = self._make(part)
@@ -254,6 +261,11 @@ class VisionService:
                 res.faces.append(FaceInfo((f.x0, f.y0, f.x1, f.y1), f.points,
                                           head_pose.estimate(f.points, frame.width, frame.height)))
             res.ms["face"] = round((time.perf_counter() - t) * 1000, 1)
+            if "mesh" in parts:
+                t = time.perf_counter()
+                for fi in sorted(res.faces, key=lambda f: -(f.box[2] - f.box[0]))[:MESH_FACES]:   # largest faces
+                    fi.mesh = parts["mesh"].run(bgr, fi.box, fi.points)
+                res.ms["mesh"] = round((time.perf_counter() - t) * 1000, 1)
         if "pose" in parts:
             t = time.perf_counter()
             res.poses, _ = parts["pose"].estimate(bgr)
@@ -319,7 +331,10 @@ def draw(bgra: np.ndarray, r: VisionResult) -> None:
     import cv2
 
     from vcstudio.ai import head_pose, pose
+    from vcstudio.ai import face_mesh
     for f in r.faces:
+        if f.mesh is not None:
+            face_mesh.draw(bgra, f.mesh)
         head_pose.draw(bgra, f.points, f.pose)
     pose.draw(bgra, r.poses)
     for h in r.hands:

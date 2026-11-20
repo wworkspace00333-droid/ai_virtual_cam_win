@@ -228,3 +228,15 @@ def test_vision_tab_people_lock_and_locked_only_framing(win):
     tab.locked_only.setChecked(True)
     assert win.ctx.pipeline.scene.framing.locked_only
     tab.tick()
+
+
+def test_vision_mesh_checkbox_and_background_depth_source(win):
+    tab = studio(win).part("AI Vision")
+    tab.mesh.setChecked(True)
+    assert win.ctx.settings.get("vision")["mesh"] is True and win.ctx.vision.cfg.mesh
+    tab.mesh.setChecked(False)
+    page = win.pages[win.page_keys().index("replacement")]
+    page.bg_mode.setCurrentIndex(page.bg_mode.findData("blur"))
+    page.bg_source.setCurrentIndex(page.bg_source.findData("depth"))
+    assert win.ctx.profiles.active()["body"]["background"]["source"] == "depth"
+    assert win.ctx.background.cfg.source == "depth"

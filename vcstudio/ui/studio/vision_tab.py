@@ -24,7 +24,8 @@ class VisionTab:
         self.pose = QCheckBox(tr("Body pose (skeleton)"))
         self.hands = QCheckBox(tr("Hands (21 points per hand)"))
         self.overlay = QCheckBox(tr("Draw on the camera picture"))
-        for w in (self.enabled, self.face, self.pose, self.hands, self.overlay):
+        self.mesh = QCheckBox(tr("Dense face mesh (478 points, up to 2 faces)"))
+        for w in (self.enabled, self.face, self.mesh, self.pose, self.hands, self.overlay):
             c.layout_.addWidget(w)
         r = QHBoxLayout()
         r.addWidget(QLabel(tr("Analyses per second")))
@@ -76,7 +77,7 @@ class VisionTab:
         self.worker = Worker()
         self.worker.done.connect(self._done)
         self.load()
-        for w in (self.enabled, self.face, self.pose, self.hands, self.overlay):
+        for w in (self.enabled, self.face, self.mesh, self.pose, self.hands, self.overlay):
             w.toggled.connect(self.save)
         self.fps.valueChanged.connect(self.save)
 
@@ -88,6 +89,7 @@ class VisionTab:
         self.pose.setChecked(bool(v.get("pose", True)))
         self.hands.setChecked(bool(v.get("hands", False)))
         self.overlay.setChecked(bool(v.get("overlay", True)))
+        self.mesh.setChecked(bool(v.get("mesh", False)))
         self.fps.setValue(int(v.get("fps", 6)))
         self._loading = False
         self._load_locked_only()
@@ -98,24 +100,30 @@ class VisionTab:
             return
         self.ctx.settings.set("vision", {"enabled": self.enabled.isChecked(), "fps": self.fps.value(),
                                          "face": self.face.isChecked(), "pose": self.pose.isChecked(),
-                                         "hands": self.hands.isChecked(), "overlay": self.overlay.isChecked()})
+                                         "hands": self.hands.isChecked(), "overlay": self.overlay.isChecked(),
+                                         "mesh": self.mesh.isChecked()})
 
     def _models_text(self) -> None:
-        from vcstudio.ai import hands, pose
+        from vcstudio.ai import face_mesh, hands, pose
         from vcstudio.ai.model_download import network_allowed
         lines = [tr("Face: built in (YuNet)."),
+                 tr("Face mesh: downloaded.") if face_mesh.available() else tr("Face mesh: not downloaded."),
                  tr("Body pose: downloaded.") if pose.available() else tr("Body pose: not downloaded."),
                  tr("Hands: downloaded.") if hands.available() else
                  tr("Hands: not downloaded (Settings → Gestures → Download).")]
         self.models.setText("\n".join(lines))
-        self.dl_btn.setVisible(not pose.available() and network_allowed(self.ctx.settings))
+        self._missing = [t for t, ok in (("POSE", pose.available()), ("FACE_MESH", face_mesh.available())) if not ok]
+        mb = {"POSE": 17, "FACE_MESH": 5}
+        self.dl_btn.setText(tr("Download missing models ({mb} MB)", mb=sum(mb[t] for t in self._missing)))
+        self.dl_btn.setVisible(bool(self._missing) and network_allowed(self.ctx.settings))
 
     def download(self) -> None:
         from vcstudio.ai import model_download as md
         from vcstudio.ai.open_vocab import user_models_dir
         self.dl_btn.setEnabled(False)
         self.models.setText(tr("Downloading…"))
-        self.worker.run("download", lambda: md.download(user_models_dir(), table=md.POSE))
+        tables = [getattr(md, t) for t in self._missing]
+        self.worker.run("download", lambda: [md.download(user_models_dir(), table=t) for t in tables])
 
     def _done(self, kind, res, err) -> None:
         self.dl_btn.setEnabled(True)

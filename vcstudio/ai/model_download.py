@@ -95,6 +95,28 @@ TEXT_REC: dict[str, tuple[str, str, str, int]] = {
 }
 TEXT_REC_APPROX_MB = 16
 
+# Depth (vcstudio/ai/depth.py): Depth Anything V2 Small (Apache-2.0; the Base / Large models are non-commercial and
+# not used), 8-bit ONNX from onnx-community, 27 MB, pinned commit.
+DEPTH_REV = "onnx-community/depth-anything-v2-small/resolve/4472b7362082ad9968fee890ca0f1e5aca36b93d/"
+DEPTH: dict[str, tuple[str, str, str, int]] = {
+    "depth/depth_anything_v2_small_int8.onnx": (
+        HF + DEPTH_REV + "onnx/model_int8.onnx",
+        "01aa7a23de3f4a0ee1a2bb9997e6918104c85a9f95dea46d27b9b3fb0c6b9001", "Apache-2.0", 27258801),
+}
+DEPTH_APPROX_MB = 27
+
+# Dense face mesh (vcstudio/ai/face_mesh.py): an ONNX export of MediaPipe Face Mesh (468 points) published on Hugging
+# Face by astaileyyoung (licence field: MIT; the original Google model is Apache-2.0); the repository does not say how
+# it was converted, so it is checked on a photo by tests before use. 5 MB, pinned commit.
+FACEMESH_REV = "astaileyyoung/FaceMeshONNX/resolve/71a6de2112ae66337e098bff6cfcdb3905899207/"
+FACE_MESH: dict[str, tuple[str, str, str, int]] = {
+    "facemesh/face_mesh_468.onnx": (
+        HF + FACEMESH_REV + "mesh.onnx",
+        "c334c26b128dfc709da0f353c6157ac340b785f5f25cdab5dbea12bbea243172", "MIT (file) / Apache-2.0 (MediaPipe)",
+        5133323),
+}
+FACE_MESH_APPROX_MB = 5
+
 # CLIP ViT-B/32 (OpenAI, MIT), 8-bit ONNX (Xenova, Transformers.js), pinned commit, about 147 MB: checks what OWLv2
 # found against the query text, and finds objects like an example picture (vcstudio/ai/clip.py). The text model uses
 # the CLIP tokenizer that comes with OWLv2 (same vocabulary), so it is only useful with the open-vocabulary models.
