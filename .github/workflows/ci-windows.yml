@@ -80,6 +80,11 @@ jobs:
         run: python scripts/check_licenses.py
 
       - name: Tests with coverage
+        # a test stuck in native code (GIL held: pytest-timeout cannot fire) leaves every thread's stack in this file
+        # after VCS_HANG_DUMP_S (conftest.py); it is uploaded below, so a hang is diagnosable from the run page
+        env:
+          VCS_HANG_LOG: build/test-hang.log
+          VCS_HANG_DUMP_S: "180"
         run: python -m pytest -q -p no:cacheprovider --timeout=600 -rfE --junitxml=build/junit.xml --cov --cov-report=json:build/coverage.json --cov-report=term
 
       - name: Failed tests as annotations (readable on the run page without signing in)
@@ -99,4 +104,5 @@ jobs:
           path: |
             build/coverage.json
             build/junit.xml
+            build/test-hang.log
           retention-days: 14

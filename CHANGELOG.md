@@ -15,6 +15,10 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 - Privacy Shield "only sensitive text" works: the text recognition model (CRNN, English, 16 MB, downloaded on click)
   reads each detected line word by word; phone, card, account-like numbers, addresses and your keywords are hidden,
   other text stays visible. At most 12 lines are read per pass; any others stay hidden.
+- Choose who is framed: Studio → AI Vision lists the tracked people with Lock / Unlock, and auto-framing can follow
+  only the locked person(s).
+- CI uploads the stack dump of a test stuck in native code (build/test-hang.log); one CI run of 14c0f07 hung once
+  in the tests and passed on re-run, the same tests passed 3 times in a row locally.
 - Audio Studio: hear the processed microphone (monitoring, headphones), with a bounded queue so the delay never grows.
 
 ## [0.6.0-preview] — 2026-11-19

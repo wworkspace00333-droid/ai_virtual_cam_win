@@ -31,6 +31,7 @@ hardware GPU or a physical webcam (the development server has neither).
 | Background | depth-aware blur | ⬜ | no depth model approved | — |
 | Background | per-person masks / effects | ✅ (0.5.x) | PersonMaskDetector + per-object regions | — |
 | Tracking | manual lock, re-acquisition by position, 10 s buffer, track history | ✅ | ai/tracking.py | synthetic |
+| Tracking | people list with Lock / Unlock; auto-framing of only the locked person(s) (choose who is framed) | ✅ | ui/studio/vision_tab.py, replacement/framing.py | synthetic + GUI test |
 | Tracking | SAM 2.1 video propagation | ⛔ | ONNX export lacks memory modules | — |
 | Privacy | faces / screens / background levels (existing) | ✅ | replacement/privacy_mode.py | existing tests |
 | Privacy | text regions (PP-OCRv3), custom / excluded areas, padding, effects | ✅ | replacement/privacy_shield.py | real detector on synthetic text; misses documented |

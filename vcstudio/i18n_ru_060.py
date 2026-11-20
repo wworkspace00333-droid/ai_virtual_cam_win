@@ -87,7 +87,15 @@ RU_060: dict[str, str] = {
     "State: {st} · {fps} analyses/s · faces {f} · poses {p} · hands {h}":
         "Состояние: {st} · {fps} анализов/с · лиц {f} · поз {p} · рук {h}",
     "Models missing: {m}": "Нет моделей: {m}",
-    "AI Vision (face, pose, hands)": "ИИ-зрение (лицо, поза, руки)", "Download failed: {e}": "Загрузка не удалась: {e}",
+    "AI Vision (face, pose, hands)": "ИИ-зрение (лицо, поза, руки)",
+    "People in view": "Люди в кадре", "Object": "Объект", "Confidence": "Уверенность", "Locked": "Закреплён",
+    "Lock": "Закрепить", "Unlock": "Открепить",
+    "Auto-framing follows only locked people": "Автокадрирование следит только за закреплёнными",
+    "Tracked people (object detection must be on). A locked person keeps their number through short occlusions (up "
+    "to 10 s) and is found again by position; auto-framing can follow only the locked people.":
+        "Отслеживаемые люди (нужно включённое распознавание объектов). Закреплённый человек сохраняет номер при "
+        "коротких перекрытиях (до 10 с) и находится снова по положению; автокадрирование может следить только за "
+        "закреплёнными.", "Download failed: {e}": "Загрузка не удалась: {e}",
     "running": "работает", "no models": "нет моделей", "error": "ошибка", "holding": "удерживает",
     # privacy
     "E-mail addresses": "Адреса e-mail", "Phone numbers": "Номера телефонов", "Payment card numbers": "Номера карт",

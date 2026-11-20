@@ -31,6 +31,7 @@ class FramingConfig:
     tau: float = 0.6
     deadzone: float = 0.04
     lost_s: float = 2.0
+    locked_only: bool = False     # 0.6.0: frame only the people locked in the tracker (Studio → AI Vision)
 
     @classmethod
     def from_profile(cls, body: dict) -> "FramingConfig":
@@ -38,7 +39,8 @@ class FramingConfig:
         return cls(enabled=bool(f.get("enabled", False)),
                    zoom_max=float(min(4.0, max(1.0, f.get("zoom_max", 2.0)))),
                    margin=float(min(1.0, max(0.0, f.get("margin", 0.25)))),
-                   tau=float(min(5.0, max(0.05, f.get("tau", 0.6)))))
+                   tau=float(min(5.0, max(0.05, f.get("tau", 0.6)))),
+                   locked_only=bool(f.get("locked_only", False)))
 
 
 class AutoFramer:
@@ -61,7 +63,11 @@ class AutoFramer:
 
     # ---------------- target
     def target(self, tracked, W: int, H: int) -> tuple[float, float, float, float] | None:
-        boxes = [(o.x0, o.y0, o.x1, o.y1) for o in tracked if o.label in TARGET_CLASSES]
+        people = [o for o in tracked if o.label in TARGET_CLASSES]
+        if self.cfg.locked_only:                     # frame the chosen person(s); nobody locked: everyone as usual
+            locked = [o for o in people if getattr(o, "locked", False)]
+            people = locked or people
+        boxes = [(o.x0, o.y0, o.x1, o.y1) for o in people]
         if not boxes:
             boxes = [(o.x0, o.y0, o.x1, o.y1) for o in tracked if o.label in FALLBACK_CLASSES]
             if boxes:                                    # a face alone: frame head and shoulders

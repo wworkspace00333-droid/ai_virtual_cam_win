@@ -208,3 +208,23 @@ def test_remote_tab_switches_the_server_and_renews_the_code(win):
     assert tab.lan_warn.isVisibleTo(tab.widget) and win.ctx.settings.get("remote")["lan"] and not win.ctx.remote.running
     tab.lan.setChecked(False)
     tab.tick()
+
+
+def test_vision_tab_people_lock_and_locked_only_framing(win):
+    from vcstudio.ai.detection import Detection
+    tab = studio(win).part("AI Vision")
+    tr_ = win.ctx.ai.tracker
+    t = 0.0
+    for _ in range(4):
+        tr_.update([Detection("person", 0.9, 100, 100, 180, 300)], t, (640, 360))
+        t += 0.1
+    objs = tr_.snapshot(t)
+    tab.refresh_people(objs)
+    assert tab.people.rowCount() == 1 and tab.people.item(0, 1).text() == "person"
+    tab.people.selectRow(0)
+    assert tab.set_locked(True) and tr_.snapshot(t)[0].locked
+    assert tab.set_locked(False) and not tr_.snapshot(t)[0].locked
+    assert not tab.set_locked(True, track_id=999)
+    tab.locked_only.setChecked(True)
+    assert win.ctx.pipeline.scene.framing.locked_only
+    tab.tick()

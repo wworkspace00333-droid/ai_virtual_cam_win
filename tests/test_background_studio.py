@@ -150,3 +150,21 @@ def test_unlocked_track_expires_and_a_new_id_is_given():
     tr.update([det(150, 105)], t, (640, 360))
     tr.update([det(150, 105)], t + 0.1, (640, 360))
     assert all(o.track_id != tid for o in tr.snapshot(t + 0.1))
+
+
+def test_framing_can_follow_only_locked_people():
+    from vcstudio.ai.tracking import TrackedObject
+    from vcstudio.replacement.framing import AutoFramer, FramingConfig
+
+    def person(tid, x0, locked=False):
+        return TrackedObject(tid, "person", 0.9, x0, 100, x0 + 80, 300, "tracked", 1.0, 0.0, locked=locked)
+    people = [person(1, 40), person(2, 520, locked=True)]
+    f = AutoFramer(FramingConfig(enabled=True, locked_only=True))
+    x, y, w, h = f.target(people, 640, 360)
+    assert x <= 520 and x + w >= 600                          # the locked person on the right is inside
+    f2 = AutoFramer(FramingConfig(enabled=True, locked_only=False))
+    x2, _, w2, _ = f2.target(people, 640, 360)
+    assert x2 <= 40 and w2 > w and x > x2 + 50                # both people; the locked-only crop is smaller
+    unlocked = [person(1, 40), person(2, 520)]
+    assert f.target(unlocked, 640, 360) == f2.target(unlocked, 640, 360)   # nobody locked: everyone
+    assert FramingConfig.from_profile({"framing": {"locked_only": True}}).locked_only

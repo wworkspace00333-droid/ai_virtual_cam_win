@@ -1,7 +1,8 @@
 """AI Vision tab: face landmarks + head pose, body pose and hands (vcstudio/ai/vision.py), and the pose download."""
 from __future__ import annotations
 
-from PySide6.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QPushButton, QSpinBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (QCheckBox, QHBoxLayout, QLabel, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem,
+                               QVBoxLayout, QWidget)
 
 from vcstudio.i18n import tr
 from vcstudio.ui.studio.common import Worker, muted
@@ -47,7 +48,31 @@ class VisionTab:
         r2.addStretch(1)
         dl.layout_.addLayout(r2)
         lay.addWidget(dl)
+        pc = Card("People in view")
+        pc.layout_.addWidget(muted("Tracked people (object detection must be on). A locked person keeps their number "
+                                   "through short occlusions (up to 10 s) and is found again by position; "
+                                   "auto-framing can follow only the locked people."))
+        self.people = QTableWidget(0, 4)
+        self.people.setHorizontalHeaderLabels([tr(h) for h in ("Id", "Object", "Confidence", "Locked")])
+        self.people.horizontalHeader().setStretchLastSection(True)
+        self.people.verticalHeader().setVisible(False)
+        self.people.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.people.setMinimumHeight(110)
+        pc.layout_.addWidget(self.people)
+        r3 = QHBoxLayout()
+        self.lock_btn = QPushButton(tr("Lock"))
+        self.unlock_btn = QPushButton(tr("Unlock"))
+        self.locked_only = QCheckBox(tr("Auto-framing follows only locked people"))
+        for w in (self.lock_btn, self.unlock_btn, self.locked_only):
+            r3.addWidget(w)
+        r3.addStretch(1)
+        pc.layout_.addLayout(r3)
+        lay.addWidget(pc)
         lay.addStretch(1)
+        self.lock_btn.clicked.connect(lambda: self.set_locked(True))
+        self.unlock_btn.clicked.connect(lambda: self.set_locked(False))
+        self.locked_only.toggled.connect(self._save_locked_only)
+        ctx.profiles.add_listener(lambda ev, _n: self._load_locked_only() if ev == "switched" else None)
         self.worker = Worker()
         self.worker.done.connect(self._done)
         self.load()
@@ -65,6 +90,7 @@ class VisionTab:
         self.overlay.setChecked(bool(v.get("overlay", True)))
         self.fps.setValue(int(v.get("fps", 6)))
         self._loading = False
+        self._load_locked_only()
         self._models_text()
 
     def save(self, *_):
@@ -100,7 +126,47 @@ class VisionTab:
         self.ctx.vision.stop()
         self.ctx.vision.apply_settings()
 
+    def _load_locked_only(self) -> None:
+        self.locked_only.blockSignals(True)
+        self.locked_only.setChecked(bool((self.ctx.profiles.active()["body"].get("framing") or {}).get("locked_only")))
+        self.locked_only.blockSignals(False)
+
+    def _save_locked_only(self, on: bool) -> None:
+        self.ctx.update_active_profile(lambda b: b.setdefault("framing", {}).__setitem__("locked_only", bool(on)))
+
+    def refresh_people(self, objs=None) -> None:
+        if objs is None:
+            from vcstudio.core.frame import host_time_s
+            objs = self.ctx.ai.tracked_at(host_time_s()) if self.ctx.ai.running else []
+        cur = self._selected_id()
+        self.people.setRowCount(len(objs))
+        for row, o in enumerate(objs):
+            vals = (o.track_id, o.label, f"{o.confidence:.2f}", tr("yes") if getattr(o, "locked", False) else "")
+            for col, v in enumerate(vals):
+                self.people.setItem(row, col, QTableWidgetItem(str(v)))
+            if o.track_id == cur:
+                self.people.selectRow(row)
+
+    def _selected_id(self) -> int | None:
+        r = self.people.currentRow()
+        it = self.people.item(r, 0) if r >= 0 else None
+        try:
+            return int(it.text()) if it else None
+        except ValueError:
+            return None
+
+    def set_locked(self, on: bool, track_id: int | None = None) -> bool:
+        tid = track_id if track_id is not None else self._selected_id()
+        if tid is None:
+            return False
+        tr_ = self.ctx.ai.tracker
+        if on:
+            return tr_.lock(tid)
+        tr_.unlock(tid)
+        return True
+
     def tick(self) -> None:
+        self.refresh_people()
         s = self.ctx.vision.stats
         parts = ", ".join(f"{k} {v} ms" for k, v in s.parts_ms.items())
         self.status.setText(tr("State: {st} · {fps} analyses/s · faces {f} · poses {p} · hands {h}",
