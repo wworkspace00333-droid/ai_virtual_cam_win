@@ -16,7 +16,7 @@ are not verified on real hardware yet.
 | 5 | AI errors isolated | ✅ | every new stage falls back to the unmodified frame; vision / shield / extra sources on own threads; tests with failing analysers |
 | 6 | Old profiles migrate correctly | ✅ automated | new sections are optional and default to off; settings deep-merged; old-profile tests pass |
 | 7 | New settings persist | ✅ | GUI tests write through settings / profiles |
-| 8 | Installer updates safely | 🟡 | preview installer built and installed fresh in CI with the installed-app check passing; an upgrade over 0.5.3 is not tested yet (the same installer code passed 0.4.1 → 0.5.2) |
+| 8 | Installer updates safely | ✅ | fresh install in CI and upgrade 0.5.2 → 0.6.0-preview2 on this server (2026-11-20): exit 0, cameras registered, self-check 13/13, e2e ok, data kept |
 | 9 | Uninstall leaves nothing | ⬜ for 0.6.0 | no new system components were added (no driver, no service, no firewall rule); new data files live in app data |
 | 10 | Model and dependency licences checked | ✅ | 3 new Apache-2.0 models in THIRD_PARTY_NOTICES; no new Python dependencies |
 | 11 | New APIs protected | ✅ | reports/PRO_060_SECURITY.md, tests/test_remote.py |
@@ -27,10 +27,13 @@ are not verified on real hardware yet.
 Published pre-releases: v0.6.0-preview and **v0.6.0-preview2** (installer 227 MB + .sha256; CI build, silent install
 and installed-app check passed). 0.5.3 stays the latest release, so 0.5.x users are not offered the previews.
 
-1. Upgrade over an installed version: tried on this server (installed 0.5.2) — the installer stops safely in
-   PrepareToInstall (exit code 8) because a reboot is still pending from the earlier 0.4.1 → 0.5.2 update
-   (vcam_dshow.dll was in use); 0.5.2 and both cameras stayed intact. Needs a reboot of the server (the owner's
-   decision; this session runs on it), then: install preview2 silently, installed self-check, Studio tabs, cameras.
+1. Done 2026-11-20 — upgrade over an installed version on this server: after the owner rebooted it (the pending
+   replace from the earlier update completed), the downloaded 0.6.0-preview2 installer (SHA-256 checked) upgraded
+   0.5.2 silently: exit code 0 in 26 s, version 0.6.0-preview2, both cameras registered again; vcam_dshow.dll was in
+   use by another process and is replaced at the next restart (the previous DLL keeps the camera working meanwhile).
+   Installed app: self-check 13/13; camera loopback ok (60 fps capture, median latency 11 ms, delivery 70 %);
+   pipeline end-to-end ok (61 fps, latency 12 / 14 ms p50 / p95, 0 render errors, 0 dropped, client 60 fps);
+   settings, profile and data folder kept.
 2. Real hardware: the "0.6.0 Studio" section of docs/HARDWARE_CHECKLIST.md (GPU backends incl. the GPU LUT pass, two
    webcams, a person in front of a camera for vision / face mesh / depth, privacy shield in Zoom / Teams, a real
    microphone with monitoring, the phone page over LAN).
