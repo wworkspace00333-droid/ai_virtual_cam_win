@@ -40,6 +40,7 @@ log = logging.getLogger(__name__)
 TEXT_MODES = ("off", "all", "sensitive")
 EFFECTS = ("pixelate", "blur", "black")
 PATTERNS = ("email", "phone", "card", "account", "address", "keywords")
+MAX_READ = 12                # text boxes read per pass (30-160 ms each on the CPU); the rest stay hidden, unread
 
 _EMAIL = re.compile(r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}", re.I)
 _PHONE = re.compile(r"\+?\(?\d[\d\s().-]{5,}\d")       # a whole run of digits and separators
@@ -254,6 +255,7 @@ class PrivacyShield:
         boxes = det.detect(bgr)
         W, H = frame.width, frame.height
         keep = []
+        read = 0
         kinds: dict[str, int] = {}
         for b in boxes:
             x0, y0, x1, y1 = b.box
@@ -261,7 +263,8 @@ class PrivacyShield:
             if any(ex <= cx <= ex + ew and ey <= cy <= ey + eh for ex, ey, ew, eh in cfg.exclude):
                 continue
             kind = "text"
-            if cfg.text == "sensitive" and rec is not None:
+            if cfg.text == "sensitive" and rec is not None and read < MAX_READ:
+                read += 1
                 txt = rec.read(bgr, b)
                 found = sensitive_kinds(txt, cfg.patterns, cfg.keywords)
                 if not found:

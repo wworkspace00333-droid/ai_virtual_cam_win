@@ -11,6 +11,7 @@ docs/TESTING.md; nothing was skipped on purpose to make numbers look better.
 | Live + stress (`VCS_LIVE=1 VCS_STRESS=1`, camera / capture / integration / packaging / pipeline / vcam / stress files) | **71** | **0** | 16 | 3 min 34 s |
 | Soak, all Studio features at once, 10 min (scripts/pro060_soak.py) | pass | | | 29.9 fps avg, +7.2 MB / 10 min, 0 errors |
 | After the preview build (driver / feature levels, raised hand, pose framing, monitoring): full suite | **768** | **0** | 40 | 5 min 16 s |
+| Text recognition with the real CRNN model (2026-11-20) | 2 new tests pass | 0 | | phone / card / keyword / IBAN hidden, "hello world" shown |
 | ruff | clean | | | |
 | mypy (CI scope, 53 files incl. the new core modules) | clean | | | |
 

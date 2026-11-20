@@ -183,3 +183,33 @@ def test_pipeline_hides_text_on_the_output(paths):
     finally:
         ctx.stop_capture()
         ctx.shutdown()
+
+
+def test_ctc_greedy_and_word_split():
+    s = np.zeros((6, 37), np.float32)
+    for t, i in enumerate([0, 2, 2, 0, 2, 11]):          # blank, "1", "1" (merged), blank, "1", "a"
+        s[t, i] = 1
+    assert td.ctc_greedy(s) == "11a"
+    gray = np.full((32, 300), 230, np.uint8)
+    for x0 in (10, 120, 230):                             # three "words" with wide gaps
+        gray[8:24, x0:x0 + 50] = 20
+    spans = td.TextRecognizer.words(gray)
+    assert len(spans) == 3 and spans[0][0] <= 10 and spans[2][1] >= 280
+    long = np.full((32, 600), 230, np.uint8)
+    long[8:24, 5:595] = 20                                # one 590 px block: split evenly
+    assert len(td.TextRecognizer.words(long)) == 4
+
+
+@pytest.mark.skipif(not (td.available() and td.recognizer_available()), reason="text models not downloaded")
+def test_real_recognition_finds_only_sensitive_lines():
+    lines = [("call 415 555 0134", 1.1), ("card 4111 1111 1111 1111", 1.1), ("project orion", 1.1),
+             ("hello world", 1.1), ("DE89370400440532013000", 1.1)]
+    img = text_image(lines)
+    s = shield(text="sensitive", padding=0.0, keywords=("orion",))
+    a = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
+    s.process(Frame(1, 1.0, 1.0, a.shape[1], a.shape[0], array=a, source="t"), td.TextDetector(),
+              td.TextRecognizer(), now=1.0)
+    rows = sorted(int((b[1] + b[3]) / 2) for b in s.boxes_for(a.shape[1], a.shape[0], now=1.1))
+    expected = [70 + i * 80 - 12 for i in (0, 1, 2, 4)]   # phone, card, keyword, IBAN — not "hello world"
+    assert len(rows) == 4 and all(abs(r - e) < 25 for r, e in zip(rows, expected)), (rows, s.stats.kinds)
+    assert set(s.stats.kinds) <= {"phone", "card", "keywords", "account"}

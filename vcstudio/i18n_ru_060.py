@@ -127,6 +127,7 @@ RU_060: dict[str, str] = {
         "Защита: {st} · текстовых блоков {b} · скрыто сейчас {h} · поиск {ms} мс",
     "hide": "скрывать", "never hide": "не скрывать",
     "Download the text detection model (3 MB)": "Скачать модель поиска текста (3 МБ)",
+    "Download the text recognition model (16 MB)": "Скачать модель распознавания текста (16 МБ)",
     # colour
     "Exposure": "Экспозиция", "Brightness": "Яркость", "Contrast": "Контраст", "Saturation": "Насыщенность",
     "Temperature": "Температура", "Tint": "Оттенок", "Gamma": "Гамма", "Highlights": "Света", "Shadows": "Тени",

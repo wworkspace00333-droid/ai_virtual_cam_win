@@ -34,7 +34,7 @@ hardware GPU or a physical webcam (the development server has neither).
 | Tracking | SAM 2.1 video propagation | ⛔ | ONNX export lacks memory modules | — |
 | Privacy | faces / screens / background levels (existing) | ✅ | replacement/privacy_mode.py | existing tests |
 | Privacy | text regions (PP-OCRv3), custom / excluded areas, padding, effects | ✅ | replacement/privacy_shield.py | real detector on synthetic text; misses documented |
-| Privacy | sensitive patterns (e-mail, phone, card + Luhn, IBAN, address, keywords) | ✅ (matching) / 🟡 (needs recogniser model, not downloaded) | privacy_shield.sensitive_kinds | unit |
+| Privacy | "only sensitive text": CRNN recognition (16 MB, on click) + patterns (phone, card + Luhn, IBAN / long numbers, address, keywords; e-mail needs "@", which the English model cannot read) | ✅ | text_detect.TextRecognizer, privacy_shield | real models on a synthetic page: 4 sensitive lines hidden, plain text shown |
 | Privacy | strict fail-safe (hold + grow; shield in passthrough; dark frame on shield error) | ✅ | privacy_shield, VideoPipeline._shield | synthetic |
 | Privacy | ID cards / passports / plates as objects | ⬜ | no such classes; found only as text | — |
 | Colour | exposure … sharpness, vignette, grain, glow, skin protection | ✅ | replacement/color.py | synthetic (values, direction) |

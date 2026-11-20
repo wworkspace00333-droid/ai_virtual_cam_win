@@ -85,6 +85,16 @@ TEXT: dict[str, tuple[str, str, str, int]] = {
 }
 TEXT_APPROX_MB = 3
 
+# Text recognition for "only sensitive text" (vcstudio/ai/text_detect.TextRecognizer): CRNN English, 8-bit, from the
+# OpenCV Zoo (Apache-2.0), 16 MB, pinned commit. Reads 0-9 and a-z.
+TEXTREC_REV = "opencv/text_recognition_crnn/resolve/6487ac545965a2c277aff293e2fdded8b0e6f9b9/"
+TEXT_REC: dict[str, tuple[str, str, str, int]] = {
+    "text/text_recognition_CRNN_EN_2022oct_int8.onnx": (
+        HF + TEXTREC_REV + "text_recognition_CRNN_EN_2022oct_int8.onnx",
+        "94117b4c2652337b3f1aef81b2ec15a74e97973b1c58f743e86380b95b95ffa2", "Apache-2.0", 16378030),
+}
+TEXT_REC_APPROX_MB = 16
+
 # CLIP ViT-B/32 (OpenAI, MIT), 8-bit ONNX (Xenova, Transformers.js), pinned commit, about 147 MB: checks what OWLv2
 # found against the query text, and finds objects like an example picture (vcstudio/ai/clip.py). The text model uses
 # the CLIP tokenizer that comes with OWLv2 (same vocabulary), so it is only useful with the open-vocabulary models.

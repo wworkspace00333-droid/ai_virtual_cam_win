@@ -28,9 +28,13 @@ are not verified on real hardware yet.
 2. Done in CI: the preview installer built (216 MB), installed silently on the runner and passed the installed-app
    check; it is attached to the draft pre-release v0.6.0-preview (not published). Still open: install it over
    0.5.3 on a PC that has 0.5.3 (an upgrade, not a fresh install) and open the Studio tabs there.
+   Tried on this server (installed: 0.5.2) on 2026-11-20: the installer stopped safely in PrepareToInstall
+   (exit code 8) because a reboot is still pending from the earlier 0.4.1 → 0.5.2 update (vcam_dshow.dll was in use
+   and is replaced at the next start); the installed 0.5.2 and both cameras stayed intact. Needs a reboot first.
 3. Real hardware: the "0.6.0 Studio" section of docs/HARDWARE_CHECKLIST.md (GPU backends, two webcams, a person in
    front of a camera for vision, privacy shield in Zoom / Teams, real microphone, phone over LAN).
-4. Decide on the 16 MB text recognition model (needed for "only sensitive text"; until then all text is hidden).
+4. Done: the 16 MB text recognition model is a download in the Privacy Shield tab; "only sensitive text" is
+   tested with the real models.
 5. Optional but announced in the prompt and not done: GPU LUT shader, depth effects, dense face mesh,
    active-speaker switching, virtual microphone (driver; see reports/VIRTUAL_AUDIO_DEVICE.md). Done after the
    preview build: adapter driver / feature levels, raised-hand event, pose-aware framing, microphone monitoring.

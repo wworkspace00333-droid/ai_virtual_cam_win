@@ -159,7 +159,10 @@ class PrivacyTab:
                                 "then all text is hidden."))
             self.rec_note.setText(" ".join(notes))
             from vcstudio.ai.model_download import network_allowed
-            self.dl_btn.setVisible(not td.available() and network_allowed(self.ctx.settings))
+            need_rec = c.text == "sensitive" and not td.recognizer_available()
+            self.dl_btn.setText(tr("Download the text detection model (3 MB)") if not td.available() else
+                                tr("Download the text recognition model (16 MB)"))
+            self.dl_btn.setVisible((not td.available() or need_rec) and network_allowed(self.ctx.settings))
         finally:
             self._loading = False
 
@@ -206,7 +209,9 @@ class PrivacyTab:
         from vcstudio.ai.open_vocab import user_models_dir
         self.dl_btn.setEnabled(False)
         self.rec_note.setText(tr("Downloading…"))
-        self.worker.run("download", lambda: md.download(user_models_dir(), table=md.TEXT))
+        from vcstudio.ai import text_detect as td
+        table = md.TEXT if not td.available() else md.TEXT_REC
+        self.worker.run("download", lambda: md.download(user_models_dir(), table=table))
 
     def _downloaded(self, kind, res, err) -> None:
         self.dl_btn.setEnabled(True)

@@ -23,7 +23,7 @@ import cv2
 import numpy as np
 
 DET_FILE = "text/text_detection_en_ppocrv3_2023may.onnx"
-REC_FILE = "text/text_recognition_CRNN_EN_2021sep.onnx"
+REC_FILE = "text/text_recognition_CRNN_EN_2022oct_int8.onnx"
 EN_CHARSET = "0123456789abcdefghijklmnopqrstuvwxyz"
 MEAN = (122.67891434, 116.66876762, 104.00698793)
 
@@ -87,23 +87,75 @@ class TextDetector:
         return out
 
 
+def ctc_greedy(scores: np.ndarray, charset: str = EN_CHARSET) -> str:
+    """(T, C) or (T, 1, C) scores -> text: index 0 is the CTC blank, repeats are merged (pure: tested)."""
+    idx = np.argmax(scores.reshape(scores.shape[0], -1), axis=1)
+    out, prev = [], 0
+    for i in idx:
+        if i != 0 and i != prev and i - 1 < len(charset):
+            out.append(charset[i - 1])
+        prev = i
+    return "".join(out)
+
+
 class TextRecognizer:
-    """CRNN over the detector's quadrilaterals (straightened to 100×32 grey)."""
+    """CRNN over the detector's quadrilaterals, straightened to 100x32 grey (the English model takes one channel),
+    run with OpenCV DNN, CTC greedy decoding as in the OpenCV Zoo reference."""
 
     def __init__(self, charset: str = EN_CHARSET):
-        self.model = cv2.dnn.TextRecognitionModel(str(models_dir() / REC_FILE))
-        self.model.setDecodeType("CTC-greedy")
-        self.model.setVocabulary(list(charset))
-        self.model.setInputParams(1.0 / 127.5, (100, 32), (127.5, 127.5, 127.5))
+        self.net = cv2.dnn.readNet(str(models_dir() / REC_FILE))
+        self.charset = charset
+
+    W_IN = 100                                       # the model's fixed input width (24 CTC steps)
 
     def read(self, bgr: np.ndarray, tb: TextBox) -> str:
+        """Straighten the line at 32 px height keeping its aspect, cut it into words at blank columns, and read each
+        word on its own: a whole line squeezed into 100 px loses characters."""
         q = tb.quad.astype(np.float32)
-        # order: the detector gives bottom-left, top-left, top-right, bottom-right
         s = q.sum(1)
         d = np.diff(q, axis=1).ravel()
         tl, br, tr, bl = q[np.argmin(s)], q[np.argmax(s)], q[np.argmin(d)], q[np.argmax(d)]
+        h = max(1.0, float(np.linalg.norm(bl - tl)))
+        w = max(1.0, float(np.linalg.norm(tr - tl)))
+        W = int(min(2000, max(32, round(32 * w / h))))
         M = cv2.getPerspectiveTransform(np.array([bl, tl, tr, br], np.float32),
-                                        np.array([[0, 31], [0, 0], [99, 0], [99, 31]], np.float32))
-        crop = cv2.warpPerspective(bgr, M, (100, 32))
-        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-        return str(self.model.recognize(cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)) or "")
+                                        np.array([[0, 31], [0, 0], [W - 1, 0], [W - 1, 31]], np.float32))
+        gray = cv2.cvtColor(cv2.warpPerspective(bgr, M, (W, 32)), cv2.COLOR_BGR2GRAY)
+        return " ".join(t for t in (self._word(gray[:, x0:x1]) for x0, x1 in self.words(gray)) if t)
+
+    @classmethod
+    def words(cls, gray: np.ndarray) -> list[tuple[int, int]]:
+        """Column ranges of words: cut at runs of blank columns at least 0.4 x the line height wide; a piece
+        still wider than 1.6 x the model input is split evenly (pure: tested)."""
+        _, ink = cv2.threshold(gray, 0, 1, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        if ink.mean() > 0.5:                         # dark background: ink is the minority class
+            ink = 1 - ink
+        col = ink[4:-4].sum(0) > 0
+        W = len(col)
+        gap = max(4, int(gray.shape[0] * 0.4))      # letter spacing (thin "1"s) stays inside a word
+        spans, start, blank = [], None, 0
+        for x in range(W):
+            if col[x]:
+                if start is None:
+                    start = x
+                blank = 0
+            elif start is not None:
+                blank += 1
+                if blank >= gap:
+                    spans.append((start, x - blank + 1))
+                    start, blank = None, 0
+        if start is not None:
+            spans.append((start, W - blank))
+        out = []
+        for x0, x1 in spans:
+            x0, x1 = max(0, x0 - 2), min(W, x1 + 2)
+            n = max(1, int(np.ceil((x1 - x0) / (1.6 * cls.W_IN))))
+            step = (x1 - x0) / n
+            out += [(int(x0 + i * step), int(x0 + (i + 1) * step)) for i in range(n)]
+        return out
+
+    def _word(self, gray: np.ndarray) -> str:
+        if gray.shape[1] < 4:
+            return ""
+        self.net.setInput(cv2.dnn.blobFromImage(gray, 1.0 / 127.5, (self.W_IN, 32), 127.5))
+        return ctc_greedy(self.net.forward(), self.charset)

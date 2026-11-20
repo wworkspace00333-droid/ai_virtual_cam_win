@@ -54,6 +54,7 @@ it off. Developers can use `scripts/fetch_models.py --open-vocab --hands` instea
 | MediaPipe person detection, ONNX (`pose/person_detection_mediapipe_2023mar.onnx`) | Apache-2.0 (Google MediaPipe; OpenCV Zoo export) | `opencv/person_detection_mediapipe`, commit `531b6da8`; downloaded on the user's click (Studio → AI Vision), 0.6.0 |
 | MediaPipe pose landmarks, ONNX (`pose/pose_estimation_mediapipe_2023mar.onnx`) | Apache-2.0 (Google MediaPipe; OpenCV Zoo export) | `opencv/pose_estimation_mediapipe`, commit `8cd55743`; the person crop geometry in `vcstudio/ai/pose.py` follows its Apache-2.0 reference code |
 | PP-OCRv3 text detection (DB), ONNX (`text/text_detection_en_ppocrv3_2023may.onnx`) | Apache-2.0 (PaddlePaddle PaddleOCR; OpenCV Zoo export) | `opencv/text_detection_ppocr`, commit `c299e81a`; privacy shield, 0.6.0 |
+| CRNN text recognition (English, 8-bit), ONNX (`text/text_recognition_CRNN_EN_2022oct_int8.onnx`) | Apache-2.0 (OpenCV Zoo) | `opencv/text_recognition_crnn`, commit `6487ac54`; privacy shield "only sensitive text", downloaded on click, 0.6.0 |
 
 SHA-256 of every file: `scripts/fetch_models.py`. The CLIP text tokenizer is implemented in the program
 (`vcstudio/ai/open_vocab.py`, from the model's `tokenizer.json`); no tokenizer library is shipped.
