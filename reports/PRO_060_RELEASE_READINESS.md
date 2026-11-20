@@ -1,7 +1,7 @@
 # 0.6.0 Professional — release readiness (2026-11-19)
 
-**Verdict: not ready to publish as 0.6.0 final. Ready as a preview build (0.6.0-preview) for testing on real PCs**,
-once the changes are committed and an installer is built. The code is complete for the scope in
+**Verdict: not ready to publish as 0.6.0 final. Published as previews (0.6.0-preview, 0.6.0-preview2) for testing
+on real PCs.** The code is complete for the scope in
 docs/PRO_060_FEATURE_MATRIX.md and the automated checks pass, but several release requirements of the master prompt
 are not verified on real hardware yet.
 
@@ -22,23 +22,27 @@ are not verified on real hardware yet.
 | 11 | New APIs protected | ✅ | reports/PRO_060_SECURITY.md, tests/test_remote.py |
 | 12 | Documentation current | ✅ | README, CHANGELOG (Unreleased), ARCHITECTURE, HARDWARE_CHECKLIST, PRO_060_* docs and reports |
 
-## Open before a final 0.6.0
+## Open before a final 0.6.0 (state 2026-11-20, after 0.6.0-preview2)
 
-1. Done: committed (6633d2b) and tagged v0.6.0-preview with your permission; CI builds the preview installer.
-2. Done in CI: the preview installer built (216 MB), installed silently on the runner and passed the installed-app
-   check; it is attached to the draft pre-release v0.6.0-preview (not published). Still open: install it over
-   0.5.3 on a PC that has 0.5.3 (an upgrade, not a fresh install) and open the Studio tabs there.
-   Tried on this server (installed: 0.5.2) on 2026-11-20: the installer stopped safely in PrepareToInstall
-   (exit code 8) because a reboot is still pending from the earlier 0.4.1 → 0.5.2 update (vcam_dshow.dll was in use
-   and is replaced at the next start); the installed 0.5.2 and both cameras stayed intact. Needs a reboot first.
-3. Real hardware: the "0.6.0 Studio" section of docs/HARDWARE_CHECKLIST.md (GPU backends, two webcams, a person in
-   front of a camera for vision, privacy shield in Zoom / Teams, real microphone, phone over LAN).
-4. Done: the 16 MB text recognition model is a download in the Privacy Shield tab; "only sensitive text" is
-   tested with the real models.
-5. Optional but announced in the prompt and not done:
-   active-speaker switching, virtual microphone (driver; see reports/VIRTUAL_AUDIO_DEVICE.md). Done after the
-   preview build: adapter driver / feature levels, raised-hand event, pose-aware framing, microphone monitoring,
-   GPU LUT pass, choose-who-is-framed.
+Published pre-releases: v0.6.0-preview and **v0.6.0-preview2** (installer 227 MB + .sha256; CI build, silent install
+and installed-app check passed). 0.5.3 stays the latest release, so 0.5.x users are not offered the previews.
+
+1. Upgrade over an installed version: tried on this server (installed 0.5.2) — the installer stops safely in
+   PrepareToInstall (exit code 8) because a reboot is still pending from the earlier 0.4.1 → 0.5.2 update
+   (vcam_dshow.dll was in use); 0.5.2 and both cameras stayed intact. Needs a reboot of the server (the owner's
+   decision; this session runs on it), then: install preview2 silently, installed self-check, Studio tabs, cameras.
+2. Real hardware: the "0.6.0 Studio" section of docs/HARDWARE_CHECKLIST.md (GPU backends incl. the GPU LUT pass, two
+   webcams, a person in front of a camera for vision / face mesh / depth, privacy shield in Zoom / Teams, a real
+   microphone with monitoring, the phone page over LAN).
+3. Not possible in 0.6.0 and stated in the UI / docs: system virtual microphone (signed kernel driver,
+   reports/VIRTUAL_AUDIO_DEVICE.md), SAM 2.1 video propagation (not in the ONNX export), identity documents / plates
+   as objects (no such detector classes; their printing is found as text), active-speaker camera switching (one
+   microphone gives no per-camera signal).
+4. Partly: registered custom models of categories other than detection / YOLO-seg are checked, measured and kept,
+   but no pipeline module loads them yet.
+
+Everything else in docs/PRO_060_FEATURE_MATRIX.md is implemented, in the GUI, in the pipeline and in the tests
+(full suite 783 passed, 0 failed, 40 skipped on 2026-11-20).
 
 ## Known limitations (also in the UI where they matter)
 
