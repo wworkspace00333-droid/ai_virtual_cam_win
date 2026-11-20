@@ -5,7 +5,7 @@
 ; (%LOCALAPPDATA%\AIVirtualCameraStudio: settings, profiles, imported assets) is kept on uninstall.
 
 #ifndef AppVersion
-  #define AppVersion "0.6.0-preview"
+  #define AppVersion "0.6.0-preview2"
 #endif
 ; Windows version resources take numbers only: "0.6.0-preview" -> "0.6.0" (the build script passes it)
 #ifndef AppNumVersion

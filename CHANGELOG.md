@@ -7,6 +7,11 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+## [0.6.0-preview2] — 2026-11-20
+
+Second 0.6.0 Professional preview (a pre-release, not offered by "Check for updates" in 0.5.x). Since
+0.6.0-preview:
+
 ### Added
 - The hardware profile lists each graphics adapter's driver version, Direct3D 11 feature level and Direct3D 12
   support; a GPU without Direct3D 12 is no longer counted as usable for DirectML.
@@ -411,6 +416,7 @@ for real hardware are still to be measured (docs/HARDWARE_CHECKLIST.md).
 
 macOS releases; see the history of the original repository.
 
+[0.6.0-preview2]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.6.0-preview2
 [0.6.0-preview]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.6.0-preview
 [0.5.3]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.5.3
 [0.5.2]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.5.2

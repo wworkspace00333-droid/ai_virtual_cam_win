@@ -16,7 +16,7 @@ switch on network access.
 There is no telemetry and no auto-update. Plugins (Settings → Plugins, [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md)) are
 your own code and are not limited by this.
 
-**Status: 0.5.3 (latest release); 0.6.0-preview for testing.** All features of the 0.5 plan are in. Developed and tested on a server without a GPU (Windows Server 2025, software
+**Status: 0.5.3 (latest release); 0.6.0-preview2 for testing.** All features of the 0.5 plan are in. Developed and tested on a server without a GPU (Windows Server 2025, software
 Direct3D). Speed on real graphics cards, compatibility with every video app and colour in each of them still have
 to be checked on real PCs: [docs/HARDWARE_CHECKLIST.md](docs/HARDWARE_CHECKLIST.md). Changes:
 [CHANGELOG.md](CHANGELOG.md).
