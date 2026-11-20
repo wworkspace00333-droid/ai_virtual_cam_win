@@ -43,6 +43,9 @@ _k32.UnmapViewOfFile.argtypes = [ctypes.c_void_p]
 _k32.CloseHandle.argtypes = [wintypes.HANDLE]
 
 
+# The access list the OBS plugin gives the section (native/obs-plugin/vcstudio-obs.c VCS_SHM_SDDL): owner, SYSTEM and
+# administrators only. Kept here so a test can create a section the same way and check that the reader opens it.
+VCS_SHM_SDDL = "D:P(A;;GA;;;OW)(A;;GA;;;SY)(A;;GA;;;BA)"
 READ_CONTROL = 0x00020000
 ERROR_ACCESS_DENIED = 5
 

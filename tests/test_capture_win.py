@@ -309,3 +309,43 @@ def test_obs_shared_memory_from_another_owner_is_refused(monkeypatch):
         assert "not to this user" in obs_shm.obs_sharing_status(name)["reason"]
     finally:
         k32.CloseHandle(h)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows security descriptors")
+def test_obs_section_access_list_is_owner_system_admins_and_the_reader_still_opens_it():
+    """The OBS plugin creates the frame section with VCS_SHM_SDDL (owner, SYSTEM, administrators). Same descriptor
+    here: the app's reader must still open it, and the stored access list must be exactly those three."""
+    import ctypes
+    import uuid
+    from ctypes import wintypes
+    from vcstudio.platform.win import obs_shm
+    adv = ctypes.WinDLL("advapi32", use_last_error=True)
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    sd = ctypes.c_void_p()
+    assert adv.ConvertStringSecurityDescriptorToSecurityDescriptorW(obs_shm.VCS_SHM_SDDL, 1, ctypes.byref(sd), None)
+
+    class SA(ctypes.Structure):
+        _fields_ = [("nLength", wintypes.DWORD), ("lpSecurityDescriptor", ctypes.c_void_p), ("bInheritHandle", wintypes.BOOL)]
+    sa = SA(ctypes.sizeof(SA), sd, False)
+    k32.CreateFileMappingW.restype = wintypes.HANDLE
+    k32.CreateFileMappingW.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
+                                       wintypes.DWORD, wintypes.LPCWSTR]
+    name = f"Local\vcs-test-dacl-{uuid.uuid4().hex}"
+    h = k32.CreateFileMappingW(wintypes.HANDLE(-1), ctypes.byref(sa), 0x04, 0, 65536, name)
+    k32.LocalFree(sd)
+    assert h
+    try:
+        psd, dacl = ctypes.c_void_p(), ctypes.c_void_p()
+        # SE_KERNEL_OBJECT = 6, DACL_SECURITY_INFORMATION = 4
+        assert adv.GetSecurityInfo(wintypes.HANDLE(h), 6, 4, None, None, ctypes.byref(dacl), None,
+                                   ctypes.byref(psd)) == 0
+        s = ctypes.c_wchar_p()
+        assert adv.ConvertSecurityDescriptorToStringSecurityDescriptorW(psd, 1, 4, ctypes.byref(s), None)
+        text = s.value
+        k32.LocalFree(psd)
+        assert text.startswith("D:P") and text.count("(A;") == 3, text      # protected, three entries only
+        assert ";;;WD)" not in text and ";;;AU)" not in text and ";;;IU)" not in text   # no Everyone / users
+        v = obs_shm.ShmView(name)                                          # the app's reader opens it
+        v.close()
+    finally:
+        k32.CloseHandle(h)

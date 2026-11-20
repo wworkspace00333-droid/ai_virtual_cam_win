@@ -26,6 +26,13 @@
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <sddl.h>
+#pragma comment(lib, "advapi32.lib")
+
+/* Only the owner (the user OBS runs as), SYSTEM and administrators may open the frame section: other users' processes
+   in the session cannot read the picture or write into it (the app also checks the section's owner). Kept equal to
+   VCS_SHM_SDDL in vcstudio/platform/win/obs_shm.py, which tests it. */
+#define VCS_SHM_SDDL L"D:P(A;;GA;;;OW)(A;;GA;;;SY)(A;;GA;;;BA)"
 #else
 #include <errno.h>
 #include <fcntl.h>
@@ -99,8 +106,16 @@ static void *shm_map(uint32_t w, uint32_t h)
 {
 #ifdef _WIN32
 	uint64_t total = VCS_SHM_TOTAL_BYTES;
-	g.mapping = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE | SEC_RESERVE, (DWORD)(total >> 32),
-				       (DWORD)(total & 0xFFFFFFFFu), VCS_SHM_NAME_WIN);
+	SECURITY_ATTRIBUTES sa = {sizeof(sa), NULL, FALSE};
+	PSECURITY_DESCRIPTOR sd = NULL;
+	if (ConvertStringSecurityDescriptorToSecurityDescriptorW(VCS_SHM_SDDL, SDDL_REVISION_1, &sd, NULL))
+		sa.lpSecurityDescriptor = sd;
+	else
+		blog(LOG_WARNING, "[vcstudio-obs] explicit access list failed (%lu); default one used", GetLastError());
+	g.mapping = CreateFileMappingW(INVALID_HANDLE_VALUE, sd ? &sa : NULL, PAGE_READWRITE | SEC_RESERVE,
+				       (DWORD)(total >> 32), (DWORD)(total & 0xFFFFFFFFu), VCS_SHM_NAME_WIN);
+	if (sd)
+		LocalFree(sd);
 	if (!g.mapping) {
 		blog(LOG_ERROR, "[vcstudio-obs] CreateFileMapping failed: %lu", GetLastError());
 		return NULL;
