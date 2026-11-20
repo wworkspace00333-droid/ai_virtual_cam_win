@@ -126,6 +126,7 @@ class AppContext:
         self.shield = PrivacyShield(self.capture, self.settings,
                                     lambda lv, m: self.db.log_event(lv, "privacy", m))
         self.pipeline.shield = self.shield
+        self.shield.face_outlines = self._face_outlines
         self.shield.apply_settings()
         # scene automation (vcstudio/core/automation.py): decisions here, actions through the existing services
         from vcstudio.core.automation import AutomationEngine
@@ -216,6 +217,27 @@ class AppContext:
         if key.startswith("processing"):
             used = self.replacement.compositor.set_backend(self.settings.get("processing.compositor"))
             log.info("Compositor backend: %s", used)
+
+    def _face_outlines(self, W: int, H: int) -> list:
+        """Privacy shield "faces": face-mesh ovals (or face boxes) of the newest fresh AI Vision result, in output
+        pixels; empty when AI Vision is off or its result is stale."""
+        import numpy as np
+
+        from vcstudio.ai.vision import STALE_S
+        from vcstudio.core.frame import host_time_s
+        r, _ = self.vision.slot.peek()
+        if r is None or not self.vision.cfg.enabled or host_time_s() - r.pts > STALE_S + 0.5:
+            return []
+        sx, sy = W / max(1, r.width), H / max(1, r.height)
+        out = []
+        for f in r.faces:
+            if f.mesh is not None:
+                p = f.mesh.oval().astype(np.float32)
+            else:
+                x0, y0, x1, y1 = f.box
+                p = np.array([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], np.float32)
+            out.append((p * [sx, sy]).astype(np.int32))
+        return out
 
     def _automation_snapshot(self):
         from vcstudio.core.automation import Snapshot

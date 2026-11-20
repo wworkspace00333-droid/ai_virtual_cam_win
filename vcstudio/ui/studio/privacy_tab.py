@@ -56,6 +56,8 @@ class PrivacyTab:
             g.addWidget(QLabel(tr(lbl)), 1 + i // 2, (i % 2) * 2)
             g.addWidget(w, 1 + i // 2, (i % 2) * 2 + 1)
         g.addWidget(self.strict, 3, 0, 1, 4)
+        self.faces = QCheckBox(tr("Hide faces by their outline (needs AI Vision; precise with the face mesh)"))
+        g.addWidget(self.faces, 4, 0, 1, 4)
         sh.layout_.addLayout(g)
         self.pattern_boxes = {}
         pr = QGridLayout()
@@ -101,7 +103,7 @@ class PrivacyTab:
         self._loading = False
         self.load()
         self.level.currentIndexChanged.connect(self._set_level)
-        for w in (self.enabled, self.strict, *self.pattern_boxes.values()):
+        for w in (self.enabled, self.strict, self.faces, *self.pattern_boxes.values()):
             w.toggled.connect(self.save)
         for w in (self.text, self.effect):
             w.currentIndexChanged.connect(self.save)
@@ -142,6 +144,7 @@ class PrivacyTab:
             self.padding.setValue(c.padding)
             self.sens.setValue(c.sensitivity)
             self.strict.setChecked(c.strict)
+            self.faces.setChecked(c.faces)
             for k, cb in self.pattern_boxes.items():
                 cb.setChecked(k in c.patterns)
             self.keywords.setText(", ".join(c.keywords))
@@ -172,7 +175,7 @@ class PrivacyTab:
         d = self._data()
         d.update(enabled=self.enabled.isChecked(), text=self.text.currentData(), effect=self.effect.currentData(),
                  padding=round(self.padding.value(), 3), sensitivity=round(self.sens.value(), 3),
-                 strict=self.strict.isChecked(),
+                 strict=self.strict.isChecked(), faces=self.faces.isChecked(),
                  patterns=[k for k, cb in self.pattern_boxes.items() if cb.isChecked()],
                  keywords=[k.strip() for k in self.keywords.text().split(",") if k.strip()])
         self.ctx.settings.set("privacy_shield", d)

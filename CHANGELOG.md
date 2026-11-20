@@ -18,6 +18,8 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 - Background by distance: Replacement → Background → "Separate by: distance" uses a depth model (Depth Anything V2
   Small, Apache-2.0, 27 MB download): what is nearer than the edge setting stays, the rest is blurred or replaced.
   About 0.4 s per depth map on a 2-core CPU, so it updates ~2 times a second there.
+- Privacy Shield: "hide faces by their outline" uses the face-mesh oval from AI Vision (the face box when there is
+  no mesh), so the hidden area follows the face instead of a rectangle.
 - AI Vision: dense face mesh (478 points with irises, 5 MB download) for up to two faces, drawn with the overlay.
 - Colour Studio: 3-D LUTs run on the GPU (Direct3D 11 compute pass with a 3-D texture and hardware trilinear
   filtering) when a hardware graphics card is present; closer to an exact lookup than the CPU path (mean error 0.19

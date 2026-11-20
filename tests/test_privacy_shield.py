@@ -213,3 +213,36 @@ def test_real_recognition_finds_only_sensitive_lines():
     expected = [70 + i * 80 - 12 for i in (0, 1, 2, 4)]   # phone, card, keyword, IBAN — not "hello world"
     assert len(rows) == 4 and all(abs(r - e) < 25 for r, e in zip(rows, expected)), (rows, s.stats.kinds)
     assert set(s.stats.kinds) <= {"phone", "card", "keywords", "account"}
+
+
+def test_faces_hidden_by_outline_not_by_box():
+    s = shield(text="off", faces=True, padding=0.0, effect="black")
+    oval = np.array([[160, 40], [200, 60], [210, 100], [190, 140], [160, 150], [130, 140], [110, 100], [120, 60]],
+                    np.int32)
+    s.face_outlines = lambda w, h: [oval]
+    a = np.full((180, 320, 4), 200, np.uint8)
+    out = s.apply(a)
+    assert out[100, 160, :3].max() == 0                   # inside the outline: hidden
+    assert out[42, 112, 0] == 200                          # inside the box but outside the oval: visible
+    assert np.array_equal(out[:, 250:], a[:, 250:])
+    g = ps.grow(oval, 1.5)
+    assert g[:, 0].min() < oval[:, 0].min() and g[:, 0].max() > oval[:, 0].max()
+    s.cfg = ps.ShieldConfig(enabled=True, text="off", faces=False)
+    assert s.apply(a) is a                                 # option off: outlines ignored
+
+
+def test_app_face_outlines_from_vision(paths):
+    from vcstudio.ai.vision import FaceInfo, VisionResult
+    from vcstudio.app.application import AppContext
+    from vcstudio.core.frame import host_time_s
+    ctx = AppContext(paths, configure_logging=False)
+    try:
+        assert ctx._face_outlines(640, 360) == []          # vision off
+        ctx.vision.cfg = type(ctx.vision.cfg)(enabled=True)
+        ctx.vision.slot.put(VisionResult(host_time_s(), 320, 180, faces=[FaceInfo((10, 20, 50, 80), np.zeros((5, 2)))]))
+        polys = ctx._face_outlines(640, 360)               # no mesh: the box, scaled to the output
+        assert len(polys) == 1 and polys[0][:, 0].min() == 20 and polys[0][:, 1].max() == 160
+        ctx.vision.slot.put(VisionResult(host_time_s() - 5, 320, 180, faces=[FaceInfo((1, 1, 9, 9), np.zeros((5, 2)))]))
+        assert ctx._face_outlines(640, 360) == []          # stale result: nothing
+    finally:
+        ctx.shutdown()

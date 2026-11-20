@@ -16,6 +16,8 @@ Settings section "privacy_shield" (global: a scene switch must not switch privac
                drawn even in emergency passthrough; the status says "holding" so the user knows
   regions      the user's own rectangles (x, y, w, h in 0..1) always hidden
   exclude      rectangles never hidden by text detection (e.g. the user's own name badge)
+  faces        hide faces by their outline: the face-mesh oval from AI Vision (vcstudio/ai/vision.py, mesh on), or
+               the face box when a face has no mesh; grown by `padding`. Needs AI Vision with face analysis on
 
 Runs on the INPUT frame on its own thread (newest frame only, `fps` default 2); the output thread only draws the
 current boxes (a pixelation of a few boxes: about a millisecond). Limits, said plainly in the UI: text smaller than
@@ -119,6 +121,7 @@ class ShieldConfig:
     strict_grow: float = 0.5
     regions: tuple[tuple[float, float, float, float], ...] = ()
     exclude: tuple[tuple[float, float, float, float], ...] = ()
+    faces: bool = False
 
     @staticmethod
     def from_settings(settings) -> ShieldConfig:
@@ -140,7 +143,7 @@ class ShieldConfig:
                             pats, kws, d.get("effect") if d.get("effect") in EFFECTS else "pixelate",
                             num("padding", 0, 2, 0.25), num("sensitivity", 0, 1, 0.5), num("fps", 0.5, 10, 2.0),
                             num("hold_s", 0, 30, 1.5), bool(d.get("strict", False)), num("strict_hold_s", 1, 120, 10),
-                            num("strict_grow", 0, 3, 0.5), regs, excl)
+                            num("strict_grow", 0, 3, 0.5), regs, excl, bool(d.get("faces", False)))
 
 
 @dataclass
@@ -177,6 +180,8 @@ class PrivacyShield:
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._t: threading.Thread | None = None
+        # faces by outline: callable(W, H) -> list of (n, 2) int32 polygons in output pixels (set by the app)
+        self.face_outlines = None
 
     @property
     def running(self) -> bool:
@@ -315,9 +320,14 @@ class PrivacyShield:
         """Hide the current boxes in a copy of `bgra` (returns `bgra` itself when nothing is hidden)."""
         h, w = bgra.shape[:2]
         rects = self.boxes_for(w, h, now)
-        if not rects:
+        polys = []
+        if self.cfg.enabled and self.cfg.faces and self.face_outlines is not None:
+            polys = [grow(p, 1.0 + self.cfg.padding) for p in self.face_outlines(w, h)]
+        if not rects and not polys:
             return bgra
         out = bgra.copy()
+        if polys:
+            self._hide_polygons(out, polys)
         for x0, y0, x1, y1 in rects:
             if x1 - x0 < 2 or y1 - y0 < 2:
                 continue
@@ -333,6 +343,35 @@ class PrivacyShield:
                                    interpolation=cv2.INTER_AREA)
                 roi[:] = cv2.resize(small, (x1 - x0, y1 - y0), interpolation=cv2.INTER_NEAREST)
         return out
+
+    def _hide_polygons(self, out: np.ndarray, polys: list) -> None:
+        h, w = out.shape[:2]
+        mask = np.zeros((h, w), np.uint8)
+        cv2.fillPoly(mask, [p.reshape(-1, 1, 2) for p in polys], 255)
+        ys, xs = np.nonzero(mask)
+        if not len(xs):
+            return
+        x0, x1, y0, y1 = xs.min(), xs.max() + 1, ys.min(), ys.max() + 1
+        roi, m = out[y0:y1, x0:x1], mask[y0:y1, x0:x1] > 0
+        if self.cfg.effect == "black":
+            hidden = np.zeros_like(roi)
+            hidden[..., 3] = roi[..., 3]
+        elif self.cfg.effect == "blur":
+            k = max(3, (min(x1 - x0, y1 - y0) // 3) | 1)
+            hidden = cv2.GaussianBlur(roi, (k, k), 0)
+        else:
+            bs = max(4, min(x1 - x0, y1 - y0) // 8)
+            small = cv2.resize(roi, (max(1, (x1 - x0) // bs), max(1, (y1 - y0) // bs)), interpolation=cv2.INTER_AREA)
+            hidden = cv2.resize(small, (x1 - x0, y1 - y0), interpolation=cv2.INTER_NEAREST)
+        np.copyto(roi, hidden, where=m[..., None])
+        self.stats.hidden += len(polys)
+
+
+def grow(poly: np.ndarray, k: float) -> np.ndarray:
+    """A polygon scaled by k around its centroid (padding for face outlines; pure: tested)."""
+    p = np.asarray(poly, np.float32).reshape(-1, 2)
+    c = p.mean(0)
+    return ((p - c) * k + c).astype(np.int32)
 
 
 def _overlap(a, b) -> float:

@@ -37,6 +37,7 @@ hardware GPU or a physical webcam (the development server has neither).
 | Privacy | text regions (PP-OCRv3), custom / excluded areas, padding, effects | ✅ | replacement/privacy_shield.py | real detector on synthetic text; misses documented |
 | Privacy | "only sensitive text": CRNN recognition (16 MB, on click) + patterns (phone, card + Luhn, IBAN / long numbers, address, keywords; e-mail needs "@", which the English model cannot read) | ✅ | text_detect.TextRecognizer, privacy_shield | real models on a synthetic page: 4 sensitive lines hidden, plain text shown |
 | Privacy | strict fail-safe (hold + grow; shield in passthrough; dark frame on shield error) | ✅ | privacy_shield, VideoPipeline._shield | synthetic |
+| Privacy | faces hidden by their face-mesh outline (box when no mesh), padding, all effects | ✅ | privacy_shield.face_outlines, AppContext._face_outlines | synthetic + app test |
 | Privacy | ID cards / passports / plates as objects | ⬜ | no such classes; found only as text | — |
 | Colour | exposure … sharpness, vignette, grain, glow, skin protection | ✅ | replacement/color.py | synthetic (values, direction) |
 | Colour | .cube 1D / 3D import, intensity, per scene, presets | ✅ | replacement/color.py, color_tab | synthetic |

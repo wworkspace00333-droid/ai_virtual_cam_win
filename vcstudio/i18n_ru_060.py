@@ -140,6 +140,8 @@ RU_060: dict[str, str] = {
     "Shield: {st} · text boxes {b} · hidden now {h} · detection {ms} ms":
         "Защита: {st} · текстовых блоков {b} · скрыто сейчас {h} · поиск {ms} мс",
     "hide": "скрывать", "never hide": "не скрывать",
+    "Hide faces by their outline (needs AI Vision; precise with the face mesh)":
+        "Скрывать лица по контуру (нужно ИИ-зрение; точно — с сеткой лица)",
     "Download the text detection model (3 MB)": "Скачать модель поиска текста (3 МБ)",
     "Download the text recognition model (16 MB)": "Скачать модель распознавания текста (16 МБ)",
     # colour
