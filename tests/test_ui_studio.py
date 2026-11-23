@@ -109,13 +109,14 @@ def test_privacy_tab_drives_mode_and_shield(win):
     assert pm.level_of(win.ctx.profiles.active()["body"]) == "faces"
     tab.effect.setCurrentIndex(tab.effect.findData("black"))
     tab.strict.setChecked(True)
+    tab.documents.setChecked(True)
     tab.pattern_boxes["address"].setChecked(False)
     tab.keywords.setText("orion, budget")
     tab.save()
     tab.enabled.setChecked(True)
     d = win.ctx.settings.get("privacy_shield")
     assert d["enabled"] and d["effect"] == "black" and d["strict"] and "address" not in d["patterns"]
-    assert d["keywords"] == ["orion", "budget"]
+    assert d["keywords"] == ["orion", "budget"] and d["documents"] and win.ctx.shield.cfg.documents
     assert tab.add_area("regions", "0.1, 0.1, 0.2, 0.2") and tab.add_area("exclude", "0.5,0.5,0.1,0.1")
     assert not tab.add_area("regions", "nonsense")
     assert win.ctx.shield.cfg.regions == ((0.1, 0.1, 0.2, 0.2),) and len(win.ctx.shield.cfg.exclude) == 1

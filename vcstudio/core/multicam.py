@@ -23,8 +23,9 @@ the CPU with OpenCV: one resize per visible tile, tile masks cached per size.
 
 Automatic switching (`auto`): "people" switches the single / primary source to `fallback` when nobody has been seen
 on the main camera for `hold_s` and back once people are seen again for `hold_s`; a switch is followed by at least
-`cooldown_s` without another switch (hysteresis + cooldown: no flapping). Active-speaker switching is not offered:
-the app has no reliable per-camera speech signal (one microphone, no direction).
+`cooldown_s` without another switch (hysteresis + cooldown: no flapping). "speaker" makes the source whose
+speaker's mouth moves clearly the most the single / primary source (vcstudio/ai/speaker.py: mouth movement on each
+source, since one microphone gives no per-camera signal); while nobody speaks the picture stays where it is.
 """
 from __future__ import annotations
 
@@ -42,6 +43,7 @@ log = logging.getLogger(__name__)
 LAYOUTS = ("single", "pip", "side_by_side", "split_v", "grid", "custom")
 MISSING = ("hold", "placeholder", "hide")
 CORNERS = ("top_right", "top_left", "bottom_right", "bottom_left")
+AUTO_MODES = ("off", "people", "speaker")
 MAX_SOURCES = 3                     # extra sources besides the main input
 SOURCE_KEYS = ("method", "device_unique_id", "device_name_hint", "screen_target", "video_path", "video_loop")
 
@@ -106,7 +108,7 @@ class MulticamConfig:
     max_age_s: float = 0.5
     hold_max_s: float = 3.0
     missing: str = "placeholder"
-    auto: str = "off"                             # off | people
+    auto: str = "off"                             # off | people | speaker
     fallback: str = ""                            # source used by auto "people" when the main camera is empty
     hold_s: float = 3.0
     cooldown_s: float = 8.0
@@ -139,7 +141,7 @@ class MulticamConfig:
             _f(d.get("pip_size"), 0.1, 0.5, 0.28), _f(d.get("pip_margin"), 0, 0.2, 0.03),
             int(_f(d.get("border_px"), 0, 40, 2)), int(_f(d.get("radius_px"), 0, 200, 12)),
             _f(d.get("max_age_s"), 0.05, 5, 0.5), _f(d.get("hold_max_s"), 0, 60, 3.0),
-            pick("missing", MISSING, "placeholder"), pick("auto", ("off", "people"), "off"), fallback,
+            pick("missing", MISSING, "placeholder"), pick("auto", AUTO_MODES, "off"), fallback,
             _f(d.get("hold_s"), 0.5, 60, 3.0), _f(d.get("cooldown_s"), 0, 600, 8.0))
 
     @property
@@ -343,6 +345,12 @@ class SourceSet:
         with self._lock:
             return list(self._sups)
 
+    def frames(self) -> dict:
+        """{source id: newest Frame or None} of the running extra sources (for analysers; no copy is made)."""
+        with self._lock:
+            sups = dict(self._sups)
+        return {sid: sup.slot.peek()[0] for sid, sup in sups.items()}
+
     def stats(self) -> dict[str, Any]:
         with self._lock:
             sups = dict(self._sups)
@@ -369,7 +377,7 @@ class SourceSet:
 
 
 class AutoSwitcher:
-    """Hysteresis + cooldown for automatic camera switching by people on the main camera."""
+    """Hysteresis + cooldown for automatic camera switching: by people on the main camera, or by who speaks."""
 
     def __init__(self):
         self.current: str | None = None             # None: the layout's own primary
@@ -380,11 +388,17 @@ class AutoSwitcher:
     def reset(self) -> None:
         self.current, self._since, self._last_switch = None, None, -1e9
 
-    def update(self, cfg: MulticamConfig, people: int, now: float) -> str | None:
-        if cfg.auto != "people" or not cfg.fallback:
+    def update(self, cfg: MulticamConfig, people: int, now: float, speaker: str | None = None) -> str | None:
+        if cfg.auto == "speaker":
+            if speaker is None or speaker == (self.current or cfg.primary):
+                self._since = None                  # nobody speaks / the speaker is shown: stay
+                return self.current
+            want: str | None = None if speaker == cfg.primary else speaker
+        elif cfg.auto != "people" or not cfg.fallback:
             self.reset()
             return None
-        want = cfg.fallback if people == 0 else None
+        else:
+            want = cfg.fallback if people == 0 else None
         if want == self.current:
             self._since = None
             return self.current
@@ -393,7 +407,8 @@ class AutoSwitcher:
         if now - self._since >= cfg.hold_s and now - self._last_switch >= cfg.cooldown_s:
             self.current, self._since, self._last_switch = want, None, now
             self.switches += 1
-            log.info("multicam: auto switch to %s (%d people on the main camera)", want or "main", people)
+            log.info("multicam: auto switch to %s (%s)", want or cfg.primary,
+                     f"speaker on {speaker}" if cfg.auto == "speaker" else f"{people} people on the main camera")
         return self.current
 
 
@@ -415,6 +430,7 @@ class MulticamService:
         self.sources = sources
         self.auto = AutoSwitcher()
         self.override: str | None = None             # manual camera switch (action "camera_next"), until scene change
+        self.speaker = None                          # vcstudio.ai.speaker.SpeakerService (auto "speaker"), set by the app
         self.layout_override: str | None = None      # manual layout switch (action "layout_next")
         self.stats = MulticamStats()
         self._cfg = MulticamConfig()
@@ -430,9 +446,16 @@ class MulticamService:
             self.sources.sync(list(cfg.sources))
         else:
             self.sources.stop()
+        if self.speaker is not None:
+            if running and cfg.enabled and cfg.auto == "speaker" and cfg.enabled_ids():
+                self.speaker.start()
+            else:
+                self.speaker.stop()
 
     def stop(self) -> None:
         self.sources.stop()
+        if self.speaker is not None:
+            self.speaker.stop()
 
     def next_camera(self) -> str:
         ids = ["main"] + self._cfg.enabled_ids()
@@ -453,7 +476,8 @@ class MulticamService:
         now = time.monotonic() if now is None else now
         from vcstudio.core.frame import host_time_s
         hnow = host_time_s()
-        auto = self.auto.update(cfg, people, now)
+        spk = self.speaker.speaker() if self.speaker is not None and cfg.auto == "speaker" else None
+        auto = self.auto.update(cfg, people, now, spk)
         primary = self.override or auto or cfg.primary
         eff = cfg if not self.layout_override else MulticamConfig(**{**cfg.__dict__, "layout": self.layout_override})
         tiles = layout_tiles(eff, primary)

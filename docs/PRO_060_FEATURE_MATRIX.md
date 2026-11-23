@@ -18,7 +18,7 @@ hardware GPU or a physical webcam (the development server has neither).
 | Multi-camera | single, PiP, side by side, split, 2×2, custom tiles (crop, rotation, border, radius, opacity) | ✅ | core/multicam.py | synthetic (pixel tests) |
 | Multi-camera | age-limited frames, hold / placeholder / hide, never waits | ✅ | core/multicam.SourceSet | synthetic |
 | Multi-camera | auto switch by people (hysteresis + cooldown); manual camera / layout hotkeys | ✅ | AutoSwitcher, actions | synthetic |
-| Multi-camera | active-speaker switching | ⬜ | no reliable per-camera speech signal | — |
+| Multi-camera | active-speaker switching: the source whose speaker's mouth moves clearly the most (face mesh lip gap, 1.5 s window), with the switcher's hold / cooldown | 🟡 | ai/speaker.py, AutoSwitcher "speaker" | real models on a synthetic talking / still close-up; real speech not measured |
 | Vision | YuNet 5 landmarks kept; head pose (yaw / pitch / roll) | ✅ | ai/head_pose.py | synthetic round trip + real faces (bus.jpg) |
 | Vision | body pose (39 points), posture, upper-body box | ✅ | ai/pose.py | real (bus.jpg) |
 | Vision | hands: 21 landmarks reused from gestures (no second detector) | ✅ | ai/vision.py | synthetic |
@@ -38,7 +38,7 @@ hardware GPU or a physical webcam (the development server has neither).
 | Privacy | "only sensitive text": CRNN recognition (16 MB, on click) + patterns (phone, card + Luhn, IBAN / long numbers, address, keywords; e-mail needs "@", which the English model cannot read) | ✅ | text_detect.TextRecognizer, privacy_shield | real models on a synthetic page: 4 sensitive lines hidden, plain text shown |
 | Privacy | strict fail-safe (hold + grow; shield in passthrough; dark frame on shield error) | ✅ | privacy_shield, VideoPipeline._shield | synthetic |
 | Privacy | faces hidden by their face-mesh outline (box when no mesh), padding, all effects | ✅ | privacy_shield.face_outlines, AppContext._face_outlines | synthetic + app test |
-| Privacy | ID cards / passports / plates as objects | ⬜ | no such classes; found only as text | — |
+| Privacy | ID cards / passports / plates as whole objects: four-cornered outline of card / document / plate proportions with text inside (photo on the card hidden too) | 🟡 | ai/document_detect.py, shield "documents" | real text detector on synthetic cards / plates at 0 / 12 / -25°; 0 false documents on 18 real photos; low-contrast edges missed (text still hidden) |
 | Colour | exposure … sharpness, vignette, grain, glow, skin protection | ✅ | replacement/color.py | synthetic (values, direction) |
 | Colour | .cube 1D / 3D import, intensity, per scene, presets | ✅ | replacement/color.py, color_tab | synthetic |
 | Colour | GPU (D3D11) 3-D LUT pass: Texture3D, hardware trilinear, full resolution; used on hardware GPUs, CPU fallback | ✅ | native/win/d3d11 (lut_cs), replacement/color.py | correctness on WARP (error 0.19 vs exact, CPU path 3.3); speed on a hardware GPU not measured |

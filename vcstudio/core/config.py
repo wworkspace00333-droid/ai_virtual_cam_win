@@ -136,7 +136,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "privacy_shield": {"enabled": False, "text": "all", "effect": "pixelate", "padding": 0.25, "sensitivity": 0.5,
                        "fps": 2, "hold_s": 1.5, "strict": False, "patterns": ["email", "phone", "card", "account",
                                                                                 "address", "keywords"],
-                       "keywords": [], "regions": [], "exclude": []},
+                       "keywords": [], "regions": [], "exclude": [], "documents": False},
     # scene automation (vcstudio/core/automation.py): rules "when <trigger> do <action>"
     "automation": {"enabled": False, "rules": []},
     # remote control (vcstudio/app/remote.py): off; localhost only unless "lan" is switched on (with a warning)

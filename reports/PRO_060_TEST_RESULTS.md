@@ -16,6 +16,8 @@ docs/TESTING.md; nothing was skipped on purpose to make numbers look better.
 | Soak, all Studio features, 60 min (2026-11-20) | pass | | | 29.1 fps avg, +0.7 MB / 10 min, 0 errors, 0 restarts |
 | After preview3 (A/V sync of recordings, custom face detector / face mesh roles), 2026-11-23: full suite | **791** | **1** | 40 | 5 min 59 s |
 | The one failure: test_metal_performance_1080p (D3D11 WARP must beat the CPU backend; 49.0 vs 47.6 ms with the suite loading both cores). Re-run alone 3 times | 3 / 3 pass | 0 | | WARP 40-41 ms vs CPU 45 ms; compositor code unchanged |
+| Documents / plates as objects and active-speaker switching added, 2026-11-23: full suite | **819** | **0** | 40 | 5 min 27 s |
+| of which new: test_document_detect.py (16: proportions, cards and plates at 0 / 12 / -25 deg with the real text detector, no outline without text / text without outline, 0 documents on 18 real photos, shield hides the card photo) and test_speaker.py (11: mouth opening, window, pick rules, switcher hold / cooldown, service wiring, real models on a talking vs still close-up) | 27 | 0 | | |
 | ruff | clean | | | |
 | mypy (CI scope, 53 files incl. the new core modules) | clean | | | |
 

@@ -103,6 +103,9 @@ class AppContext:
         from vcstudio.core.multicam import MulticamService, SourceSet
         self.multicam = MulticamService(SourceSet(self.factory_for, self.db.log_event, self.source_loop_risk))
         self.pipeline.multicam = self.multicam
+        from vcstudio.ai.speaker import SpeakerService      # auto "speaker": mouth movement on every source
+        self.multicam.speaker = SpeakerService(
+            lambda: {"main": self.capture.slot.peek()[0], **self.multicam.sources.frames()})
         if not os.environ.get("VCS_NO_PLUGINS"):            # safe start: VCS_NO_PLUGINS=1 loads none
             self.plugins.start_approved()
         from vcstudio.ai.gestures import GestureService

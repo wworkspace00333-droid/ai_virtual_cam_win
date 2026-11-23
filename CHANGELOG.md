@@ -8,6 +8,14 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 ## [Unreleased]
 
 ### Added
+- Privacy Shield: "Hide cards, documents and licence plates whole". A four-cornered outline with card / document or
+  plate proportions and printed text inside is hidden entirely, including the photo on an ID card. Works with text
+  detection set to "off" too. Best effort: an edge that does not stand out (a white card on a white desk) is missed,
+  and its text is then hidden as text.
+- Multi-Camera: automatic switching "Show who is speaking". The source where a face's lips move clearly the most
+  becomes the main picture, with the same hold time and cooldown as the other modes; while nobody speaks the picture
+  stays where it is. It needs the face models and costs about half a CPU core with three 720p sources. No one is
+  identified.
 - Studio → AI Models → "Use in the app" also for a face detector (YuNet layout: the cls / obj / bbox / kps outputs
   OpenCV decodes) and a face mesh (MediaPipe face landmarker layout: 256x256 input, 478 x 3 points and a presence
   value), both used by AI Vision and so by the privacy shield's face outlines.

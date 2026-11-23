@@ -58,6 +58,8 @@ class PrivacyTab:
         g.addWidget(self.strict, 3, 0, 1, 4)
         self.faces = QCheckBox(tr("Hide faces by their outline (needs AI Vision; precise with the face mesh)"))
         g.addWidget(self.faces, 4, 0, 1, 4)
+        self.documents = QCheckBox(tr("Hide cards, documents and licence plates whole (outline with text inside)"))
+        g.addWidget(self.documents, 5, 0, 1, 4)
         sh.layout_.addLayout(g)
         self.pattern_boxes = {}
         pr = QGridLayout()
@@ -103,7 +105,7 @@ class PrivacyTab:
         self._loading = False
         self.load()
         self.level.currentIndexChanged.connect(self._set_level)
-        for w in (self.enabled, self.strict, self.faces, *self.pattern_boxes.values()):
+        for w in (self.enabled, self.strict, self.faces, self.documents, *self.pattern_boxes.values()):
             w.toggled.connect(self.save)
         for w in (self.text, self.effect):
             w.currentIndexChanged.connect(self.save)
@@ -145,6 +147,7 @@ class PrivacyTab:
             self.sens.setValue(c.sensitivity)
             self.strict.setChecked(c.strict)
             self.faces.setChecked(c.faces)
+            self.documents.setChecked(c.documents)
             for k, cb in self.pattern_boxes.items():
                 cb.setChecked(k in c.patterns)
             self.keywords.setText(", ".join(c.keywords))
@@ -176,6 +179,7 @@ class PrivacyTab:
         d.update(enabled=self.enabled.isChecked(), text=self.text.currentData(), effect=self.effect.currentData(),
                  padding=round(self.padding.value(), 3), sensitivity=round(self.sens.value(), 3),
                  strict=self.strict.isChecked(), faces=self.faces.isChecked(),
+                 documents=self.documents.isChecked(),
                  patterns=[k for k, cb in self.pattern_boxes.items() if cb.isChecked()],
                  keywords=[k.strip() for k in self.keywords.text().split(",") if k.strip()])
         self.ctx.settings.set("privacy_shield", d)
@@ -229,5 +233,5 @@ class PrivacyTab:
         s = self.ctx.shield.stats
         self.status.setText(tr("Shield: {st} · text boxes {b} · hidden now {h} · detection {ms} ms",
                                st=tr(s.state.replace("_", " ")), b=s.boxes, h=s.hidden, ms=f"{s.ms:.0f}")
-                            + (("\n" + ", ".join(f"{k}: {v}" for k, v in s.kinds.items())) if s.kinds else "")
+                            + (("\n" + ", ".join(f"{tr(k)}: {v}" for k, v in s.kinds.items())) if s.kinds else "")
                             + (f"\n{s.error}" if s.error else ""))

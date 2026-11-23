@@ -38,9 +38,10 @@ and installed-app check passed). 0.5.3 stays the latest release, so 0.5.x users 
    webcams, a person in front of a camera for vision / face mesh / depth, privacy shield in Zoom / Teams, a real
    microphone with monitoring, the phone page over LAN).
 3. Not possible in 0.6.0 and stated in the UI / docs: system virtual microphone (signed kernel driver,
-   reports/VIRTUAL_AUDIO_DEVICE.md), SAM 2.1 video propagation (not in the ONNX export), identity documents / plates
-   as objects (no such detector classes; their printing is found as text), active-speaker camera switching (one
-   microphone gives no per-camera signal).
+   reports/VIRTUAL_AUDIO_DEVICE.md), SAM 2.1 video propagation (not in the ONNX export).
+   Added 2026-11-23 as best effort (🟡, measured on synthetic input only): identity documents / cards / plates as
+   whole objects (outline + text inside, ai/document_detect.py) and active-speaker switching by mouth movement
+   (ai/speaker.py); both are in the hardware checklist.
 4. Partly: registered custom models can be used for background segmentation, text detection, pose landmarks,
    hand landmarks, face detection and face mesh (the layouts of the built-in models); semantic-segmentation layouts
    are checked and kept only.

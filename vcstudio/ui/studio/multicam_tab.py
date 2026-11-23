@@ -46,6 +46,7 @@ class MulticamTab:
         self.auto = QComboBox()
         self.auto.addItem(tr("Off"), "off")
         self.auto.addItem(tr("Switch when nobody is on the main camera"), "people")
+        self.auto.addItem(tr("Show who is speaking (mouth movement; needs the face models)"), "speaker")
         self.fallback = QComboBox()
         rows = [("Layout", self.layout_box), ("Main picture", self.primary), ("Window corner", self.corner),
                 ("Window size", self.size), ("Lost source", self.missing), ("Automatic switching", self.auto),
@@ -232,3 +233,11 @@ class MulticamTab:
         self.status.setText(tr("Showing: {p} · composition {ms} ms · stale tiles {n} · auto switches {a}",
                                p=tr("Main input") if s.primary == "main" else s.primary, ms=f"{s.compose_ms:.1f}",
                                n=s.stale_tiles, a=self.ctx.multicam.auto.switches))
+        sp = self.ctx.multicam.speaker
+        if sp is not None and sp.stats.state != "stopped":
+            st = sp.stats
+            act = ", ".join(f"{tr('Main input') if k == 'main' else k} {v:.3f}" for k, v in st.activity.items())
+            self.status.setText(self.status.text() + "\n" + (
+                tr("Speaker detection: models missing (AI Models)") if st.state == "no_models" else
+                tr("Speaker detection: {state} · speaking: {who} · mouth movement: {act}", state=tr(st.state),
+                   who=st.speaker or "—", act=act or "—")))

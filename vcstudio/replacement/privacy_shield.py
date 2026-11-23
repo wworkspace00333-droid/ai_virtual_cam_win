@@ -16,6 +16,9 @@ Settings section "privacy_shield" (global: a scene switch must not switch privac
                drawn even in emergency passthrough; the status says "holding" so the user knows
   regions      the user's own rectangles (x, y, w, h in 0..1) always hidden
   exclude      rectangles never hidden by text detection (e.g. the user's own name badge)
+  documents    hide cards, documents and licence plates whole (vcstudio/ai/document_detect.py: a four-cornered
+               outline of the right proportions with text inside), including the photo on an ID card; uses the text
+               detector, also when `text` is "off"
   faces        hide faces by their outline: the face-mesh oval from AI Vision (vcstudio/ai/vision.py, mesh on), or
                the face box when a face has no mesh; grown by `padding`. Needs AI Vision with face analysis on
 
@@ -23,8 +26,8 @@ Runs on the INPUT frame on its own thread (newest frame only, `fps` default 2); 
 current boxes (a pixelation of a few boxes: about a millisecond). Limits, said plainly in the UI: text smaller than
 about 12 px, strongly slanted, handwritten or very low-contrast is often missed; the English recogniser reads
 letters and digits only, so e-mail addresses are recognised only as "all text"; identity documents, payment cards
-and licence plates are found as text regions (their printing), not as objects (the bundled detectors have no such
-classes). It reduces what leaves the PC; it is not a guarantee.
+and licence plates are found as whole objects only when their outline stands out ("documents"), otherwise as text
+regions (the bundled detectors have no such classes). It reduces what leaves the PC; it is not a guarantee.
 """
 from __future__ import annotations
 
@@ -42,6 +45,8 @@ log = logging.getLogger(__name__)
 TEXT_MODES = ("off", "all", "sensitive")
 EFFECTS = ("pixelate", "blur", "black")
 PATTERNS = ("email", "phone", "card", "account", "address", "keywords")
+DOC_KINDS = ("document", "plate")
+DOC_PAD = 0.04               # padding of a whole document, share of its height (text padding would be far too much)
 MAX_READ = 12                # text boxes read per pass (30-160 ms each on the CPU); the rest stay hidden, unread
 
 _EMAIL = re.compile(r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}", re.I)
@@ -122,6 +127,7 @@ class ShieldConfig:
     regions: tuple[tuple[float, float, float, float], ...] = ()
     exclude: tuple[tuple[float, float, float, float], ...] = ()
     faces: bool = False
+    documents: bool = False
 
     @staticmethod
     def from_settings(settings) -> ShieldConfig:
@@ -143,7 +149,8 @@ class ShieldConfig:
                             pats, kws, d.get("effect") if d.get("effect") in EFFECTS else "pixelate",
                             num("padding", 0, 2, 0.25), num("sensitivity", 0, 1, 0.5), num("fps", 0.5, 10, 2.0),
                             num("hold_s", 0, 30, 1.5), bool(d.get("strict", False)), num("strict_hold_s", 1, 120, 10),
-                            num("strict_grow", 0, 3, 0.5), regs, excl, bool(d.get("faces", False)))
+                            num("strict_grow", 0, 3, 0.5), regs, excl, bool(d.get("faces", False)),
+                            bool(d.get("documents", False)))
 
 
 @dataclass
@@ -190,7 +197,7 @@ class PrivacyShield:
 
     def apply_settings(self) -> None:
         cfg = ShieldConfig.from_settings(self.settings)
-        need_thread = cfg.enabled and cfg.text != "off"
+        need_thread = cfg.enabled and (cfg.text != "off" or cfg.documents)
         restart = self.running and (cfg.text != self.cfg.text or cfg.sensitivity != self.cfg.sensitivity)
         self.cfg = cfg
         if restart or (self.running and not need_thread):
@@ -229,7 +236,7 @@ class PrivacyShield:
             if hasattr(det, "set_sensitivity"):
                 det.set_sensitivity(self.cfg.sensitivity)
             rec = None
-            if self.cfg.text == "sensitive":
+            if self.cfg.text == "sensitive":    # (read the config of the start: a change restarts the thread)
                 if self.recognizer_factory is not None:
                     rec = self.recognizer_factory()
                 elif td.recognizer_available():
@@ -265,11 +272,23 @@ class PrivacyShield:
         keep = []
         read = 0
         kinds: dict[str, int] = {}
-        for b in boxes:
+        docs = []
+        if cfg.documents:
+            from vcstudio.ai import document_detect as dd
+            for d in dd.find(bgr, boxes):
+                cx, cy = (d.box[0] + d.box[2]) / 2 / W, (d.box[1] + d.box[3]) / 2 / H
+                if any(ex <= cx <= ex + ew and ey <= cy <= ey + eh for ex, ey, ew, eh in cfg.exclude):
+                    continue
+                docs.append(d)
+                kinds[d.kind] = kinds.get(d.kind, 0) + 1
+                keep.append(Hidden(tuple(float(v) for v in d.box), now, d.kind))
+        for b in boxes if cfg.text != "off" else ():
             x0, y0, x1, y1 = b.box
             cx, cy = (x0 + x1) / 2 / W, (y0 + y1) / 2 / H
             if any(ex <= cx <= ex + ew and ey <= cy <= ey + eh for ex, ey, ew, eh in cfg.exclude):
                 continue
+            if any(d.box[0] <= cx * W <= d.box[2] and d.box[1] <= cy * H <= d.box[3] for d in docs):
+                continue                                     # inside a hidden document: no need to read it
             kind = "text"
             if cfg.text == "sensitive" and rec is not None and read < MAX_READ:
                 read += 1
@@ -289,8 +308,8 @@ class PrivacyShield:
         st = self.stats
         st.runs += 1
         st.ms = (time.perf_counter() - t) * 1000
-        st.boxes, st.sensitive, st.kinds, st.last_run = len(boxes), sum(v for k, v in kinds.items() if k != "text"), \
-            kinds, now
+        st.boxes, st.sensitive, st.kinds, st.last_run = len(boxes), sum(
+            v for k, v in kinds.items() if k not in ("text", *DOC_KINDS)), kinds, now
 
     # ------------------------------------------------------------------ output thread
     def boxes_for(self, W: int, H: int, now: float | None = None) -> list[tuple[int, int, int, int]]:
@@ -313,7 +332,7 @@ class PrivacyShield:
             if now - h.last_seen > hold:
                 continue
             x0, y0, x1, y1 = h.box[0] * sx, h.box[1] * sy, h.box[2] * sx, h.box[3] * sy
-            pad = (y1 - y0) * (cfg.padding + (cfg.strict_grow if holding else 0.0))
+            pad = (y1 - y0) * ((DOC_PAD if h.kind in DOC_KINDS else cfg.padding) + (cfg.strict_grow if holding else 0.0))
             out.append((max(0, int(x0 - pad)), max(0, int(y0 - pad)), min(W, int(x1 + pad + 0.999)),
                         min(H, int(y1 + pad + 0.999))))
         self.stats.hidden = len(out)

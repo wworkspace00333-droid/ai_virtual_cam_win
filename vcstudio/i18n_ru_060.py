@@ -242,5 +242,13 @@ RU_060: dict[str, str] = {
     "Choose a video: add one to the asset library above first.": "Выберите видео: сначала добавьте его в библиотеку выше.",
     # actions (hotkeys page)
     "Next camera layout": "Следующая раскладка камер",
+    "Hide cards, documents and licence plates whole (outline with text inside)":
+        "Скрывать карты, документы и номера целиком (контур с текстом внутри)",
+    "document": "документ", "plate": "номер",
+    "Speaker detection: models missing (AI Models)": "Определение говорящего: нет моделей (AI Models)",
+    "Speaker detection: {state} · speaking: {who} · mouth movement: {act}":
+        "Определение говорящего: {state} · говорит: {who} · движение губ: {act}",
+    "Show who is speaking (mouth movement; needs the face models)":
+        "Показывать говорящего (по движению губ; нужны модели лица)",
     **{f"Automation trigger {n}": f"Триггер автоматизации {n}" for n in range(1, 5)},
 }

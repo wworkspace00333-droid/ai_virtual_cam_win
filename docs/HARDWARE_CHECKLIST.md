@@ -134,6 +134,11 @@ None of these could be checked on the development server (no GPU, no webcam, no 
       but the model ran on CPU") and be faster than the CPU line.
 - [ ] Multi-Camera with two real USB webcams: both run, PiP / side by side at 1080p30 without output drops; unplug the
       extra camera: placeholder or held frame, main output keeps its rate; plug back: the tile returns.
+- [ ] Multi-Camera "Show who is speaking" with two people (one per camera) talking in turn: note how often the right
+      camera is shown, the delay after a speaker change, and false switches when someone laughs or chews; read the
+      mouth-movement numbers on the tab (the threshold is 0.012).
+- [ ] Privacy Shield "cards, documents and plates whole": hold a bank card, an ID-sized card and a printed page in
+      front of the camera at 0.5-1.5 m, also tilted; note which are hidden whole and which only as text.
 - [ ] AI Vision with a real person at 1-3 m: face points on the eyes / nose / mouth, head direction follows turning,
       skeleton on the body; measure the analyses per second shown on the tab.
 - [ ] Privacy Shield in Zoom / Teams with a document, a phone screen and a whiteboard in view: what is hidden, what is
