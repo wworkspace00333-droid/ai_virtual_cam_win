@@ -152,3 +152,35 @@ def test_app_uses_the_chosen_custom_background_and_text_models(paths):
         assert ctx.custom_model_path("background") is None
     finally:
         ctx.shutdown()
+
+
+def test_pose_and_hand_landmarkers_take_their_roles(tmp_path):
+    for name, cat, role in (("pose/pose_estimation_mediapipe_2023mar.onnx", "body_pose", "pose"),
+                            ("hands/handpose_estimation_mediapipe_2023feb.onnx", "hand_landmarks", "hands")):
+        if not _have(name):
+            continue
+        rep = mc.check(M / name, cat, providers=["CPUExecutionProvider"], runs=1)
+        assert rep.fits and rep.used_by.startswith(mc.ROLES[role]), rep.used_by
+        dest = mc.register(rep, tmp_path, role + "-lm")
+        assert mc.active_path(tmp_path, role, role + "-lm") == dest
+    assert mc.validate("body_pose", [{"shape": [1, 3, 256, 256]}], [[1, 195]])[2] == ""   # other input layout
+
+
+def test_app_hands_custom_landmarker_reaches_gestures_and_vision(paths):
+    from vcstudio.app.application import AppContext
+    if not _have("hands/handpose_estimation_mediapipe_2023feb.onnx"):
+        pytest.skip("hand models not downloaded")
+    ctx = AppContext(paths, configure_logging=False)
+    try:
+        rep = mc.check(M / "hands/handpose_estimation_mediapipe_2023feb.onnx", "hand_landmarks",
+                       providers=["CPUExecutionProvider"], runs=1)
+        mc.register(rep, ctx.paths.models_dir, "hl")
+        ctx.settings.set("models", {"background": "", "text": "", "pose": "", "hands": "hl"})
+        assert ctx.custom_model_path("hands") is not None and ctx.gestures._factory is not None
+        assert ctx.vision.custom_model("hands") == ctx.custom_model_path("hands")
+        tracker = ctx.gestures._factory()
+        assert tracker is not None
+        ctx.settings.set("models", {"background": "", "text": "", "pose": "", "hands": ""})
+        assert ctx.gestures._factory is None
+    finally:
+        ctx.shutdown()

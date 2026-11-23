@@ -102,6 +102,7 @@ class VisionService:
         self._log = log_event or (lambda lv, m: None)
         self.cache_dir = cache_dir
         self.factories = factories or {}         # tests: {"face": fn, "pose": fn, "hands": fn} -> analyser
+        self.custom_model = None                 # callable(role) -> Path of a chosen custom landmarker, or None
         self.cfg = VisionConfig()
         self.slot: LatestSlot[VisionResult] = LatestSlot()
         self.stats = VisionStats()
@@ -164,10 +165,12 @@ class VisionService:
             return YuNetFaceDetector() if yunet_path().exists() else None
         if part == "pose":
             from vcstudio.ai import pose
-            return pose.PoseEstimator(self.cache_dir) if pose.available() else None
+            custom = self.custom_model("pose") if self.custom_model else None
+            return pose.PoseEstimator(self.cache_dir, landmarker=custom) if pose.available() else None
         if part == "hands":
             from vcstudio.ai import hands
-            return hands.HandTracker("all", self.cache_dir) if hands.available() else None
+            custom = self.custom_model("hands") if self.custom_model else None
+            return hands.HandTracker("all", self.cache_dir, landmarker=custom) if hands.available() else None
         if part == "mesh":
             from vcstudio.ai import face_mesh
             return face_mesh.FaceMesh(self.cache_dir) if face_mesh.available() else None

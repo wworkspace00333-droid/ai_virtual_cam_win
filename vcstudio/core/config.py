@@ -148,7 +148,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
               "agc_target_db": -20.0, "agc_max_gain_db": 18.0, "limiter": True, "limiter_ceiling_db": -1.0,
               "monitor": False},                 # hear the processed microphone (headphones!)
     # custom models in use (vcstudio/ai/model_check.py registry): role -> registered name ("" = built-in model)
-    "models": {"background": "", "text": ""},
+    "models": {"background": "", "text": "", "pose": "", "hands": ""},
     "color_presets": {},         # Colour Studio presets: name -> colour settings (vcstudio/ui/studio/color_tab.py)
     "vision": {"enabled": False, "fps": 6, "face": True, "pose": True, "hands": False, "overlay": True,
                "mesh": False},

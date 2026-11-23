@@ -11,6 +11,8 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 - Studio → AI Models → "Use in the app": a checked custom model can replace the built-in background segmentation
   (PP-HumanSeg layout) or the privacy-shield text detector (PP-OCR DB layout). Its SHA-256 is checked each time it is
   loaded; a disabled, changed or removed model falls back to the built-in one.
+- The same for pose landmarks (MediaPipe pose layout) and hand landmarks (MediaPipe hand layout; used by AI Vision and
+  gesture control alike).
 
 ### Security
 - The OBS plugin creates its frame section with an explicit access list (owner, SYSTEM, administrators); before,

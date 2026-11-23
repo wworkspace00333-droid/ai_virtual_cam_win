@@ -165,8 +165,8 @@ def _iou(a, b) -> float:
 
 
 class PoseLandmarker:
-    def __init__(self, cache_dir: Path | None = None, score: float = 0.5):
-        self.sess = _session(models_dir() / POSE_FILE, cache_dir)
+    def __init__(self, cache_dir: Path | None = None, score: float = 0.5, path: Path | None = None):
+        self.sess = _session(path or models_dir() / POSE_FILE, cache_dir)        # path: a custom landmarker
         self.inp = self.sess.get_inputs()[0].name
         self.score = score
 
@@ -200,9 +200,9 @@ class PoseLandmarker:
 class PoseEstimator:
     """Person detector + landmarker; `estimate(bgr)` -> (poses, ms)."""
 
-    def __init__(self, cache_dir: Path | None = None, max_people: int = 2):
+    def __init__(self, cache_dir: Path | None = None, max_people: int = 2, landmarker: Path | None = None):
         self.det = PersonDetector(cache_dir)
-        self.lm = PoseLandmarker(cache_dir)
+        self.lm = PoseLandmarker(cache_dir, path=landmarker)
         self.max_people = max_people
 
     def estimate(self, bgr: np.ndarray) -> tuple[list[Pose], float]:

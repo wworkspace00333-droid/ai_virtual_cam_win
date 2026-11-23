@@ -234,10 +234,11 @@ def classify(lm: np.ndarray) -> str:
 class HandTracker:
     """Palm detector + landmarker; hands(bgr) -> list[Hand] with their gesture."""
 
-    def __init__(self, compute_units: str = "all", cache_dir: Path | None = None, max_hands: int = 2):
+    def __init__(self, compute_units: str = "all", cache_dir: Path | None = None, max_hands: int = 2,
+                 landmarker: Path | None = None):
         d = models_dir()
         self.palms = PalmDetector(d / PALM_FILE, compute_units, cache_dir)
-        self.marks = HandLandmarker(d / HANDPOSE_FILE, compute_units, cache_dir)
+        self.marks = HandLandmarker(landmarker or d / HANDPOSE_FILE, compute_units, cache_dir)   # custom: same layout
         self.backend = self.palms.backend
         self.max_hands = max_hands
 

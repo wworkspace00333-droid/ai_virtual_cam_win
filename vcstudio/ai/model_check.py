@@ -181,6 +181,14 @@ def validate(category: str, inputs: list[dict], shapes: list[list[int]]) -> tupl
                 best = max(best, s[1])
         if best < need:
             p.append(f"no landmark output with at least {need} points ((1, K*d) or (1, K, d), d = 2..5)")
+        else:                                # the MediaPipe layouts the app's analysers decode
+            nhwc = any(i["shape"][1:] in ([256, 256, 3], [224, 224, 3]) for i in images)
+            if category == "body_pose" and nhwc and any(s == [1, 195] for s in shapes) and \
+                    any(i["shape"][1:] == [256, 256, 3] for i in images):
+                used_by = "pose landmarks (MediaPipe pose layout: 256x256 input, 39 x 5 output)"
+            elif category == "hand_landmarks" and nhwc and any(s == [1, 63] for s in shapes) and \
+                    any(i["shape"][1:] == [224, 224, 3] for i in images):
+                used_by = "hand landmarks (MediaPipe hand layout: 224x224 input, 21 x 3 output)"
     elif category == "ocr":
         det_map = [s for s in four if s[1] == 1 and s[2] >= 16 and s[3] >= 16]
         det_map += [s for s in shapes if len(s) == 2 and s[0] >= 16 and s[1] >= 16]
@@ -329,7 +337,8 @@ def verify(models_dir: Path, name: str) -> bool:
     return f.exists() and sha256_file(f) == meta["report"]["sha256"]
 
 
-ROLES = {"background": "background", "text": "privacy shield text"}   # role -> the used_by prefix it needs
+ROLES = {"background": "background", "text": "privacy shield text", "pose": "pose landmarks",
+         "hands": "hand landmarks"}           # role -> the used_by prefix it needs
 
 
 def usable_for(meta: dict) -> str:

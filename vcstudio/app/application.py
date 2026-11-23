@@ -128,6 +128,7 @@ class AppContext:
         self.pipeline.shield = self.shield
         self.shield.face_outlines = self._face_outlines
         self.shield.custom_model = lambda: self.custom_model_path("text")
+        self.vision.custom_model = self.custom_model_path
         self.apply_custom_models()
         self.shield.apply_settings()
         # scene automation (vcstudio/core/automation.py): decisions here, actions through the existing services
@@ -238,6 +239,19 @@ class AppContext:
             self.background.person_factory = factory
             if self.background.cfg.source == "person":
                 self.background.seg.use(factory)
+        hands_custom = self.custom_model_path("hands")     # gestures share the hand landmarker
+        if getattr(self, "_hands_custom", None) != hands_custom:
+            self._hands_custom = hands_custom
+            from vcstudio.ai import hands as _hands
+            self.gestures._factory = ((lambda p=hands_custom: _hands.HandTracker(
+                "all", self.models.cache_dir / "onnx", landmarker=p) if _hands.available() else None)
+                if hands_custom is not None else None)
+            if self.gestures.running:
+                self.gestures.stop()
+                self.gestures.apply_settings()
+        if self.vision.running:                            # pose / hand landmarkers too
+            self.vision.stop()
+            self.vision.apply_settings()
         if self.shield.running:                            # the text detector is created when the thread starts
             self.shield.stop()
             self.shield.apply_settings()

@@ -49,6 +49,14 @@ and an automation timer rule, all at once. Result: **pass** — average 29.9 fps
 7.2 MB per 10 minutes, below the 50 MB limit), vision 4.0 analyses/s throughout, 597 text-detection runs, 19 of 20
 expected timer rules fired (the 20th was due at the stop).
 
+## Soak: everything on for 60 minutes (2026-11-20)
+
+Same setup, `scripts/pro060_soak.py --minutes 60` (raw: [pro060_soak_60min.json](pro060_soak_60min.json)): **pass** —
+average 29.1 fps, 0 render errors, 0 pipeline restarts, memory 431 → 372 MB with a fitted growth of 0.7 MB per
+10 minutes after the first 2 minutes (no leak), 3591 text-detection runs, 119 timer rules fired. 16 of 360
+10-second windows were below 27 fps (lowest 17.9); about half a minute of them overlapped a unit-test run on the same
+2-core machine.
+
 ## Component measurements (same machine)
 
 | Component | Measurement |
