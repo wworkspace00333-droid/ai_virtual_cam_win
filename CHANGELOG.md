@@ -7,6 +7,11 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+## [0.6.0-preview3] — 2026-11-23
+
+Third 0.6.0 Professional preview (a pre-release, not offered by "Check for updates" in 0.5.x). Since
+0.6.0-preview2:
+
 ### Added
 - Studio → AI Models → "Use in the app": a checked custom model can replace the built-in background segmentation
   (PP-HumanSeg layout) or the privacy-shield text detector (PP-OCR DB layout). Its SHA-256 is checked each time it is
@@ -427,6 +432,7 @@ for real hardware are still to be measured (docs/HARDWARE_CHECKLIST.md).
 
 macOS releases; see the history of the original repository.
 
+[0.6.0-preview3]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.6.0-preview3
 [0.6.0-preview2]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.6.0-preview2
 [0.6.0-preview]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.6.0-preview
 [0.5.3]: https://github.com/wworkspace00333-droid/ai_virtual_cam_win/releases/tag/v0.5.3

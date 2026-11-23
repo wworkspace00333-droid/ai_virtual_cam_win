@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 
 ROOT = Path(SPECPATH).parent
-VERSION = os.environ.get("VCS_VERSION", "0.6.0-preview2")
+VERSION = os.environ.get("VCS_VERSION", "0.6.0-preview3")
 NATIVE = ROOT / "build" / "native"
 
 SHIPPED_MODELS = ["yolox_nano", "yolox_tiny", "yolox_s", "face_detection_yunet_2023mar",
