@@ -21,7 +21,8 @@ Categories and what "fits" means (checked on the declared shapes, then on the sh
 
 A model that passes is registered in <app data>/models/custom/ with its report and an enabled flag. Using a custom
 model in place of a built-in one is per module and only for the layouts that module decodes (detectors and YOLO-seg
-through model_import; the others are checked, benchmarked and kept, and the report says what would use them).
+through model_import; background, text, pose, hand, face-detection and face-mesh models of the built-in layouts
+through ROLES / active_path; the others are checked, benchmarked and kept, and the report says what would use them).
 """
 from __future__ import annotations
 
@@ -137,8 +138,13 @@ def _feed(inp, side: int) -> np.ndarray:
     return np.ascontiguousarray(arr.astype(np.float32))
 
 
-def validate(category: str, inputs: list[dict], shapes: list[list[int]]) -> tuple[bool, list[str], str]:
-    """(fits, problems, used_by) from the input list and the output shapes of a real run. Pure: tested directly."""
+YUNET_OUTPUTS = {f"{k}_{s}" for k in ("cls", "obj", "bbox", "kps") for s in (8, 16, 32)}
+
+
+def validate(category: str, inputs: list[dict], shapes: list[list[int]],
+             names: list[str] | None = None) -> tuple[bool, list[str], str]:
+    """(fits, problems, used_by) from the input list, the output shapes of a real run and (optional) the output
+    names. Pure: tested directly."""
     p: list[str] = []
     used_by = ""
     images = [i for i in inputs if len(i["shape"]) == 4]
@@ -169,10 +175,15 @@ def validate(category: str, inputs: list[dict], shapes: list[list[int]]) -> tupl
     elif category == "face_detection":
         if not any(s and s[-1] >= 4 for s in shapes):
             p.append("no output with at least 4 values per row (a box)")
+        elif names is not None and YUNET_OUTPUTS <= set(names) and any(
+                i["shape"][1] == 3 for i in images):     # what OpenCV's FaceDetectorYN decodes (by output name)
+            used_by = "face detection (YuNet layout: cls / obj / bbox / kps outputs at strides 8, 16, 32)"
     elif category in MIN_POINTS:
         need = MIN_POINTS[category]
         best = 0
         for s in shapes:                     # (1, K*d) flat or (1, K, d), d = coordinates (+ visibility/presence)
+            if len(s) == 4 and s[1] == s[2] == 1:   # (1, 1, 1, K*d), e.g. the MediaPipe face landmarker
+                s = [s[0], s[3]]
             if len(s) == 2:
                 for k in (5, 4, 3, 2):
                     if s[1] % k == 0 and need <= s[1] // k <= 600:
@@ -189,6 +200,10 @@ def validate(category: str, inputs: list[dict], shapes: list[list[int]]) -> tupl
             elif category == "hand_landmarks" and nhwc and any(s == [1, 63] for s in shapes) and \
                     any(i["shape"][1:] == [224, 224, 3] for i in images):
                 used_by = "hand landmarks (MediaPipe hand layout: 224x224 input, 21 x 3 output)"
+            elif category == "face_landmarks" and any(int(np.prod(s)) == 1434 for s in shapes) and \
+                    any(int(np.prod(s)) == 1 for s in shapes) and \
+                    any(i["shape"][1:] == [256, 256, 3] for i in images):
+                used_by = "face mesh (MediaPipe face landmarker layout: 256x256 input, 478 x 3 output + presence)"
     elif category == "ocr":
         det_map = [s for s in four if s[1] == 1 and s[2] >= 16 and s[3] >= 16]
         det_map += [s for s in shapes if len(s) == 2 and s[0] >= 16 and s[1] >= 16]
@@ -271,7 +286,7 @@ def check(src: Path, category: str, providers: list[str] | None = None, runs: in
         rep.problems.append("the model does not run on any execution provider: " +
                             "; ".join(p.error for p in rep.providers if p.error)[:600])
         return rep
-    fits, problems, used_by = validate(category, rep.inputs, list(rep.run_shapes.values()))
+    fits, problems, used_by = validate(category, rep.inputs, list(rep.run_shapes.values()), list(rep.run_shapes))
     rep.fits, rep.used_by = fits, used_by
     rep.problems += problems
     return rep
@@ -338,11 +353,11 @@ def verify(models_dir: Path, name: str) -> bool:
 
 
 ROLES = {"background": "background", "text": "privacy shield text", "pose": "pose landmarks",
-         "hands": "hand landmarks"}           # role -> the used_by prefix it needs
+         "hands": "hand landmarks", "face": "face detection", "mesh": "face mesh"}   # role -> used_by prefix
 
 
 def usable_for(meta: dict) -> str:
-    """The role a registered model can take ("background" / "text"), or "" (pure: tested)."""
+    """The role a registered model can take (a key of ROLES), or "" (pure: tested)."""
     used = str(meta.get("report", {}).get("used_by", ""))
     return next((role for role, prefix in ROLES.items() if used.startswith(prefix)), "")
 

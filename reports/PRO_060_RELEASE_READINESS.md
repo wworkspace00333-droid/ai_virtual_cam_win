@@ -41,9 +41,13 @@ and installed-app check passed). 0.5.3 stays the latest release, so 0.5.x users 
    reports/VIRTUAL_AUDIO_DEVICE.md), SAM 2.1 video propagation (not in the ONNX export), identity documents / plates
    as objects (no such detector classes; their printing is found as text), active-speaker camera switching (one
    microphone gives no per-camera signal).
-4. Partly: registered custom models can be used for background segmentation, text detection, pose landmarks and
-   hand landmarks (the layouts of the built-in models); face and semantic-segmentation layouts are checked and kept
-   only.
+4. Partly: registered custom models can be used for background segmentation, text detection, pose landmarks,
+   hand landmarks, face detection and face mesh (the layouts of the built-in models); semantic-segmentation layouts
+   are checked and kept only.
+5. Done 2026-11-23 — the OBS plugin with the new access list compiles: CI build of v0.6.0-preview3 (tests and
+   installer jobs passed). Loading it in a real OBS is part of the hardware checklist.
+6. Done 2026-11-23 — audio/video sync of recordings with noise suppression: constant 21 ms delay, compensated in the
+   recorder; tested with a recorded tone + flash (within 10 ms).
 
 Everything else in docs/PRO_060_FEATURE_MATRIX.md is implemented, in the GUI, in the pipeline and in the tests
 (full suite 783 passed, 0 failed, 40 skipped on 2026-11-20).

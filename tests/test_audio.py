@@ -249,3 +249,43 @@ def test_settings_card_microphone_choice(qtbot, paths):
         assert ctx.settings.get("recording.replay_seconds") == 45
     finally:
         ctx.shutdown()
+
+
+def test_noise_suppression_latency_is_constant_and_compensated(tmp_path):
+    """The audio chain's noise suppression delays the sound by one STFT frame (1024 samples); the delay is the same
+    for any block size, and the recording service subtracts it, so the tone still lands on the flash."""
+    from vcstudio.core.audio_fx import AudioChain, AudioFxConfig
+    for blk in (480, 1500):
+        ch = AudioChain(AudioFxConfig(denoise=True, denoise_strength=0.0, limiter=False))
+        x = np.zeros((24000, 2), np.int16)
+        x[12000:12048] = 20000
+        y = np.concatenate([ch.process(x[i:i + blk]) for i in range(0, len(x), blk)])
+        assert len(y) == len(x) and abs(int(np.argmax(np.abs(y[:, 0]))) - 12000 - 1024) <= 2
+        assert ch.latency_s == pytest.approx(1024 / RATE)
+
+    class Settings:
+        def __init__(self):
+            self.d = {"recording.replay_enabled": False, "recording.replay_seconds": 30,
+                      "recording.audio_device": "", "recording.folder": str(tmp_path),
+                      "audio": {"denoise": True, "denoise_strength": 0.0, "limiter": False}}
+
+        def get(self, k):
+            return self.d[k]
+
+    class Pipe:
+        taps: list = []
+    svc = RecordingService(Pipe(), Settings())
+    assert svc.fx.cfg.denoise
+    p = tmp_path / "dn.mp4"
+    r = Recorder(p, 30, ("mpeg4",), queue_frames=500, audio=True)
+    r.start()
+    svc.recorder = r
+    for i in range(90):
+        r.push(frame(30 <= i < 33), T0 + i / 30, block=True)
+    for k in range(300):                       # through the service: the chain runs and the latency is subtracted
+        t = T0 + k * 0.01
+        svc._on_audio(tone_chunk(t), t)
+    svc.recorder = None
+    r.stop()
+    flash, tone, total = first_flash_and_tone(p)
+    assert abs(tone - flash) <= 0.01, (flash, tone)   # without compensation the tone came 21 ms late

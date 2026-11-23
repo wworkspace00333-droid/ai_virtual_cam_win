@@ -14,6 +14,8 @@ docs/TESTING.md; nothing was skipped on purpose to make numbers look better.
 | Text recognition with the real CRNN model (2026-11-20) | 2 new tests pass | 0 | | phone / card / keyword / IBAN hidden, "hello world" shown |
 | Upgrade 0.5.2 -> 0.6.0-preview2 on this server (installed app, 2026-11-20) | self-check 13/13, loopback ok, e2e ok | 0 | | 61 fps, 0 render errors, 0 dropped |
 | Soak, all Studio features, 60 min (2026-11-20) | pass | | | 29.1 fps avg, +0.7 MB / 10 min, 0 errors, 0 restarts |
+| After preview3 (A/V sync of recordings, custom face detector / face mesh roles), 2026-11-23: full suite | **791** | **1** | 40 | 5 min 59 s |
+| The one failure: test_metal_performance_1080p (D3D11 WARP must beat the CPU backend; 49.0 vs 47.6 ms with the suite loading both cores). Re-run alone 3 times | 3 / 3 pass | 0 | | WARP 40-41 ms vs CPU 45 ms; compositor code unchanged |
 | ruff | clean | | | |
 | mypy (CI scope, 53 files incl. the new core modules) | clean | | | |
 

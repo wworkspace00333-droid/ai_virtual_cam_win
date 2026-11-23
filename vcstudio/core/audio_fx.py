@@ -129,7 +129,8 @@ class _Denoiser:
         self.prev = np.zeros((self.N, 2), np.float32)       # last analysis frame
         self.ola = np.zeros((self.HOP, 2), np.float32)       # overlap tail waiting for the next frame
         self.noise: np.ndarray | None = None                 # per-bin noise floor
-        self.outbuf = np.zeros((0, 2), np.float32)
+        # one hop of silence up front: output is then always available and the delay is constant (LATENCY)
+        self.outbuf = np.zeros((self.HOP, 2), np.float32)
 
     def process(self, x: np.ndarray, strength: float) -> np.ndarray:
         """Same number of samples out as in; delayed by N samples (21 ms), the recorder's clock is not shifted —
@@ -154,9 +155,9 @@ class _Denoiser:
         if frames:
             self.outbuf = np.concatenate([self.outbuf] + frames)
         n = len(x)
-        if len(self.outbuf) < n:                             # start-up: silence until the first frames are out
+        if len(self.outbuf) < n:                             # cannot happen with the hop of silence; kept as a guard
             pad = np.zeros((n - len(self.outbuf), 2), np.float32)
-            self.outbuf = np.concatenate([pad, self.outbuf])
+            self.outbuf = np.concatenate([self.outbuf, pad])
         out, self.outbuf = self.outbuf[:n], self.outbuf[n:]
         return out
 
@@ -181,6 +182,12 @@ class AudioChain:
         self._lock = threading.Lock()
         self.meter = Meter()
         self.configure(cfg or AudioFxConfig())
+
+    @property
+    def latency_s(self) -> float:
+        """Constant delay the chain adds (noise suppression only: one STFT frame); recordings subtract it from the
+        audio timestamps so sound stays in sync with the picture."""
+        return _Denoiser.N / RATE if self.cfg.denoise and not self.cfg.mute else 0.0
 
     def configure(self, cfg: AudioFxConfig) -> None:
         with self._lock:
@@ -292,7 +299,7 @@ class AudioChain:
         rel = _coef(50.0)
         gains = np.ones(k, np.float32)
         for i in range(k):
-            need = min(1.0, ceil / peaks[i]) if peaks[i] > 0 else 1.0
+            need = min(1.0, ceil / peaks[i]) if peaks[i] > 1e-9 else 1.0
             self.lim_g = need if need < self.lim_g else need + (self.lim_g - need) * rel   # instant attack
             gains[i] = self.lim_g
         self.meter.limiter_gain_db = db(float(gains.min()))

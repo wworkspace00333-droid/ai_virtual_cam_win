@@ -434,6 +434,7 @@ class RecordingService:
     def _on_audio(self, samples: np.ndarray, t: float) -> None:
         try:
             samples = self.fx.process(samples)
+            t -= self.fx.latency_s                       # noise suppression delays the sound by a constant frame
         except Exception:                                # a DSP bug must never cost the recording its sound
             log.exception("audio processing failed; raw microphone used")
         if self.monitor.running:

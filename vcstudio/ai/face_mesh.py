@@ -59,9 +59,10 @@ def _sigmoid(x: float) -> float:
 class FaceMesh:
     # The presence logit measured on tests/data/bus.jpg: open face +8.1, face with sunglasses -2.8, a wall -19.9.
     # The face is already confirmed by YuNet, so the bar is low (logit -5): sunglasses pass, non-faces do not.
-    def __init__(self, cache_dir: Path | None = None, score: float = 0.0067):
+    def __init__(self, cache_dir: Path | None = None, score: float = 0.0067, path: Path | None = None):
         from vcstudio.ai.onnx_engine import create_session
-        self.sess, _ = create_session(models_dir() / MESH_FILE, "cpu_only", cache_dir)
+        self.sess, _ = create_session(Path(path) if path is not None else models_dir() / MESH_FILE, "cpu_only",
+                                      cache_dir)          # path: a checked custom model of the same layout
         self.inp = self.sess.get_inputs()[0].name
         self.score = score
         self.ms = 0.0
@@ -93,7 +94,7 @@ class FaceMesh:
         x = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB).astype(np.float32)[None] / 255.0
         outs = self.sess.run(None, {self.inp: x})
         lm = next(o for o in outs if o.size == 1434).reshape(478, 3)
-        flag = outs[1] if len(outs) > 1 and outs[1].size == 1 else None      # Identity_1: face presence logit
+        flag = next((o for o in outs if o.size == 1), None)                  # Identity_1: face presence logit
         score = _sigmoid(float(np.ravel(flag)[0])) if flag is not None else 1.0
         self.ms = (time.perf_counter() - t0) * 1000
         if score < self.score:

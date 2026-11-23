@@ -162,6 +162,9 @@ class VisionService:
             return self.factories[part]()
         if part == "face":
             from vcstudio.ai.onnx_engine import YuNetFaceDetector, yunet_path
+            custom = self.custom_model("face") if self.custom_model else None
+            if custom is not None:
+                return YuNetFaceDetector(path=custom)
             return YuNetFaceDetector() if yunet_path().exists() else None
         if part == "pose":
             from vcstudio.ai import pose
@@ -173,6 +176,9 @@ class VisionService:
             return hands.HandTracker("all", self.cache_dir, landmarker=custom) if hands.available() else None
         if part == "mesh":
             from vcstudio.ai import face_mesh
+            custom = self.custom_model("mesh") if self.custom_model else None
+            if custom is not None:
+                return face_mesh.FaceMesh(self.cache_dir, path=custom)
             return face_mesh.FaceMesh(self.cache_dir) if face_mesh.available() else None
         return None
 

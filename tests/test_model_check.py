@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import shutil
+from pathlib import Path
 
 import pytest
 
@@ -128,7 +129,7 @@ def test_custom_models_take_their_role_and_fall_back_when_changed(tmp_path):
     dest.write_bytes(dest.read_bytes()[:-1] + b"\x01")
     assert mc.active_path(tmp_path, "background", "my-seg") is None    # changed after registration
     face = mc.check(M / "face_detection_yunet_2023mar.onnx", "face_detection", providers=["CPUExecutionProvider"], runs=1)
-    assert mc.usable_for({"report": face.as_dict()}) == ""             # no module decodes this layout
+    assert mc.usable_for({"report": face.as_dict()}) == "face"         # YuNet layout: AI Vision can use it
 
 
 def test_app_uses_the_chosen_custom_background_and_text_models(paths):
@@ -164,6 +165,53 @@ def test_pose_and_hand_landmarkers_take_their_roles(tmp_path):
         dest = mc.register(rep, tmp_path, role + "-lm")
         assert mc.active_path(tmp_path, role, role + "-lm") == dest
     assert mc.validate("body_pose", [{"shape": [1, 3, 256, 256]}], [[1, 195]])[2] == ""   # other input layout
+
+
+def test_face_detector_and_face_mesh_take_their_roles(tmp_path):
+    for name, cat, role in (("face_detection_yunet_2023mar.onnx", "face_detection", "face"),
+                            ("facemesh/face_mesh_468.onnx", "face_landmarks", "mesh")):
+        if not _have(name):
+            continue
+        rep = mc.check(M / name, cat, providers=["CPUExecutionProvider"], runs=1)
+        assert rep.fits and rep.used_by.startswith(mc.ROLES[role]), rep.used_by
+        dest = mc.register(rep, tmp_path, role + "-m")
+        assert mc.active_path(tmp_path, role, role + "-m") == dest
+    # boxes with other output names are checked but not decoded; a landmark model without a presence value neither
+    assert mc.validate("face_detection", [{"shape": [1, 3, 320, 320]}], [[1, 100, 15]], ["boxes"])[2] == ""
+    assert mc.validate("face_landmarks", [{"shape": [1, 256, 256, 3]}], [[1, 1, 1, 1434]])[2] == ""
+    assert mc.validate("face_landmarks", [{"shape": [1, 256, 256, 3]}], [[1, 1, 1, 1434], [1, 1]])[0]
+
+
+def test_vision_loads_the_chosen_custom_face_models(paths):
+    from vcstudio.ai import face_mesh
+    from vcstudio.ai.onnx_engine import YuNetFaceDetector
+    from vcstudio.app.application import AppContext
+    if not _have("face_detection_yunet_2023mar.onnx", "facemesh/face_mesh_468.onnx"):
+        pytest.skip("face models not available")
+    ctx = AppContext(paths, configure_logging=False)
+    try:
+        for name, cat, reg in (("face_detection_yunet_2023mar.onnx", "face_detection", "fd"),
+                               ("facemesh/face_mesh_468.onnx", "face_landmarks", "fm")):
+            mc.register(mc.check(M / name, cat, providers=["CPUExecutionProvider"], runs=1), ctx.paths.models_dir, reg)
+        ctx.settings.set("models", {"face": "fd", "mesh": "fm"})
+        assert ctx.custom_model_path("face").name == "fd.onnx" and ctx.custom_model_path("mesh").name == "fm.onnx"
+        det = ctx.vision._make("face")
+        mesh = ctx.vision._make("mesh")
+        assert isinstance(det, YuNetFaceDetector) and isinstance(mesh, face_mesh.FaceMesh)
+        import cv2
+
+        from vcstudio.core.frame import Frame
+        img = cv2.imread(str(Path(__file__).parent / "data" / "bus.jpg"))
+        a = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
+        faces, _ = det.detect(Frame(1, 1.0, 1.0, a.shape[1], a.shape[0], array=a, source="test"))
+        assert faces, "the custom (YuNet-layout) detector finds the faces on bus.jpg"
+        f = max(faces, key=lambda d: d.x1 - d.x0)
+        m = mesh.run(img, (f.x0, f.y0, f.x1, f.y1), f.points)
+        assert m is not None and m.points.shape == (478, 3)
+        ctx.settings.set("models", {"face": "", "mesh": ""})
+        assert ctx.custom_model_path("face") is None
+    finally:
+        ctx.shutdown()
 
 
 def test_app_hands_custom_landmarker_reaches_gestures_and_vision(paths):

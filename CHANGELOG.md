@@ -7,6 +7,17 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 
 ## [Unreleased]
 
+### Added
+- Studio → AI Models → "Use in the app" also for a face detector (YuNet layout: the cls / obj / bbox / kps outputs
+  OpenCV decodes) and a face mesh (MediaPipe face landmarker layout: 256x256 input, 478 x 3 points and a presence
+  value), both used by AI Vision and so by the privacy shield's face outlines.
+
+### Fixed
+- Recordings with noise suppression on: the sound lagged the picture by a varying 10-20 ms. Noise suppression now
+  delays the sound by a constant 1024 samples (21 ms at 48 kHz), which the recorder subtracts from the audio
+  timestamps; a test records a tone and a flash together and checks they stay within 10 ms.
+- The limiter no longer warns (overflow) on near-silent blocks.
+
 ## [0.6.0-preview3] — 2026-11-23
 
 Third 0.6.0 Professional preview (a pre-release, not offered by "Check for updates" in 0.5.x). Since

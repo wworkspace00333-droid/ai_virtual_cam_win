@@ -353,8 +353,8 @@ class YuNetFaceDetector:
     HEAD_INPUT = 160              # long side of an enlarged head crop
     SMALL_PERSON = 0.35           # a person shorter than this share of the frame height gets a head crop
 
-    def __init__(self, score_threshold: float = 0.6, nms_threshold: float = 0.3):
-        p = yunet_path()
+    def __init__(self, score_threshold: float = 0.6, nms_threshold: float = 0.3, path: Path | None = None):
+        p = Path(path) if path is not None else yunet_path()    # a checked custom model of the same layout
         if not p.exists():
             raise FileNotFoundError(f"face model missing: {p}")
         self._det = cv2.FaceDetectorYN.create(str(p), "", (320, 320), score_threshold, nms_threshold, 50)
