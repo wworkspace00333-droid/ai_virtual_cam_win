@@ -8,6 +8,22 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 ## [Unreleased]
 
 ### Added
+- AI Camera Motion (Studio → AI Camera Motion; hotkey Ctrl+Alt+M): the picture moves as if filmed by hand. The
+  movement is drift (fractal Perlin noise) plus hand micro-jitter, an amplitude envelope, a damped spring per axis
+  (inertia, natural damping) and roll coupled to the sideways movement; it has no period (64-bit hashed noise
+  lattice, non-integer octave ratio). Six modes (Natural Handheld, Micro Movement, Professional Camera, Documentary,
+  Product Showcase, Subtle Cinematic), eight presets plus the user's own, intensity / horizontal / vertical /
+  rotation / zoom breathing / speed / smoothness / randomness / frequency / stabilisation, random seed, auto
+  intensity (less motion while the picture already moves), object-aware pivot that keeps the largest detected object
+  away from the edges, a 6-second path preview and the live output. The whole picture moves rigidly (rotation and
+  uniform scale only, a fixed overscan hides the edges): objects are never deformed and are not moved separately
+  from the background. Switching on and off eases over 0.4 s. Measured on the 2-core development server: 5.9 ms per
+  1080p frame (linear), 11.5 ms per 720p frame (cubic). OpenCL is used when OpenCV reports a device (not available on
+  the development server, so that path is untested here).
+- Scene transitions (Scenes page, "Enter with"): each scene says how the output enters it — cut (default, as
+  before), fade, slide or dip to black, 0.05–5 s. The transition starts from the last output frame of the old scene,
+  held still, and blends into the live new scene; editing or renaming the active scene does not start one. Measured
+  on the 2-core development server: about 3.3–3.7 ms per 1080p frame while it runs, plus one 2.5 ms copy at the switch.
 - Virtual studio lights (Studio → Color Studio): key, fill and rim light painted onto the person, aimed at the
   largest face, with direction, colour temperature, softness and presets (Studio, Soft, Dramatic, Warm, Cool). With
   background segmentation on only the person is lit. 2-D relighting: it brightens and tints, it does not cast new

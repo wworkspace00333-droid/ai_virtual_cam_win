@@ -5,6 +5,8 @@ profile body under "scene":
   slot   1..9   the hotkey Ctrl+Alt+<slot> switches to it (without explicit slots, the n-th profile in list order)
   input  null | {"method": ..., "device_unique_id"/"device_name_hint"/"video_path"/"video_loop"/"screen_target": ...}
          an input of its own (a camera, a file, a screen): switching to the scene switches the input too
+  transition, transition_s   how the output enters this scene: cut / fade / slide / dip over 0.05..5 s
+         (vcstudio/core/scene_transition.py)
 
 Atomic scene state. The output thread used to read regions, replacement specs and the background from three services,
 each with its own lock, and a profile switch updated them one after another: a frame rendered in between could
@@ -46,6 +48,10 @@ class SceneState:
     lighting: Any = None                     # replacement.lighting.LightingConfig
     multicam: Any = None                     # core.multicam.MulticamConfig (extra sources and layout)
     color: Any = None                        # replacement.color.ColorConfig (grading, LUT)
+    entry: int = 0                           # counts real scene switches: a new value starts the scene transition
+    transition: str = "cut"                  # how the output enters this scene (vcstudio/core/scene_transition.py)
+    transition_s: float = 0.5
+    motion: Any = None                       # replacement.camera_motion.MotionConfig (handheld camera motion)
 
     @property
     def replacement_active(self) -> bool:
@@ -57,14 +63,16 @@ class SceneState:
         return c is not None and c.mode != "off" and (c.mode != "image" or self.bg_image is not None)
 
 
-def build_state(name: str, rois, replacement, background, body: dict | None = None) -> SceneState:
+def build_state(name: str, rois, replacement, background, body: dict | None = None, entry: int = 0) -> SceneState:
     """Snapshot of the services after they loaded a profile (called before publishing)."""
     from vcstudio.replacement.framing import FramingConfig
     from vcstudio.replacement.lighting import LightingConfig
     from vcstudio.core.multicam import MulticamConfig
+    from vcstudio.replacement.camera_motion import MotionConfig
     specs, assets = replacement.state()
     cfg, image = background.snapshot() if background is not None else (None, None)
     b = body or {}
+    kind, secs = scene_data(b)["transition"]
     try:
         from vcstudio.replacement.color import ColorConfig
         color = ColorConfig.from_profile(b)
@@ -75,15 +83,17 @@ def build_state(name: str, rois, replacement, background, body: dict | None = No
         color = None
     return SceneState(next(_versions), name or "", tuple(rois.rois()), specs, assets, cfg, image,
                       FramingConfig.from_profile(b), LightingConfig.from_profile(b), MulticamConfig.from_profile(b),
-                      color)
+                      color, entry=entry, transition=kind, transition_s=secs, motion=MotionConfig.from_profile(b))
 
 
 def scene_data(body: dict) -> dict:
+    from vcstudio.core.scene_transition import DEFAULT_S, clean
     d = body.get("scene") or {}
     slot = d.get("slot")
     inp = d.get("input")
     return {"slot": slot if slot in SLOTS else None,
-            "input": {k: v for k, v in inp.items() if k in INPUT_KEYS} if isinstance(inp, dict) and inp else None}
+            "input": {k: v for k, v in inp.items() if k in INPUT_KEYS} if isinstance(inp, dict) and inp else None,
+            "transition": clean(d.get("transition", "cut"), d.get("transition_s", DEFAULT_S))}
 
 
 class SceneManager:
@@ -121,6 +131,20 @@ class SceneManager:
             if n != name and slot is not None and self.slot_of(n) == slot:
                 self._update(n, lambda b: b.setdefault("scene", {}).__setitem__("slot", None))
         self._update(name, lambda b: b.setdefault("scene", {}).__setitem__("slot", slot))
+
+    # ---------------- transition into a scene
+    def transition_of(self, name: str) -> tuple[str, float]:
+        try:
+            return scene_data(self.ctx.profiles.get(name)["body"])["transition"]
+        except Exception:
+            return ("cut", 0.5)
+
+    def set_transition(self, name: str, kind: str, seconds: float) -> None:
+        from vcstudio.core.scene_transition import KINDS, clean
+        if kind not in KINDS:
+            raise ValueError(f"transition must be one of {KINDS}, got {kind!r}")
+        k, s = clean(kind, seconds)
+        self._update(name, lambda b: b.setdefault("scene", {}).update(transition=k, transition_s=round(s, 2)))
 
     # ---------------- per-scene input
     def input_of(self, name: str) -> dict | None:

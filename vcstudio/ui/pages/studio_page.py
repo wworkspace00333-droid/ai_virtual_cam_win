@@ -12,12 +12,13 @@ log = logging.getLogger(__name__)
 
 
 def _builders(ctx, window):
-    from vcstudio.ui.studio import (audio_tab, automation_tab, color_tab, models_tab, multicam_tab, privacy_tab,
-                                    remote_tab, vision_tab)
+    from vcstudio.ui.studio import (audio_tab, automation_tab, color_tab, models_tab, motion_tab, multicam_tab,
+                                    privacy_tab, remote_tab, vision_tab)
     return [("Multi-Camera", lambda: multicam_tab.MulticamTab(ctx)),
             ("AI Vision", lambda: vision_tab.VisionTab(ctx)),
             ("Privacy Shield", lambda: privacy_tab.PrivacyTab(ctx)),
             ("Color Studio", lambda: color_tab.ColorTab(ctx)),
+            ("AI Camera Motion", lambda: motion_tab.MotionTab(ctx)),
             ("Automation", lambda: automation_tab.AutomationTab(ctx)),
             ("Audio Studio", lambda: audio_tab.AudioTab(ctx)),
             ("Remote Control", lambda: remote_tab.RemoteTab(ctx)),
@@ -31,7 +32,7 @@ class StudioPage:
         self.ctx = ctx
         self.window = window
         self.widget, lay = page_scaffold("Studio", "Professional tools: extra cameras and layouts, AI vision, "
-                                                   "privacy shield, colour, automation, audio, remote control and "
+                                                   "privacy shield, colour, camera motion, automation, audio, remote control and "
                                                    "your own AI models. Everything runs on this PC.")
         self.tabs = QTabWidget()
         self.parts: list = []

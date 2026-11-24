@@ -173,6 +173,10 @@ class VideoPipeline:
         self.framer = AutoFramer()        # auto-framing: crop to the people, follow them smoothly
         self.light = AutoLight()          # automatic exposure / white balance of the camera picture
         self.relit = False                # virtual lights drew on the last frame (status)
+        from vcstudio.replacement.camera_motion import HandheldMotion
+        self.motion = HandheldMotion()    # AI handheld camera motion (vcstudio/replacement/camera_motion.py)
+        from vcstudio.core.scene_transition import SceneTransition
+        self.transition = SceneTransition()   # fade / slide / dip between scenes (vcstudio/core/scene_transition.py)
         from vcstudio.replacement.color import ColorGrader
         self.grader = ColorGrader()       # Colour Studio: grading and LUTs of the scene, once per frame
         self.plugins = None               # PluginManager (vcstudio/plugins): user effects on the finished output
@@ -441,6 +445,67 @@ class VideoPipeline:
             log.exception("eye contact correction failed; frame passed unchanged")
             return out
 
+    def _camera_motion(self, out: Frame, frame: Frame, mocfg, fcfg) -> Frame:
+        """Handheld camera motion of the finished (framed) picture; tracked boxes are mapped into the framed picture
+        for the object-aware pivot. Any failure: the picture unmoved."""
+        from vcstudio.core.pixelbuffer import pixel_buffer_for
+        mo = self.motion
+        try:
+            tracked = []
+            if mocfg.object_aware:
+                tracked = list(self.ai.tracked_at(frame.pts))
+                r = self.framer.rect if fcfg is not None and fcfg.enabled else None
+                if r is not None and tracked:
+                    from types import SimpleNamespace
+                    x, y, w, h = r
+                    sx, sy = frame.width / max(1e-6, w), frame.height / max(1e-6, h)
+                    tracked = [SimpleNamespace(label=o.label, x0=(o.x0 - x) * sx, y0=(o.y0 - y) * sy,
+                                               x1=(o.x1 - x) * sx, y1=(o.y1 - y) * sy) for o in tracked]
+            with out.bgra() as a:
+                res = mo.process(a, mocfg, frame.pts, tracked)
+                if res is a:
+                    return out
+            arr = Frame(out.seq, out.pts, out.arrival, out.width, out.height, array=res, source=out.source)
+            return Frame(out.seq, out.pts, out.arrival, out.width, out.height, pixel_buffer=pixel_buffer_for(arr),
+                         source=f"{out.source}+motion")
+        except Exception as e:
+            mo.stats.error = f"{type(e).__name__}: {e}"
+            with self._lock:
+                self._stats.last_error = f"camera motion: {type(e).__name__}: {e}"
+            log.exception("camera motion failed; frame passed unmoved")
+            return out
+
+    def _scene_transition(self, out: Frame, sc) -> Frame:
+        """Blend from the last output of the previous scene into this scene (vcstudio/core/scene_transition.py).
+        Passthrough or any failure: the new scene's picture as it is."""
+        from vcstudio.core.pixelbuffer import pixel_buffer_for
+        tr = self.transition
+        prev = self._last_out
+
+        def previous():
+            if prev is None:
+                return None
+            try:
+                with prev.bgra() as p:
+                    return p.copy()
+            except Exception:
+                return None
+        try:
+            kind = "cut" if self.passthrough else sc.transition
+            with out.bgra() as a:
+                res = tr.process(a, sc.entry, kind, sc.transition_s, time.monotonic(), previous)
+                if res is a:
+                    return out
+            arr = Frame(out.seq, out.pts, out.arrival, out.width, out.height, array=res, source=out.source)
+            return Frame(out.seq, out.pts, out.arrival, out.width, out.height, pixel_buffer=pixel_buffer_for(arr),
+                         source=f"{out.source}+transition")
+        except Exception as e:
+            tr.reset()
+            with self._lock:
+                self._stats.last_error = f"scene transition: {type(e).__name__}: {e}"
+            log.exception("scene transition failed; new scene shown directly")
+            return out
+
     def _compose_cameras(self, mc, out: Frame, frame: Frame, mcfg) -> Frame:
         """Multi-camera layout on the finished picture (vcstudio/core/multicam.py). Extra sources are only peeked:
         a missing or slow camera never delays this frame. Any failure leaves the frame as it was."""
@@ -590,6 +655,9 @@ class VideoPipeline:
                     out = self._frame_to_people(out, frame, fcfg)
                 elif self.framer.rect is not None:
                     self.framer.reset()
+                mocfg = sc.motion if sc is not None else None
+                if mocfg is not None and (mocfg.enabled or self.motion.active) and not self.passthrough:
+                    out = self._camera_motion(out, frame, mocfg, fcfg)   # handheld camera on the framed picture
                 mc = self.multicam
                 mcfg = sc.multicam if sc is not None else None
                 if mc is not None and mcfg is not None and mcfg.enabled and not self.passthrough:
@@ -597,6 +665,8 @@ class VideoPipeline:
                 pm = self.plugins
                 if pm is not None and pm.active and not self.passthrough:
                     out = self._run_plugins(pm, out, frame, sc)
+                if sc is not None and not self.transition.idle_for(sc.entry):
+                    out = self._scene_transition(out, sc)      # the whole finished picture blends between scenes
                 if sc is not None:
                     out.meta["scene"] = sc.version
                 self._last_out = out

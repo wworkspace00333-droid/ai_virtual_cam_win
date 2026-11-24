@@ -319,5 +319,43 @@ RU_060: dict[str, str] = {
     "Duration": "Длительность", "Playback": "Воспроизведение", "Easing": "Сглаживание", "Key time": "Время ключа",
     "Key opacity": "Прозрачность ключа", "{n} keys": "ключей: {n}",
     "at least 2 keys are needed": "нужно не меньше 2 ключей",
+    "Enter with": "Вход в сцену", "Fade": "Наплыв",
+    "Dip to black": "Через чёрный",
+    "AI Camera Motion": "AI-движение камеры", "Camera motion on": "Движение камеры включено",
+    "Natural Handheld": "Естественная съёмка с рук", "Micro Movement": "Микродвижения",
+    "Professional Camera": "Профессиональная камера", "Documentary": "Документальная",
+    "Product Showcase": "Показ товара", "Subtle Cinematic": "Мягкая кинематографичная",
+    "Almost Static": "Почти статично", "Smartphone Recording": "Съёмка на смартфон",
+    "Professional DSLR": "Профессиональная зеркалка", "Cinematic Handheld": "Кино с рук",
+    "Product Video": "Видео товара", "Macro Product Recording": "Макросъёмка товара",
+    "Documentary Camera": "Документальная камера", "Choose a preset…": "Выберите пресет…",
+    "Movement intensity": "Интенсивность движения", "Horizontal movement": "Движение по горизонтали",
+    "Vertical movement": "Движение по вертикали", "Zoom breathing": "«Дыхание» масштаба",
+    "Movement speed": "Скорость движения", "Smoothness": "Плавность", "Randomness": "Вариативность",
+    "Motion frequency": "Частота микродвижений", "Motion stabilization": "Стабилизация движения",
+    "Random seed": "Зерно случайности", "New character": "Другой характер", "Auto intensity": "Автоинтенсивность",
+    "Less artificial motion while the picture is already moving":
+        "Меньше искусственного движения, когда картинка и так движется",
+    "Follow the detected object": "Центр — найденный объект", "Quality: auto": "Качество: авто",
+    "Quality: fast": "Качество: быстро", "Quality: sharp": "Качество: чётко",
+    "My motion presets": "Мои пресеты движения", "Delete preset": "Удалить пресет",
+    "Motion preview": "Предпросмотр движения",
+    "Path of the next 6 seconds (4× enlarged)": "Траектория на 6 секунд вперёд (увеличено в 4 раза)",
+    "Live output": "Живой выход", "Start the camera to see the live picture": "Запустите камеру, чтобы видеть картинку",
+    "Camera motion is off.": "Движение камеры выключено.",
+    "Camera motion is on; start the camera to apply it.": "Движение камеры включено; запустите камеру.",
+    "{ms} ms per frame": "{ms} мс на кадр", "zoom {z}": "масштаб {z}",
+    "auto intensity {p} %": "автоинтенсивность {p} %", "centred on: {o}": "центр: {o}",
+    "no object detected: whole frame": "объект не найден: весь кадр",
+    "Camera motion on / off": "Движение камеры вкл / выкл",
+    "Makes the camera picture move as if it were filmed by hand: slow drift, a slight tremor of the hands, "
+    "inertia and a little roll — never a random shake. The whole picture moves as one, so objects keep "
+    "their shape and proportions; a small fixed zoom hides the edges. With object detection on, the "
+    "largest object is the centre of the movement and is kept away from the edges. Settings belong to "
+    "the active scene.":
+        "Картинка камеры движется, как при съёмке с рук: медленный дрейф, лёгкий тремор рук, инерция и небольшой "
+        "наклон — никакой случайной тряски. Кадр движется целиком, поэтому предметы сохраняют форму и пропорции; "
+        "небольшое постоянное увеличение скрывает края. При включённой детекции центром движения становится "
+        "самый крупный объект, и он не уходит к краям. Настройки принадлежат активной сцене.",
     **{f"Automation trigger {n}": f"Триггер автоматизации {n}" for n in range(1, 5)},
 }

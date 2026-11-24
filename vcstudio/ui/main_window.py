@@ -245,6 +245,10 @@ class MainWindow(QMainWindow):
             log.info("Camera: %s", self.ctx.multicam.next_camera())
         elif aid == "layout_next":
             log.info("Camera layout: %s", self.ctx.multicam.next_layout())
+        elif aid == "motion_toggle":
+            on = not bool((self.ctx.profiles.active()["body"].get("camera_motion") or {}).get("enabled", False))
+            self.ctx.update_active_profile(lambda b: b.setdefault("camera_motion", {}).__setitem__("enabled", on))
+            log.info("Camera motion %s", "on" if on else "off")
         elif aid.startswith("scene_"):
             try:
                 name = self.ctx.scenes.switch_slot(int(aid.split("_", 1)[1]))

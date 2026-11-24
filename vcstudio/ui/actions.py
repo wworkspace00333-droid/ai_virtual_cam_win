@@ -35,6 +35,7 @@ ACTION_SPECS: list[ActionSpec] = [
     ActionSpec("replay_save", "Save instant replay", 1),
     ActionSpec("camera_next", "Next camera", 1),                    # vcstudio/core/multicam.py
     ActionSpec("layout_next", "Next camera layout", 1),
+    ActionSpec("motion_toggle", "Camera motion on / off", 1),       # vcstudio/replacement/camera_motion.py
 ] + [ActionSpec(f"scene_{n}", f"Scene {n}", 1) for n in range(1, 10)]   # vcstudio/core/scene.py slots
 ACTION_SPECS += [ActionSpec(f"automation_{n}", f"Automation trigger {n}", 1) for n in range(1, 5)]  # core/automation
 CURRENT_STAGE = 10

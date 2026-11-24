@@ -59,6 +59,8 @@ hardware GPU or a physical webcam (the development server has neither).
 | Audio | de-esser (Linkwitz-Riley split, sibilant-only reduction); presets Clean / Voice / Podcast / Noisy room | ✅ | core/audio_fx.py, audio_tab | synthetic tones (7.5 kHz reduced > 5 dB, 300 Hz and bright voice unchanged, flat crossover) |
 | Audio | microphone monitoring (hear yourself), bounded queue | ✅ | core/audio_monitor.py (winmm waveOut) | real device opened here with silent blocks; fake device for the queue |
 | Audio | system virtual microphone | ⛔ | needs signed kernel driver | reports/VIRTUAL_AUDIO_DEVICE.md |
+| Video | AI handheld camera motion: 6 modes, 8 presets + own, object-aware pivot, auto intensity | ✅ | replacement/camera_motion.py, ui/studio/motion_tab.py | noise, no-loop autocorrelation, rigidity (SVD), no border, object margin, fades, real pipeline, GUI; OpenCL path untested (no device) |
+| Scenes | transitions between scenes: cut / fade / slide / dip, per scene | ✅ | core/scene_transition.py, ui/pages/scenes_page.py | pure blends, state machine, real pipeline red→green fade, GUI |
 | Remote | localhost HTTP API, WebSocket status, mobile page | ✅ | app/remote.py | real sockets |
 | Remote | DPAPI token, auth, rate limit, lockout, host / origin checks, LAN opt-in | ✅ | app/remote.py | real |
 | GUI | Studio page with 8 tabs, English + Russian | ✅ | ui/pages/studio_page.py, ui/studio/ | offscreen GUI tests |

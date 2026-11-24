@@ -179,7 +179,7 @@ class AppContext:
             # everything of the new scene is loaded (incl. the decoded background image): publish it in one go
             from vcstudio.core.scene import build_state
             self.pipeline.scene = build_state(self.profiles.active_name, self.rois, self.replacement, self.background,
-                                              body)
+                                              body, getattr(self, "_scene_entry", 0))
             if self.pipeline.running:
                 self.background.sync()
             if hasattr(self, "multicam"):
@@ -428,6 +428,8 @@ class AppContext:
         self.profiles.update_body(name, body)
 
     def _on_profile_event(self, event: str, name: str) -> None:
+        if event == "switched":       # a real scene switch (not an edit or a rename): the output transition runs
+            self._scene_entry = getattr(self, "_scene_entry", 0) + 1
         if event == "switched" and hasattr(self, "replacement"):
             self.replacement.compositor.reset_assignments()   # a new scene hands out its assets afresh
         if event in ("switched", "updated", "renamed") and hasattr(self, "ai"):

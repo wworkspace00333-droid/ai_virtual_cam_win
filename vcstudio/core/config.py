@@ -63,6 +63,7 @@ DEFAULT_HOTKEYS: dict[str, str] = {
     "replay_save": "Ctrl+Alt+F10",
     "camera_next": "Ctrl+Alt+F11",                                   # vcstudio/core/multicam.py
     "layout_next": "Ctrl+Alt+F12",
+    "motion_toggle": "Ctrl+Alt+M",                                   # vcstudio/replacement/camera_motion.py
     **{f"scene_{n}": f"Ctrl+Alt+{n}" for n in range(1, 10)},        # scene slots 1..9 (vcstudio/core/scene.py)
 }
 
@@ -151,6 +152,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
               "monitor": False},                 # hear the processed microphone (headphones!)
     # custom models in use (vcstudio/ai/model_check.py registry): role -> registered name ("" = built-in model)
     "models": {"background": "", "text": "", "pose": "", "hands": "", "face": "", "mesh": ""},
+    "motion_presets": {},        # AI Camera Motion presets: name -> settings (vcstudio/ui/studio/motion_tab.py)
     "color_presets": {},         # Colour Studio presets: name -> colour settings (vcstudio/ui/studio/color_tab.py)
     "vision": {"enabled": False, "fps": 6, "face": True, "pose": True, "hands": False, "overlay": True,
                "mesh": False, "gaze": False, "eye_contact": False, "eye_contact_strength": 0.7,

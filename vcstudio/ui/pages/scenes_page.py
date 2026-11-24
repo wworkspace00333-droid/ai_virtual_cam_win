@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QComboBox, QGridLayout, QHBoxLayout, QLabel, QPushButton, QWidget
+from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QGridLayout, QHBoxLayout, QLabel, QPushButton, QWidget
 
 from vcstudio.i18n import region_name, tr
 from vcstudio.platform import INPUT_METHODS
@@ -37,6 +37,15 @@ class SceneCard(Card):
             self.slot.addItem(f"Ctrl+Alt+{n}", n)
         row.addWidget(self.slot, 1)
         self.layout_.addLayout(row)
+        trow = QHBoxLayout()
+        trow.addWidget(QLabel(tr("Enter with")))
+        self.trans = QComboBox()
+        for k, lbl in (("cut", "Cut"), ("fade", "Fade"), ("slide", "Slide"), ("dip", "Dip to black")):
+            self.trans.addItem(tr(lbl), k)
+        self.trans_s = QDoubleSpinBox()
+        self.trans_s.setRange(0.05, 5.0); self.trans_s.setSingleStep(0.1); self.trans_s.setSuffix(tr(" s"))
+        trow.addWidget(self.trans, 1); trow.addWidget(self.trans_s)
+        self.layout_.addLayout(trow)
         self.input = QLabel(); self.input.setObjectName("muted"); self.input.setWordWrap(True)
         self.layout_.addWidget(self.input)
         irow = QHBoxLayout()
@@ -47,11 +56,20 @@ class SceneCard(Card):
         self.switch_btn = QPushButton(tr("Switch to this scene"))
         self.layout_.addWidget(self.switch_btn)
         self.slot.currentIndexChanged.connect(self._slot_changed)
+        self.trans.currentIndexChanged.connect(self._trans_changed)
+        self.trans_s.editingFinished.connect(self._trans_changed)
         self.use_input.clicked.connect(lambda: page.set_input(name, True))
         self.clear_input.clicked.connect(lambda: page.set_input(name, False))
         self.switch_btn.clicked.connect(lambda: page.switch(name))
 
-    def refresh(self, active: bool, explicit_slot, effective_slot, inp, thumb) -> None:
+    def refresh(self, active: bool, explicit_slot, effective_slot, inp, thumb, transition=("cut", 0.5)) -> None:
+        for w in (self.trans, self.trans_s):
+            w.blockSignals(True)
+        self.trans.setCurrentIndex(max(0, self.trans.findData(transition[0])))
+        self.trans_s.setValue(transition[1])
+        self.trans_s.setEnabled(transition[0] != "cut")
+        for w in (self.trans, self.trans_s):
+            w.blockSignals(False)
         self.slot.blockSignals(True)
         self.slot.setCurrentIndex(max(0, self.slot.findData(explicit_slot)))
         self.slot.setItemText(0, tr("auto") + (f" (Ctrl+Alt+{effective_slot})" if effective_slot and
@@ -69,6 +87,9 @@ class SceneCard(Card):
                                                                Qt.SmoothTransformation))
         else:
             self.thumb.setText(tr("No picture yet"))
+
+    def _trans_changed(self, *_):
+        self.page.set_transition(self.name, self.trans.currentData(), self.trans_s.value())
 
     def _slot_changed(self, *_):
         self.page.set_slot(self.name, self.slot.currentData())
@@ -126,7 +147,8 @@ class ScenesPage:
             self._rebuild(names)
         effective = {sm.name_for_slot(s): s for s in range(1, 10)}
         for n, card in self.cards.items():
-            card.refresh(n == prof.active_name, sm.slot_of(n), effective.get(n), sm.input_of(n), sm.thumbnail(n))
+            card.refresh(n == prof.active_name, sm.slot_of(n), effective.get(n), sm.input_of(n), sm.thumbnail(n),
+                         sm.transition_of(n))
         self.info.setText(tr("Active scene: {name}. Hotkeys work in other apps too when “System-wide” is on "
                              "(Settings).", name=region_name(prof.active_name or "—")))
 
@@ -142,6 +164,11 @@ class ScenesPage:
 
     def set_slot(self, name: str, slot) -> None:
         self.ctx.scenes.set_slot(name, slot)
+        self.refresh()
+
+    def set_transition(self, name: str, kind: str, seconds: float) -> None:
+        if self.ctx.scenes.transition_of(name) != (kind, round(seconds, 2)):
+            self.ctx.scenes.set_transition(name, kind, seconds)
         self.refresh()
 
     def set_input(self, name: str, use_current: bool) -> None:
