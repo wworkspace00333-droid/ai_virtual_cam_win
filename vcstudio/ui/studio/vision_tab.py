@@ -27,6 +27,33 @@ class VisionTab:
         self.mesh = QCheckBox(tr("Dense face mesh (478 points, up to 2 faces)"))
         for w in (self.enabled, self.face, self.mesh, self.pose, self.hands, self.overlay):
             c.layout_.addWidget(w)
+        g = Card("Gaze and eye contact")
+        g.layout_.addWidget(muted("Where the eyes look, from the irises of the face mesh and the head direction. Eye "
+                                  "contact correction moves the irises towards the camera inside the eye opening; it "
+                                  "stays off while blinking, with the head turned or when the person clearly looks "
+                                  "elsewhere. Needs the face mesh model."))
+        self.gaze = QCheckBox(tr("Gaze direction"))
+        self.eye_contact = QCheckBox(tr("Eye contact correction"))
+        g.layout_.addWidget(self.gaze)
+        g.layout_.addWidget(self.eye_contact)
+        rg = QHBoxLayout()
+        rg.addWidget(QLabel(tr("Correction strength, %")))
+        self.eye_strength = QSpinBox()
+        self.eye_strength.setRange(0, 100)
+        self.eye_strength.setSingleStep(5)
+        rg.addWidget(self.eye_strength)
+        self.calibrate_btn = QPushButton(tr("Calibrate: I am looking at the camera"))
+        self.calibrate_btn.clicked.connect(self.calibrate)
+        self.reset_cal_btn = QPushButton(tr("Reset calibration"))
+        self.reset_cal_btn.clicked.connect(self.reset_calibration)
+        rg.addWidget(self.calibrate_btn)
+        rg.addWidget(self.reset_cal_btn)
+        rg.addStretch(1)
+        g.layout_.addLayout(rg)
+        self.gaze_status = QLabel("—")
+        self.gaze_status.setObjectName("muted")
+        self.gaze_status.setWordWrap(True)
+        g.layout_.addWidget(self.gaze_status)
         r = QHBoxLayout()
         r.addWidget(QLabel(tr("Analyses per second")))
         self.fps = QSpinBox()
@@ -38,6 +65,7 @@ class VisionTab:
         self.status.setWordWrap(True)
         c.layout_.addWidget(self.status)
         lay.addWidget(c)
+        lay.addWidget(g)
         dl = Card("Models")
         self.models = QLabel("—")
         self.models.setWordWrap(True)
@@ -77,9 +105,11 @@ class VisionTab:
         self.worker = Worker()
         self.worker.done.connect(self._done)
         self.load()
-        for w in (self.enabled, self.face, self.mesh, self.pose, self.hands, self.overlay):
+        for w in (self.enabled, self.face, self.mesh, self.pose, self.hands, self.overlay, self.gaze,
+                  self.eye_contact):
             w.toggled.connect(self.save)
         self.fps.valueChanged.connect(self.save)
+        self.eye_strength.valueChanged.connect(self.save)
 
     def load(self) -> None:
         v = self.ctx.settings.get("vision")
@@ -90,6 +120,9 @@ class VisionTab:
         self.hands.setChecked(bool(v.get("hands", False)))
         self.overlay.setChecked(bool(v.get("overlay", True)))
         self.mesh.setChecked(bool(v.get("mesh", False)))
+        self.gaze.setChecked(bool(v.get("gaze", False)))
+        self.eye_contact.setChecked(bool(v.get("eye_contact", False)))
+        self.eye_strength.setValue(int(round(float(v.get("eye_contact_strength", 0.7)) * 100)))
         self.fps.setValue(int(v.get("fps", 6)))
         self._loading = False
         self._load_locked_only()
@@ -98,10 +131,26 @@ class VisionTab:
     def save(self, *_):
         if self._loading:
             return
-        self.ctx.settings.set("vision", {"enabled": self.enabled.isChecked(), "fps": self.fps.value(),
-                                         "face": self.face.isChecked(), "pose": self.pose.isChecked(),
-                                         "hands": self.hands.isChecked(), "overlay": self.overlay.isChecked(),
-                                         "mesh": self.mesh.isChecked()})
+        d = dict(self.ctx.settings.get("vision") or {})        # keeps the gaze calibration
+        d.update({"enabled": self.enabled.isChecked(), "fps": self.fps.value(),
+                  "face": self.face.isChecked(), "pose": self.pose.isChecked(),
+                  "hands": self.hands.isChecked(), "overlay": self.overlay.isChecked(),
+                  "mesh": self.mesh.isChecked(), "gaze": self.gaze.isChecked(),
+                  "eye_contact": self.eye_contact.isChecked(),
+                  "eye_contact_strength": round(self.eye_strength.value() / 100, 2)})
+        self.ctx.settings.set("vision", d)
+
+    def calibrate(self) -> dict | None:
+        cal = self.ctx.vision.calibrate()
+        self.gaze_status.setText(tr("Calibrated: yaw {y}°, pitch {p}°", y=cal["yaw"], p=cal["pitch"]) if cal else
+                                 tr("No confident gaze right now: turn gaze on and look at the camera."))
+        return cal
+
+    def reset_calibration(self) -> None:
+        d = dict(self.ctx.settings.get("vision") or {})
+        d["gaze_calibration"] = {}
+        self.ctx.settings.set("vision", d)
+        self.gaze_status.setText(tr("Calibration reset."))
 
     def _models_text(self) -> None:
         from vcstudio.ai import face_mesh, hands, pose
@@ -175,6 +224,18 @@ class VisionTab:
 
     def tick(self) -> None:
         self.refresh_people()
+        vs = self.ctx.vision
+        if vs.cfg.enabled and vs.cfg.needs_gaze:
+            r, _ = vs.slot.peek()
+            gz = [f.gaze for f in (r.faces if r is not None else []) if f.gaze is not None]
+            self.gaze_status.setText("\n".join(
+                tr("Face {n}: {dir} · off camera {y}° / {p}° · confidence {c} · stability {s}", n=i + 1,
+                   dir=tr(g.direction.replace("_", " ")), y=g.off_yaw, p=g.off_pitch, c=f"{g.confidence:.2f}",
+                   s=f"{g.stability:.2f}") for i, g in enumerate(gz)) or tr("No eyes found."))
+            if vs.cfg.eye_contact:
+                self.gaze_status.setText(self.gaze_status.text() + "\n" + tr(
+                    "Eye contact: {n} eyes corrected · frames skipped (mesh not fresh) {k}", n=vs.eyes_corrected,
+                    k=vs.eye_skipped))
         s = self.ctx.vision.stats
         parts = ", ".join(f"{k} {v} ms" for k, v in s.parts_ms.items())
         self.status.setText(tr("State: {st} · {fps} analyses/s · faces {f} · poses {p} · hands {h}",

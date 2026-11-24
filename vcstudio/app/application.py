@@ -131,6 +131,9 @@ class AppContext:
         self.pipeline.shield = self.shield
         self.shield.face_outlines = self._face_outlines
         self.shield.custom_model = lambda: self.custom_model_path("text")
+        self.shield.sources = self.multicam.sources.frames           # extra cameras are checked too
+        self.multicam.tile_filter = self.shield.apply_source
+        self.multicam.color_for = self._color_preset
         self.vision.custom_model = self.custom_model_path
         self.apply_custom_models()
         self.shield.apply_settings()
@@ -280,6 +283,18 @@ class AppContext:
             out.append((p * [sx, sy]).astype(np.int32))
         return out
 
+    def _color_preset(self, name: str):
+        """A Colour Studio preset as a ColorConfig (per-camera colour in Multi-Camera), or None."""
+        from vcstudio.replacement.color import ColorConfig
+        p = (self.settings.get("color_presets") or {}).get(name)
+        if not p:
+            return None
+        key = (name, tuple(sorted((k, str(v)) for k, v in p.items())))
+        cache = getattr(self, "_preset_cache", None)
+        if cache is None or cache[0] != key:
+            cache = self._preset_cache = (key, ColorConfig.from_profile({"color": {**p, "enabled": True}}))
+        return cache[1]
+
     def _automation_snapshot(self):
         from vcstudio.core.automation import Snapshot
         from vcstudio.core.frame import host_time_s
@@ -287,9 +302,16 @@ class AppContext:
         sources = {"main": self.capture.stats().state in ("running", "frozen") or not self.capture.running}
         for sid, st in self.multicam.sources.stats().items():
             sources[sid] = st.state in ("running", "frozen", "starting")
+        gaze = None
+        r = self.vision.result_for(host_time_s()) if self.vision.cfg.enabled and self.vision.cfg.needs_gaze else None
+        faces = [f for f in (r.faces if r is not None else []) if f.gaze is not None and f.gaze.confidence >= 0.5]
+        if faces:
+            gaze = max(faces, key=lambda f: f.box[2] - f.box[0]).gaze.at_camera
+        import datetime as _dt
+        now = _dt.datetime.now()
         return Snapshot(sum(o.label == "person" for o in objs), sum(o.label == "face" for o in objs),
                         frozenset(o.label for o in objs), self.recording.recording, self.profiles.active_name or "",
-                        sources)
+                        sources, gaze, now.hour * 60 + now.minute)
 
     def call_main(self, fn, timeout: float = 10.0):
         """Run fn on the UI thread when there is a window (profile listeners update widgets), else directly.

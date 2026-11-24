@@ -29,6 +29,7 @@ class ActiveRegion:
     state: str = "static"                    # static | tracked | coasting
     mask: object = None                      # uint8 box-local silhouette (object regions with segmentation)
     object_box: tuple[float, float, float, float] | None = None   # unpadded object box the mask belongs to
+    opacity: float = 1.0                     # keyframe animation (multiplies the replacement's own opacity)
 
     @property
     def is_object(self) -> bool:
@@ -42,15 +43,29 @@ def _pad_box(o, pad: float, width: int, height: int) -> tuple[float, float, floa
     return max(0.0, x0), max(0.0, y0), min(float(width), x1), min(float(height), y1)
 
 
-def resolve(rois: list[ROI], tracked: list, width: int, height: int) -> list[ActiveRegion]:
+def resolve(rois: list[ROI], tracked: list, width: int, height: int, t: float | None = None) -> list[ActiveRegion]:
+    """`t` (presentation time, seconds): drawn rectangles with a keyframe animation take their state at t."""
     regions: list[ActiveRegion] = []
     ordered = sorted((r for r in rois if r.enabled), key=lambda r: (r.priority, r.name))
     for roi in ordered:
         if roi.mode == "manual":
-            poly = roi.polygon_px(width, height)
+            opacity = 1.0
+            if t is not None and roi.kind == "rect" and (roi.animation or {}).get("enabled"):
+                from vcstudio.roi.animation import sample
+                s = sample(roi.animation, {"cx": roi.cx, "cy": roi.cy, "w": roi.w, "h": roi.h,
+                                           "rotation": roi.rotation, "opacity": 1.0}, t)
+                from vcstudio.roi.model import rect_corners
+                poly = rect_corners(s["cx"] * width, s["cy"] * height, s["w"] * width, s["h"] * height,
+                                    s["rotation"])
+                rot, opacity = s["rotation"], s["opacity"]
+                if opacity <= 0.001:
+                    continue
+            else:
+                poly = roi.polygon_px(width, height)
+                rot = roi.rotation if roi.kind == "rect" else 0.0
             regions.append(ActiveRegion(roi.id, roi.name, roi.mode, roi.priority, poly,
                                         (poly[:, 0].min(), poly[:, 1].min(), poly[:, 0].max(), poly[:, 1].max()),
-                                        roi.rotation if roi.kind == "rect" else 0.0))
+                                        rot, opacity=opacity))
             continue
         area = roi.polygon_px(width, height) if roi.mode == "hybrid" else None
         candidates = []
@@ -102,5 +117,5 @@ class RoiService:
         with self._lock:
             return list(self._rois)
 
-    def resolve(self, tracked: list, width: int, height: int) -> list[ActiveRegion]:
-        return resolve(self.rois(), tracked, width, height)
+    def resolve(self, tracked: list, width: int, height: int, t: float | None = None) -> list[ActiveRegion]:
+        return resolve(self.rois(), tracked, width, height, t)

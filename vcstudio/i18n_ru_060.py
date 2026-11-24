@@ -250,5 +250,74 @@ RU_060: dict[str, str] = {
         "Определение говорящего: {state} · говорит: {who} · движение губ: {act}",
     "Show who is speaking (mouth movement; needs the face models)":
         "Показывать говорящего (по движению губ; нужны модели лица)",
+    "Gaze and eye contact": "Взгляд и зрительный контакт",
+    "Where the eyes look, from the irises of the face mesh and the head direction. Eye contact correction moves the "
+    "irises towards the camera inside the eye opening; it stays off while blinking, with the head turned or when the "
+    "person clearly looks elsewhere. Needs the face mesh model.":
+        "Куда смотрят глаза — по радужкам сетки лица и направлению головы. Коррекция зрительного контакта сдвигает "
+        "радужки к камере внутри разреза глаза; она не работает при моргании, повёрнутой голове или когда человек "
+        "явно смотрит в сторону. Нужна модель сетки лица.",
+    "Gaze direction": "Направление взгляда",
+    "Eye contact correction": "Коррекция зрительного контакта",
+    "Correction strength, %": "Сила коррекции, %",
+    "Calibrate: I am looking at the camera": "Калибровка: я смотрю в камеру",
+    "Reset calibration": "Сбросить калибровку",
+    "Calibrated: yaw {y}°, pitch {p}°": "Откалибровано: по горизонтали {y}°, по вертикали {p}°",
+    "No confident gaze right now: turn gaze on and look at the camera.":
+        "Сейчас взгляд не определён уверенно: включите взгляд и посмотрите в камеру.",
+    "Calibration reset.": "Калибровка сброшена.",
+    "Face {n}: {dir} · off camera {y}° / {p}° · confidence {c} · stability {s}":
+        "Лицо {n}: {dir} · отклонение от камеры {y}° / {p}° · уверенность {c} · стабильность {s}",
+    "No eyes found.": "Глаза не найдены.",
+    "Eye contact: {n} eyes corrected · frames skipped (mesh not fresh) {k}":
+        "Зрительный контакт: исправлено глаз {n} · пропущено кадров (сетка устарела) {k}",
+    "at camera": "в камеру", "left": "влево", "right": "вправо", "up": "вверх", "down": "вниз",
+    "unknown": "неизвестно",
+    "Also check the extra cameras (Multi-Camera); strict: an unchecked camera is hidden whole":
+        "Проверять и дополнительные камеры (Multi-Camera); в строгом режиме непроверенная камера скрывается целиком",
+    "Extra cameras: {v}": "Доп. камеры: {v}",
+    "hidden whole (not checked yet)": "скрыта целиком (ещё не проверена)",
+    "{n} hidden": "скрыто {n}",
+    "De-esser": "Де-эссер", "De-esser threshold, dBFS": "Порог де-эссера, dBFS", "De-esser from, Hz": "Де-эссер от, Гц",
+    "Preset": "Пресет", "Custom": "Свой", "Clean (limiter only)": "Чистый (только лимитер)", "Voice": "Голос",
+    "Podcast": "Подкаст", "Noisy room": "Шумная комната",
+    "Looks at the camera (AI Vision gaze)": "Смотрит в камеру (взгляд, AI Vision)",
+    "Looks away from the camera (AI Vision gaze)": "Отвёл взгляд от камеры (взгляд, AI Vision)",
+    "Colour screen (chroma key: green / blue screen)": "Цветной фон (хромакей: зелёный / синий экран)",
+    "Green screen": "Зелёный экран", "Blue screen": "Синий экран", "Pick a colour…": "Выбрать цвет…",
+    "Screen colour": "Цвет фона", "Similarity": "Схожесть", "Edge softness": "Мягкость края",
+    "Spill suppression": "Подавление засветки", "Feather, px": "Растушёвка, пикс",
+    "Transition": "Переход", "Transition time, s": "Время перехода, с", "Cut": "Склейка",
+    "Cross-fade": "Наплыв", "Slide": "Сдвиг",
+    "And if": "И если", "Condition": "Условие", "Condition: {e}": "Условие: {e}",
+    "Selected camera: colour preset": "Выбранная камера: цветовой пресет", "Privacy": "Приватность",
+    "Privacy shield checks it": "Проверяет Privacy Shield", "Always hidden whole": "Всегда скрыта целиком",
+    "Not checked": "Не проверяется",
+    "Virtual studio lights": "Виртуальный студийный свет",
+    "Key, fill and rim light painted onto the person, aimed at the largest face (needs face detection or AI Vision). "
+    "With background segmentation on, only the person is lit, never the background. 2-D relighting: it brightens "
+    "and tints, it does not cast new shadows.":
+        "Рисующий, заполняющий и контровой свет на человеке, направленный на самое крупное лицо (нужно определение "
+        "лиц или AI Vision). При включённой сегментации фона освещается только человек, не фон. Это 2D-перерисовка "
+        "света: она осветляет и тонирует, но не создаёт новых теней.",
+    "Use virtual lights in this scene": "Виртуальный свет в этой сцене", "Key light": "Рисующий свет",
+    "Key direction, ° (− left, + right)": "Направление рисующего, ° (− слева, + справа)",
+    "Key colour, K": "Цвет рисующего, K", "Fill light": "Заполняющий свет", "Rim light": "Контровой свет",
+    "Rim colour, K": "Цвет контрового, K", "Softness": "Мягкость", "Soft": "Мягкий",
+    "Dramatic": "Драматичный", "Warm": "Тёплый", "Cool": "Холодный", "Lights: on the face": "Свет: на лице",
+    "Lights: waiting for a face (turn on face detection or AI Vision)":
+        "Свет: ждёт лицо (включите определение лиц или AI Vision)",
+    " s": " с", "Silhouette key frames every": "Ключевые кадры силуэтов каждые",
+    "SAM 2.1 silhouettes are made this often; in between they follow the motion (optical flow). 0 = SAM on every "
+    "detection (slow without a GPU).": "Силуэты SAM 2.1 строятся с этим интервалом, между ними они следуют за "
+    "движением (оптический поток). 0 — SAM на каждой детекции (медленно без GPU).",
+    "Animation (drawn rectangles)": "Анимация (нарисованные прямоугольники)", "Animate this region": "Анимировать область",
+    "Keyframes below": "Ключевые кадры ниже", "Pulse (opacity)": "Пульсация (прозрачность)",
+    "Slide in from the left": "Въезд слева", "Zoom": "Масштаб", "Spin": "Вращение", "Sway": "Покачивание",
+    "Repeat": "Повтор", "Back and forth": "Туда и обратно", "Smooth": "Плавно", "Linear": "Линейно",
+    "Add key: current geometry at this time": "Ключ: текущая геометрия в это время", "Clear keys": "Очистить ключи",
+    "Duration": "Длительность", "Playback": "Воспроизведение", "Easing": "Сглаживание", "Key time": "Время ключа",
+    "Key opacity": "Прозрачность ключа", "{n} keys": "ключей: {n}",
+    "at least 2 keys are needed": "нужно не меньше 2 ключей",
     **{f"Automation trigger {n}": f"Триггер автоматизации {n}" for n in range(1, 5)},
 }

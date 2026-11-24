@@ -82,6 +82,9 @@ class ColorTab:
         self.status.setObjectName("muted")
         self.status.setWordWrap(True)
         lay.addWidget(self.status)
+        from vcstudio.ui.studio.lights_card import LightsCard
+        self.lights = LightsCard(ctx)
+        lay.addWidget(self.lights.card)
         lay.addStretch(1)
         self._loading = False
         self.load()
@@ -189,6 +192,7 @@ class ColorTab:
         self.load()
 
     def tick(self) -> None:
+        self.lights.tick()
         g = self.ctx.pipeline.grader
         self.status.setText(tr("Grading: {ms} ms per frame", ms=f"{g.ms:.1f}")
                             + (" · " + tr("reduced: sharpness, glow, grain and skin protection skipped to keep the "

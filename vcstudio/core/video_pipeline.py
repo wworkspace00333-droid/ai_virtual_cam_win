@@ -172,6 +172,7 @@ class VideoPipeline:
         from vcstudio.replacement.lighting import AutoLight
         self.framer = AutoFramer()        # auto-framing: crop to the people, follow them smoothly
         self.light = AutoLight()          # automatic exposure / white balance of the camera picture
+        self.relit = False                # virtual lights drew on the last frame (status)
         from vcstudio.replacement.color import ColorGrader
         self.grader = ColorGrader()       # Colour Studio: grading and LUTs of the scene, once per frame
         self.plugins = None               # PluginManager (vcstudio/plugins): user effects on the finished output
@@ -295,6 +296,37 @@ class VideoPipeline:
             log.exception("lighting failed; frame passed unchanged")
             return frame
 
+    def _relight(self, work: Frame, lcfg, frame: Frame) -> Frame:
+        """Virtual studio lights (vcstudio/replacement/virtual_light.py) aimed at the largest face, on the person
+        mask when background segmentation runs; no face or any failure: the picture as it was."""
+        from vcstudio.replacement.virtual_light import relight
+        try:
+            faces = [(o.x0, o.y0, o.x1, o.y1) for o in self.ai.tracked_at(frame.pts) if o.label == "face"]
+            vs = self.vision
+            if not faces and vs is not None and vs.cfg.enabled:
+                r = vs.result_for(frame.pts)
+                faces = [f.box for f in (r.faces if r is not None else [])]
+            if not faces:
+                self.relit = False
+                return work
+            face = max(faces, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
+            person = None
+            bg = self.background
+            if bg is not None and bg.seg.running:
+                person = bg.seg.masks.peek()[0]
+            with work.bgra() as a:
+                out = relight(a, face, lcfg.rig(), person)
+                if out is a:
+                    return work
+            self.relit = True
+            return Frame(work.seq, work.pts, work.arrival, work.width, work.height, array=out,
+                         source=f"{work.source}+lights")
+        except Exception as e:
+            with self._lock:
+                self._stats.last_error = f"virtual lights: {type(e).__name__}: {e}"
+            log.exception("virtual lighting failed; frame passed unchanged")
+            return work
+
     def _grade(self, frame: Frame, ccfg) -> Frame:
         """Colour Studio (vcstudio/replacement/color.py); any failure leaves the picture as it was."""
         try:
@@ -379,6 +411,34 @@ class VideoPipeline:
             with self._lock:
                 self._stats.last_error = f"vision overlay: {type(e).__name__}: {e}"
             log.exception("vision overlay failed; frame passed unchanged")
+            return out
+
+    def _eye_contact(self, vs, out: Frame, frame: Frame) -> Frame:
+        """Eye contact correction (vcstudio/replacement/eye_contact.py) from the newest face mesh, only when it is
+        fresh (MAX_AGE_S); any failure or doubt leaves the picture as it was."""
+        from vcstudio.core.pixelbuffer import pixel_buffer_for
+        from vcstudio.replacement import eye_contact as ec
+        try:
+            r, _ = vs.slot.peek()
+            if r is None or abs(frame.pts - r.pts) > ec.MAX_AGE_S or (r.width, r.height) != (out.width, out.height):
+                vs.eye_skipped = vs.eye_skipped + 1
+                return out
+            faces = [f for f in r.faces if f.mesh is not None and f.gaze is not None]
+            if not faces:
+                return out
+            with out.bgra() as a:
+                arr = np.array(a, copy=True)
+            n = sum(ec.correct(arr, f.mesh.points, f.gaze, vs.cfg.eye_strength) for f in faces)
+            vs.eyes_corrected = n
+            if not n:
+                return out
+            f = Frame(out.seq, out.pts, out.arrival, out.width, out.height, array=arr, source=out.source)
+            return Frame(out.seq, out.pts, out.arrival, out.width, out.height, pixel_buffer=pixel_buffer_for(f),
+                         source=f"{out.source}+eyes")
+        except Exception as e:
+            with self._lock:
+                self._stats.last_error = f"eye contact: {type(e).__name__}: {e}"
+            log.exception("eye contact correction failed; frame passed unchanged")
             return out
 
     def _compose_cameras(self, mc, out: Frame, frame: Frame, mcfg) -> Frame:
@@ -468,6 +528,8 @@ class VideoPipeline:
                     work = self._light(frame, lcfg)          # correct the camera picture before anything is drawn
                 elif self.light._t is not None:
                     self.light.reset()
+                if lcfg is not None and lcfg.vl_enabled and not self.passthrough:
+                    work = self._relight(work, lcfg, frame)   # virtual key / fill / rim on the person
                 ccfg = sc.color if sc is not None else None
                 if ccfg is not None and ccfg.active and not self.passthrough:
                     work = self._grade(work, ccfg)           # always from this frame's own pixels: never twice
@@ -475,6 +537,7 @@ class VideoPipeline:
                 snap = (sc.bg_cfg, sc.bg_image) if sc is not None and sc.bg_cfg is not None else None
                 if bg is not None and not self.passthrough and self.replacement_enabled:
                     try:
+                        work = bg.despill(work, snap)            # chroma key only: no green rim on the person
                         if bg.use_gpu_layers(self.replacement.compositor.active.name):
                             pre_ops = bg.ops(work, snap)
                         else:
@@ -492,9 +555,9 @@ class VideoPipeline:
                             tracked = self.ai.tracked_at(frame.pts)
                             if sc is not None:
                                 from vcstudio.roi.resolver import resolve
-                                regions = resolve(list(sc.rois), tracked, frame.width, frame.height)
+                                regions = resolve(list(sc.rois), tracked, frame.width, frame.height, frame.pts)
                             else:
-                                regions = self.rois.resolve(tracked, frame.width, frame.height)
+                                regions = self.rois.resolve(tracked, frame.width, frame.height, frame.pts)
                         regions_n = len(regions)
                         pb = self.replacement.render_pb(work, regions, frame.pts, pre_ops,
                                                         state=(sc.specs, sc.assets) if sc is not None else None)
@@ -513,6 +576,9 @@ class VideoPipeline:
                 out = rendered if rendered is not None else Frame(
                     frame.seq, frame.pts, frame.arrival, frame.width, frame.height,
                     pixel_buffer=pixel_buffer_for(work), source="passthrough" if work is frame else "background")
+                vs = self.vision
+                if vs is not None and vs.cfg.enabled and vs.cfg.eye_contact and not self.passthrough:
+                    out = self._eye_contact(vs, out, frame)           # before the shield: hidden faces stay hidden
                 sh = self.shield
                 if sh is not None and sh.cfg.enabled and (not self.passthrough or sh.cfg.strict):
                     out = self._shield(sh, out)

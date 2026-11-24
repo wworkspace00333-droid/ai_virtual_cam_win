@@ -246,3 +246,86 @@ def test_app_face_outlines_from_vision(paths):
         assert ctx._face_outlines(640, 360) == []          # stale result: nothing
     finally:
         ctx.shutdown()
+
+
+def _src_frame(seq, w=320, h=180):
+    f = frame(w, h)
+    f.seq = seq
+    return f
+
+
+def test_extra_cameras_are_checked_in_turn_with_their_own_boxes():
+    s = shield()
+    frames = {"cam1": _src_frame(1), "cam2": _src_frame(1), "cam3": None}
+    s.sources = lambda: frames
+    det = FakeDet([(10, 10, 60, 30)])
+    assert s.process_next_extra(det, now=10.0) == "cam1"
+    assert s.process_next_extra(FakeDet([]), now=10.5) == "cam2"           # cam3 has no picture yet: skipped
+    assert s.process_next_extra(det, now=11.0) is None                     # cam1 again, same picture: not re-run
+    assert s._extra["cam1"].last_run == 11.0 and s._extra["cam1"].runs == 1
+    img = frame().array
+    out1 = s.apply_source("cam1", img, now=11.2)
+    assert out1 is not img and not np.array_equal(out1[15:25, 20:50], img[15:25, 20:50])
+    assert np.array_equal(out1[100:, :], img[100:, :])                    # only its box
+    assert s.apply_source("cam2", img, now=11.2) is img                    # nothing found there
+    assert s.boxes_for(320, 180, now=11.2) == []                           # the main camera is not affected
+    del frames["cam1"]
+    s.process_next_extra(det, now=12.0)
+    assert "cam1" not in s._extra                                          # a removed source forgets its boxes
+
+
+def test_strict_hides_an_unchecked_extra_camera_whole():
+    s = shield(strict=True)
+    s.sources = lambda: {"cam1": _src_frame(1)}
+    img = frame().array
+    whole = s.apply_source("cam1", img, now=5.0)                           # never checked: hidden whole
+    assert s.stats.extra["cam1"]["whole"]
+    assert np.abs(whole[..., 0].astype(int) - img[..., 0]).mean() > 1      # every column changed (pixelated)
+    s.process_next_extra(FakeDet([]), now=5.0)
+    assert s.apply_source("cam1", img, now=5.5) is img                     # checked, nothing found: shown
+    assert s.apply_source("cam1", img, now=5.0 + s.extra_fresh_s() + 0.1) is not img   # check too old again
+    off = shield(strict=True, extras=False)
+    assert off.apply_source("cam1", img, now=5.0) is img                   # switched off: tiles untouched
+    loose = shield()
+    assert loose.apply_source("cam1", img, now=5.0) is img                 # not strict: unchecked tile shown
+
+
+def test_multicam_tiles_go_through_the_shield_and_fail_closed():
+    from vcstudio.core import multicam as mc
+    tile = np.full((90, 160, 4), 200, np.uint8)
+    calls = []
+
+    class Src:
+        def latest(self, sid, now, cfg):
+            return tile
+
+    svc = mc.MulticamService(Src())
+    cfg = mc.MulticamConfig(enabled=True, layout="side_by_side", sources=({"id": "cam1", "enabled": True},))
+
+    def filt(sid, a, mode="shield"):
+        calls.append(sid)
+        b = a.copy()
+        b[..., :3] = 0
+        return b
+    svc.tile_filter = filt
+    out = svc.process(np.full((180, 320, 4), 50, np.uint8), cfg, people=1, now=1.0)
+    assert calls == ["cam1"] and (out[:, 200:, :3] < 60).all()             # the filtered (black) tile is drawn
+
+    def broken(sid, a, mode="shield"):
+        raise RuntimeError("shield down")
+    svc.tile_filter = broken
+    out = svc.process(np.full((180, 320, 4), 50, np.uint8), cfg, people=1, now=2.0)
+    assert not (out[:, 160:, :3] == 200).all(axis=-1).any()               # never the unfiltered picture
+    assert svc.stats.stale_tiles == 1
+
+
+def test_per_camera_privacy_modes():
+    s = shield()
+    img = frame().array
+    hidden = s.apply_source("cam1", img, "hide", now=1.0)
+    assert hidden is not img and s.stats.extra["cam1"]["whole"]
+    off = ps.PrivacyShield(None, None)                                    # shield switched off: "hide" still hides
+    assert off.apply_source("cam1", img, "hide", now=1.0) is not img
+    strict = shield(strict=True)
+    assert strict.apply_source("cam2", img, "off", now=1.0) is not img     # strict ignores "not checked"
+    assert shield().apply_source("cam2", img, "off", now=1.0) is img

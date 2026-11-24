@@ -293,10 +293,13 @@ def local_mask(full: np.ndarray, box: tuple[float, float, float, float], max_sid
 class BoxMaskDetector:
     """Silhouettes without a segmentation model: the COCO detector's boxes, and a SAM 2.1 mask per box (object
     replacement needs masks; YOLO-seg is AGPL and not shipped). Masks are made only for `mask_classes` (empty = any)
-    and for at most `max_masks` objects per frame, most confident first; the rest keep their boxes (no mask)."""
+    and for at most `max_masks` objects per frame, most confident first; the rest keep their boxes (no mask).
+    0.7.0: SAM runs on key frames only (every `keyframe_s`, for new or reappearing objects, and when propagation
+    loses confidence); in between each mask is carried by optical flow (vcstudio/ai/mask_propagation.py), so the
+    detector keeps its own rate and silhouettes follow the object's motion. keyframe_s = 0: SAM on every frame."""
 
     def __init__(self, detector, compute_units: str = "all", mask_classes: list[str] | None = None,
-                 max_masks: int = 4, segmenter=None):
+                 max_masks: int = 4, segmenter=None, keyframe_s: float = 1.0):
         self.det = detector
         if segmenter is None:
             check_memory("sam")
@@ -307,22 +310,50 @@ class BoxMaskDetector:
         self.loaded = getattr(detector, "loaded", None)
         self.backend = getattr(detector, "backend", "")
         self.masked = 0                                   # masks made in the last frame (stats / tests)
+        self.carried = 0                                  # masks carried by optical flow in the last frame
+        from vcstudio.ai.mask_propagation import MaskPropagator
+        self.propagator = MaskPropagator(keyframe_s) if keyframe_s > 0 else None
+
+    def set_keyframe(self, keyframe_s: float) -> None:
+        """Change the key-frame interval (0: SAM on every frame) without reloading SAM."""
+        from vcstudio.ai.mask_propagation import MaskPropagator
+        if keyframe_s <= 0:
+            self.propagator = None
+        elif self.propagator is None:
+            self.propagator = MaskPropagator(keyframe_s)
+        else:
+            self.propagator.keyframe_s = keyframe_s
 
     def detect(self, frame, conf: float = 0.25, iou: float = 0.5) -> tuple[list[Detection], float]:
         t0 = time.perf_counter()
         dets, _ = self.det.detect(frame, conf, iou)
         want = [i for i, d in enumerate(dets) if not self.mask_classes or d.label in self.mask_classes]
         want = sorted(want, key=lambda i: -dets[i].confidence)[: self.max_masks]
-        self.masked = 0
-        if want:
-            with frame.bgra() as img:
-                self.sam.set_image(img)
+        self.masked = self.carried = 0
+        if not want:
+            return dets, (time.perf_counter() - t0) * 1000
+        prop = self.propagator
+        with frame.bgra() as img:
+            gray = cv2.cvtColor(img, cv2.COLOR_BGRA2GRAY) if prop is not None else None
+            key = prop is None or prop.due([dets[i] for i in want], frame.pts)
+            image_set = False
             for i in want:
                 d = dets[i]
+                m = None if key or prop is None else prop.carry(gray, d, frame.pts)
+                if m is not None:
+                    dets[i] = Detection(d.label, d.confidence, d.x0, d.y0, d.x1, d.y1, d.class_id,
+                                        f"{d.source}+flow", mask=m)
+                    self.carried += 1
+                    continue
+                if not image_set:
+                    self.sam.set_image(img)
+                    image_set = True
                 full, _q = self.sam.mask_from_box((d.x0, d.y0, d.x1, d.y1))
                 dets[i] = Detection(d.label, d.confidence, d.x0, d.y0, d.x1, d.y1, d.class_id, f"{d.source}+sam",
                                     mask=local_mask(full, (d.x0, d.y0, d.x1, d.y1)))
                 self.masked += 1
+        if prop is not None:
+            prop.remember(gray, [dets[i] for i in want], frame.pts, key=key)
         return dets, (time.perf_counter() - t0) * 1000
 
 

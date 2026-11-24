@@ -596,7 +596,8 @@ class Compositor:
                 mask, mkey = self._static_mask(region, box, feather)
             params = {"blur": (spec.blur_sigma, 0, 0, 0), "pixelate": (float(spec.pixel_size), 0, 0, 0),
                       "color": (spec.brightness, spec.contrast, spec.saturation, 0)}[spec.effect]
-            return DrawOp(region.roi_id, "effect", box, spec.opacity, mask=mask, mask_key=mkey, mask_rect=mrect,
+            return DrawOp(region.roi_id, "effect", box, spec.opacity * getattr(region, "opacity", 1.0),
+                          mask=mask, mask_key=mkey, mask_rect=mrect,
                           effect=spec.effect, params=params)
 
         asset = assets.get(self._pick_asset(region, spec, assets))
@@ -641,7 +642,8 @@ class Compositor:
                     mask, mkey, mrect = got
             else:
                 mask, mkey = self._static_mask(region, box, feather)
-        return DrawOp(region.roi_id, "composite", box, spec.opacity, mask=mask, mask_key=mkey, mask_rect=mrect,
+        return DrawOp(region.roi_id, "composite", box, spec.opacity * getattr(region, "opacity", 1.0),
+                      mask=mask, mask_key=mkey, mask_rect=mrect,
                       src=src, src_key=skey, inv=inv, bg=bg)
 
     # ------------------------------------------------------------------ render

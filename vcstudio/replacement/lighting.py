@@ -27,15 +27,38 @@ class LightingConfig:
     target: float = 0.48           # metered brightness to aim for (0..1)
     white_balance: bool = True
     tau: float = 0.8
+    vl_enabled: bool = False       # virtual studio lights (vcstudio/replacement/virtual_light.py)
+    vl_key: float = 0.45
+    vl_key_angle: float = -40.0
+    vl_key_temp: float = 5600.0
+    vl_fill: float = 0.25
+    vl_rim: float = 0.35
+    vl_rim_temp: float = 6500.0
+    vl_softness: float = 0.6
+
+    def rig(self):
+        from vcstudio.replacement.virtual_light import LightRig
+        return LightRig(self.vl_key, self.vl_key_angle, self.vl_key_temp, self.vl_fill, self.vl_rim,
+                        self.vl_rim_temp, self.vl_softness)
 
     @classmethod
     def from_profile(cls, body: dict) -> "LightingConfig":
         lc = body.get("lighting") or {}
+
+        def num(k, lo, hi, d):
+            try:
+                return float(min(hi, max(lo, float(lc.get(k, d)))))
+            except (TypeError, ValueError):
+                return d
         return cls(enabled=bool(lc.get("enabled", False)),
                    strength=float(min(1.0, max(0.0, lc.get("strength", 0.8)))),
                    target=float(min(0.7, max(0.3, lc.get("target", 0.48)))),
                    white_balance=bool(lc.get("white_balance", True)),
-                   tau=float(min(5.0, max(0.05, lc.get("tau", 0.8)))))
+                   tau=float(min(5.0, max(0.05, lc.get("tau", 0.8)))),
+                   vl_enabled=bool(lc.get("vl_enabled", False)), vl_key=num("vl_key", 0, 1, 0.45),
+                   vl_key_angle=num("vl_key_angle", -90, 90, -40.0), vl_key_temp=num("vl_key_temp", 2700, 7500, 5600.0),
+                   vl_fill=num("vl_fill", 0, 1, 0.25), vl_rim=num("vl_rim", 0, 1, 0.35),
+                   vl_rim_temp=num("vl_rim_temp", 2700, 7500, 6500.0), vl_softness=num("vl_softness", 0, 1, 0.6))
 
 
 def luma(bgr: np.ndarray) -> np.ndarray:

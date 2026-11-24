@@ -4,6 +4,17 @@ Model: PP-HumanSeg (PaddlePaddle, Apache-2.0), the OpenCV Zoo ONNX port human_se
 input 1x3x192x192 RGB, (x / 255 - 0.5) / 0.5; output 1x2x192x192 class scores (0 background, 1 person).
 The person probability is upscaled to the frame and smoothed over time, so the edge does not flicker.
 
+A custom model (AI Models -> Use in the app, role "background") may have another layout; seg_layout() reads it from
+the output shape of a real run:
+  two-class      (1, 2, H, W) or (1, H, W, 2): background / person scores (PP-HumanSeg and alike), softmax
+  matte          (1, 1, H, W), (1, H, W, 1) or (1, H, W): one person map (alpha matting, selfie segmentation);
+                 values outside 0..1 are taken as logits (sigmoid)
+  semantic       (1, C, H, W) or (1, H, W, C) with the class list told by C: 21 Pascal VOC (person 15),
+                 19 Cityscapes (person 11), 150 ADE20K (person 12); softmax, the person class
+Input: N x C x H x W float is scaled to (x / 255 - 0.5) / 0.5, N x H x W x C float to x / 255 (the conventions of
+PaddleSeg / MODNet and of TensorFlow / MediaPipe exports), uint8 inputs get the pixels as they are; a dynamic size is
+run at DYNAMIC_SIDE. A model trained with other scaling still runs, with a less exact mask.
+
 BackgroundSegmenter runs on its own thread at a limited rate and keeps only the newest mask (LatestSlot): the camera
 output never waits for it; the pipeline blends the newest mask into every frame.
 """
@@ -12,6 +23,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
@@ -23,6 +35,60 @@ log = logging.getLogger(__name__)
 
 MODEL_FILE = "human_segmentation_pphumanseg_2023mar.onnx"
 SIZE = 192
+DYNAMIC_SIDE = 320                 # the size model_check runs dynamic models at, so the check matches the use
+PERSON_CLASS = {21: (15, "Pascal VOC"), 19: (11, "Cityscapes"), 150: (12, "ADE20K")}
+
+
+@dataclass(frozen=True)
+class SegLayout:
+    kind: str                      # "two_class" | "matte" | "semantic"
+    channels_last: bool            # the map is (1, H, W, C)
+    channel: int                   # channel with the person score (0 for a matte)
+    name: str                      # class list of a semantic map
+
+    def describe(self) -> str:
+        return {"two_class": "2-class map", "matte": "1-channel person map",
+                "semantic": f"{self.name} classes, person {self.channel}"}[self.kind]
+
+
+def seg_layout(shape) -> SegLayout | None:
+    """The person-map layout of one output shape (batch 1), or None (pure: tested)."""
+    s = [int(d) if d else 0 for d in shape]
+    if len(s) == 3 and s[0] == 1 and s[1] >= 16 and s[2] >= 16 and max(s[1:]) <= 4 * min(s[1:]):   # not (1, 84, N)
+        return SegLayout("matte", False, 0, "")
+    if len(s) != 4 or s[0] != 1:
+        return None
+
+    def of(c: int, last: bool) -> SegLayout | None:
+        if c == 1:
+            return SegLayout("matte", last, 0, "")
+        if c == 2:
+            return SegLayout("two_class", last, 1, "")
+        if c in PERSON_CLASS:
+            return SegLayout("semantic", last, PERSON_CLASS[c][0], PERSON_CLASS[c][1])
+        return None
+
+    if s[2] >= 16 and s[3] >= 16 and (lay := of(s[1], False)) is not None:
+        return lay
+    if s[1] >= 16 and s[2] >= 16 and (lay := of(s[3], True)) is not None:
+        return lay
+    return None
+
+
+def person_map(out: np.ndarray, lay: SegLayout) -> np.ndarray:
+    """(H, W) float32 person probability from one output (batch included) of layout `lay` (pure: tested)."""
+    a = np.asarray(out, np.float32)[0]
+    if a.ndim == 2:
+        a = a[None]
+    elif lay.channels_last:
+        a = np.moveaxis(a, -1, 0)
+    if lay.kind == "matte":
+        m = a[0]
+        if float(m.min()) < -1e-3 or float(m.max()) > 1 + 1e-3:
+            m = 1.0 / (1.0 + np.exp(-m))
+        return np.ascontiguousarray(m, np.float32)
+    e = np.exp(a - a.max(0, keepdims=True))
+    return (e[lay.channel] / e.sum(0)).astype(np.float32)
 
 
 def model_path() -> Path:
@@ -39,15 +105,48 @@ class PersonSegmenter:
         if not p.exists():
             raise FileNotFoundError(f"person segmentation model missing: {p} (scripts/fetch_models.py)")
         self.sess, self.backend = create_session(p, compute_units, cache_dir)
-        self.input = self.sess.get_inputs()[0].name
+        inp = self.sess.get_inputs()[0]
+        self.input = inp.name
+        d = [x if isinstance(x, int) and x > 0 else None for x in inp.shape]
+        if len(d) != 4:
+            raise ValueError(f"segmentation model needs an image input (N x C x H x W or N x H x W x C), got {d}")
+        self.nhwc = not (d[1] in (1, 3, 4) or (d[1] is None and d[3] not in (1, 3, 4)))
+        self.channels = (d[3] if self.nhwc else d[1]) or 3
+        self.h = (d[1] if self.nhwc else d[2]) or DYNAMIC_SIDE
+        self.w = (d[2] if self.nhwc else d[3]) or DYNAMIC_SIDE
+        self.uint8 = "uint8" in str(inp.type)
+        self.out_index, self.layout = self._probe()
+
+    def _tensor(self, bgr: np.ndarray) -> np.ndarray:
+        small = cv2.resize(bgr, (self.w, self.h), interpolation=cv2.INTER_AREA)
+        if self.channels == 1:
+            img = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)[..., None]
+        else:
+            img = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+        if self.uint8:
+            x = img
+        elif self.nhwc:
+            x = img.astype(np.float32) / 255.0
+        else:
+            x = (img.astype(np.float32) / 255.0 - 0.5) / 0.5
+        if self.channels == 4:
+            x = np.concatenate([x, np.full_like(x[..., :1], 255 if self.uint8 else 1)], -1)
+        x = x[None] if self.nhwc else x.transpose(2, 0, 1)[None]
+        return np.ascontiguousarray(x)
+
+    def _probe(self) -> tuple[int, SegLayout]:
+        """Which output is the person map, and its layout (one run on a grey picture)."""
+        outs = self.sess.run(None, {self.input: self._tensor(np.full((self.h, self.w, 3), 128, np.uint8))})
+        for i, o in enumerate(outs):
+            lay = seg_layout(np.asarray(o).shape)
+            if lay is not None:
+                return i, lay
+        raise ValueError("no person map among the outputs " + ", ".join(str(np.asarray(o).shape) for o in outs))
 
     def probability(self, bgra: np.ndarray) -> np.ndarray:
-        small = cv2.resize(bgra[..., :3], (SIZE, SIZE), interpolation=cv2.INTER_AREA)
-        rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB).astype(np.float32)
-        x = ((rgb / 255.0 - 0.5) / 0.5).transpose(2, 0, 1)[None]
-        scores = self.sess.run(None, {self.input: np.ascontiguousarray(x)})[0][0]      # (2, 192, 192)
-        e = np.exp(scores - scores.max(0, keepdims=True))
-        return (e[1] / e.sum(0)).astype(np.float32)                                    # softmax, person class
+        """Person probability (h, w) float32 0..1 at the model's output size."""
+        out = self.sess.run(None, {self.input: self._tensor(np.ascontiguousarray(bgra[..., :3]))})[self.out_index]
+        return person_map(out, self.layout)
 
 
 def available() -> bool:
@@ -84,9 +183,9 @@ class PersonMaskDetector:
         cx1, cy1 = min(W, int(np.ceil(x1 + bw * self.PAD))), min(H, int(np.ceil(y1 + bh * self.PAD)))
         if cx1 - cx0 < 4 or cy1 - cy0 < 4:
             return None
-        p = self.seg.probability(img[cy0:cy1, cx0:cx1])                  # (192, 192) over the crop
+        p = self.seg.probability(img[cy0:cy1, cx0:cx1])                  # e.g. (192, 192) over the crop
         # box inside the crop, in the probability map's pixels; sample it at the box-local mask resolution
-        sx, sy = SIZE / (cx1 - cx0), SIZE / (cy1 - cy0)
+        sx, sy = p.shape[1] / (cx1 - cx0), p.shape[0] / (cy1 - cy0)
         scale = min(1.0, MASK_MAX / max(bw, bh))
         ow, oh = max(2, int(round(bw * scale))), max(2, int(round(bh * scale)))
         M = np.array([[(bw * sx) / ow, 0, (x0 - cx0) * sx], [0, (bh * sy) / oh, (y0 - cy0) * sy]], np.float32)

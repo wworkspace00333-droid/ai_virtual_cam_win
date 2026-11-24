@@ -26,6 +26,18 @@ on the main camera for `hold_s` and back once people are seen again for `hold_s`
 `cooldown_s` without another switch (hysteresis + cooldown: no flapping). "speaker" makes the source whose
 speaker's mouth moves clearly the most the single / primary source (vcstudio/ai/speaker.py: mouth movement on each
 source, since one microphone gives no per-camera signal); while nobody speaks the picture stays where it is.
+
+Per camera (0.7.0), keys of each extra source: `color_preset` (a Colour Studio preset by name, graded on that
+camera's own picture with its own grader before it is drawn) and `privacy`: "shield" (default: the privacy shield
+checks it like the main camera when "extra cameras" is on), "hide" (the whole tile is always drawn hidden with the
+shield's effect, e.g. a room camera that must never show detail) or "off" (not checked; ignored in strict mode).
+Order: colour, then privacy, so nothing graded escapes the shield.
+
+Transitions (`transition`, 0.7.0): when the primary source or the layout changes (automatic, manual or a scene
+switch), "cut" shows the new picture at once; "fade" cross-fades from the last composed picture to the new one over
+`transition_s`; "slide" pushes the old picture out to the left. The old picture is one kept frame (no source is
+read twice): with fade / slide on, each composed picture is copied (about 8 MB at 1080p), and a fade costs one blend
+per frame while it runs.
 """
 from __future__ import annotations
 
@@ -44,8 +56,11 @@ LAYOUTS = ("single", "pip", "side_by_side", "split_v", "grid", "custom")
 MISSING = ("hold", "placeholder", "hide")
 CORNERS = ("top_right", "top_left", "bottom_right", "bottom_left")
 AUTO_MODES = ("off", "people", "speaker")
+TRANSITIONS = ("cut", "fade", "slide")
 MAX_SOURCES = 3                     # extra sources besides the main input
-SOURCE_KEYS = ("method", "device_unique_id", "device_name_hint", "screen_target", "video_path", "video_loop")
+SOURCE_KEYS = ("method", "device_unique_id", "device_name_hint", "screen_target", "video_path", "video_loop",
+               "color_preset", "privacy")
+PRIVACY_MODES = ("shield", "hide", "off")
 
 
 def _f(v, lo: float, hi: float, default: float) -> float:
@@ -112,6 +127,8 @@ class MulticamConfig:
     fallback: str = ""                            # source used by auto "people" when the main camera is empty
     hold_s: float = 3.0
     cooldown_s: float = 8.0
+    transition: str = "cut"                       # cut | fade | slide
+    transition_s: float = 0.4
 
     @staticmethod
     def from_profile(body: dict) -> MulticamConfig:
@@ -142,7 +159,8 @@ class MulticamConfig:
             int(_f(d.get("border_px"), 0, 40, 2)), int(_f(d.get("radius_px"), 0, 200, 12)),
             _f(d.get("max_age_s"), 0.05, 5, 0.5), _f(d.get("hold_max_s"), 0, 60, 3.0),
             pick("missing", MISSING, "placeholder"), pick("auto", AUTO_MODES, "off"), fallback,
-            _f(d.get("hold_s"), 0.5, 60, 3.0), _f(d.get("cooldown_s"), 0, 600, 8.0))
+            _f(d.get("hold_s"), 0.5, 60, 3.0), _f(d.get("cooldown_s"), 0, 600, 8.0),
+            pick("transition", TRANSITIONS, "cut"), _f(d.get("transition_s"), 0.05, 3.0, 0.4))
 
     @property
     def active(self) -> bool:
@@ -421,6 +439,22 @@ class MulticamStats:
     last_error: str = ""
     primary: str = "main"
     sources: dict = field(default_factory=dict)
+    transitions: int = 0
+
+
+def transition_frame(old: np.ndarray, new: np.ndarray, kind: str, p: float) -> np.ndarray:
+    """The picture `p` (0..1) of the way from `old` to `new` (pure: tested)."""
+    p = min(1.0, max(0.0, p))
+    if p >= 1.0 or old.shape != new.shape:
+        return new
+    if kind == "slide":
+        w = new.shape[1]
+        k = int(round(w * p))
+        out = np.empty_like(new)
+        out[:, : w - k] = old[:, k:]
+        out[:, w - k:] = new[:, : k] if k else new[:, :0]
+        return out
+    return cv2.addWeighted(old, 1.0 - p, new, p, 0.0)
 
 
 class MulticamService:
@@ -432,8 +466,17 @@ class MulticamService:
         self.override: str | None = None             # manual camera switch (action "camera_next"), until scene change
         self.speaker = None                          # vcstudio.ai.speaker.SpeakerService (auto "speaker"), set by the app
         self.layout_override: str | None = None      # manual layout switch (action "layout_next")
+        # callable(source id, BGRA, privacy mode) -> BGRA drawn instead (the privacy shield on extra cameras), set by
+        # the app; if it fails the tile shows the placeholder, never the unfiltered picture
+        self.tile_filter: Callable[[str, np.ndarray, str], np.ndarray] | None = None
+        # callable(preset name) -> ColorConfig | None (Colour Studio presets), set by the app
+        self.color_for: Callable[[str], Any] | None = None
+        self._graders: dict[str, Any] = {}
         self.stats = MulticamStats()
         self._cfg = MulticamConfig()
+        self._last_key: tuple | None = None         # (primary, layout) of the last composed picture
+        self._last_out: np.ndarray | None = None
+        self._trans: tuple | None = None            # (old picture, start time, kind, duration)
 
     def apply(self, cfg: MulticamConfig | None, running: bool) -> None:
         """A scene was published: start / stop its sources (only while capture runs)."""
@@ -481,11 +524,20 @@ class MulticamService:
         primary = self.override or auto or cfg.primary
         eff = cfg if not self.layout_override else MulticamConfig(**{**cfg.__dict__, "layout": self.layout_override})
         tiles = layout_tiles(eff, primary)
+        key = (primary, eff.layout)
+        if self._last_key is not None and key != self._last_key and cfg.transition != "cut" and \
+                self._last_out is not None:
+            self._trans = (self._last_out, now, cfg.transition, cfg.transition_s)
+            self.stats.transitions += 1
+        self._last_key = key
         if len(tiles) == 1 and tiles[0].source == "main":
             self.stats.primary = "main"
-            return out
+            return self._transition(out, now, cfg)
         t0 = time.perf_counter()
         frames: dict[str, np.ndarray | None] = {"main": out}
+        specs = {s["id"]: s for s in cfg.sources}
+        for sid in [k for k in self._graders if k not in specs]:
+            del self._graders[sid]
         stale = 0
         for t in tiles:
             if t.source in frames:
@@ -493,6 +545,16 @@ class MulticamService:
             got = self.sources.latest(t.source, hnow, cfg)
             if got is False:
                 continue
+            spec = specs.get(t.source, {})
+            if got is not None and got is not True and spec.get("color_preset") and self.color_for is not None:
+                got = self._grade(t.source, got, str(spec["color_preset"]), hnow)
+            if got is not None and got is not True and self.tile_filter is not None:
+                try:
+                    mode = str(spec.get("privacy")) if spec.get("privacy") in PRIVACY_MODES else "shield"
+                    got = self.tile_filter(t.source, got, mode)
+                except Exception:
+                    log.exception("multicam: tile filter failed for %s; placeholder shown", t.source)
+                    got = None
             if got is None or got is True:
                 stale += 1
                 frames[t.source] = None
@@ -507,4 +569,33 @@ class MulticamService:
         s.compose_ms = ms if s.composed == 1 else 0.9 * s.compose_ms + 0.1 * ms
         s.stale_tiles = stale
         s.primary = primary
+        return self._transition(res, now, cfg)
+
+    def _grade(self, sid: str, img: np.ndarray, preset: str, t: float) -> np.ndarray:
+        """This camera's colour preset on its own picture; any failure draws it ungraded."""
+        try:
+            ccfg = self.color_for(preset) if self.color_for is not None else None
+            if ccfg is None or not ccfg.active:
+                return img
+            g = self._graders.get(sid)
+            if g is None:
+                from vcstudio.replacement.color import ColorGrader
+                g = self._graders[sid] = ColorGrader()
+            return g.apply(img, ccfg, t)
+        except Exception:
+            log.exception("multicam: colour preset %r failed on %s", preset, sid)
+            return img
+
+    def _transition(self, res: np.ndarray, now: float, cfg: MulticamConfig) -> np.ndarray:
+        """Keep a copy of this picture as the start of a future transition (only when transitions are on: the
+        output buffer may be reused); blend while one runs."""
+        tr = self._trans
+        if tr is not None:
+            old, t0, kind, dur = tr
+            p = (now - t0) / max(1e-3, dur)
+            if p >= 1.0 or old.shape != res.shape:
+                self._trans = None
+            else:
+                res = transition_frame(old, res, kind, p)
+        self._last_out = None if cfg.transition == "cut" else np.array(res, copy=True)
         return res

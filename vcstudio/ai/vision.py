@@ -35,6 +35,7 @@ from vcstudio.core.frame_queue import LatestSlot
 log = logging.getLogger(__name__)
 
 STALE_S = 0.5
+EYE_FPS = 15.0               # analysis rate while eye contact correction is on
 MESH_FACES = 2
 HAND_HOLD_S = 0.6
 HAND_RELEASE_S = 0.5
@@ -49,6 +50,23 @@ class VisionConfig:
     hands: bool = False
     overlay: bool = True
     mesh: bool = False                           # dense face mesh (478 points) for up to MESH_FACES faces
+    gaze: bool = False                           # gaze direction from the mesh's irises (vcstudio/ai/gaze.py)
+    eye_contact: bool = False                    # eye contact correction (vcstudio/replacement/eye_contact.py)
+    eye_strength: float = 0.7
+    calibration: tuple = ()                      # (yaw, pitch) offsets of "I am looking at the camera"
+
+    @property
+    def needs_mesh(self) -> bool:
+        return self.mesh or self.gaze or self.eye_contact
+
+    @property
+    def needs_gaze(self) -> bool:
+        return self.gaze or self.eye_contact
+
+    @property
+    def rate(self) -> float:
+        """Analyses per second: eye contact needs fresh eye positions (EYE_FPS) or the warp would lag the head."""
+        return max(self.fps, EYE_FPS) if self.eye_contact else self.fps
 
     @staticmethod
     def from_settings(settings) -> VisionConfig:
@@ -60,8 +78,18 @@ class VisionConfig:
             fps = min(30.0, max(1.0, float(d.get("fps", 6))))
         except (TypeError, ValueError):
             fps = 6.0
+        try:
+            strength = min(1.0, max(0.0, float(d.get("eye_contact_strength", 0.7))))
+        except (TypeError, ValueError):
+            strength = 0.7
+        cal = d.get("gaze_calibration") or {}
+        try:
+            calibration = (float(cal["yaw"]), float(cal["pitch"])) if cal else ()
+        except (KeyError, TypeError, ValueError):
+            calibration = ()
         return VisionConfig(bool(d.get("enabled", False)), fps, bool(d.get("face", True)), bool(d.get("pose", True)),
-                            bool(d.get("hands", False)), bool(d.get("overlay", True)), bool(d.get("mesh", False)))
+                            bool(d.get("hands", False)), bool(d.get("overlay", True)), bool(d.get("mesh", False)),
+                            bool(d.get("gaze", False)), bool(d.get("eye_contact", False)), strength, calibration)
 
 
 @dataclass
@@ -70,6 +98,7 @@ class FaceInfo:
     points: np.ndarray
     pose: object = None                         # head_pose.HeadPose | None
     mesh: object = None                         # face_mesh.Mesh | None
+    gaze: object = None                         # gaze.Gaze | None (smoothed)
 
 
 @dataclass
@@ -108,6 +137,10 @@ class VisionService:
         self.stats = VisionStats()
         self.rate_scale = 1.0
         self.listeners: list = []                # callables(event name) for body events ("hand_raised")
+        from vcstudio.ai.gaze import GazeTracker
+        self.gaze_tracker = GazeTracker(MESH_FACES)
+        self.eyes_corrected = 0                  # eyes changed in the last frame (eye contact correction)
+        self.eye_skipped = 0                     # frames left uncorrected because the mesh was not fresh
         self._hand_since: float | None = None
         self._hand_down_since: float | None = None
         self._hand_armed = True
@@ -147,7 +180,23 @@ class VisionService:
             self._t.join(3)
         self._t = None
         self.slot.clear()
+        self.gaze_tracker.reset()
         self.stats.state = "stopped"
+
+    def calibrate(self) -> dict | None:
+        """"I am looking at the camera now": the current gaze offset of the largest face (before any earlier
+        calibration) is saved and subtracted from then on. None without a confident fresh gaze."""
+        r, _ = self.slot.peek()
+        faces = [f for f in (r.faces if r is not None else []) if f.gaze is not None and f.gaze.confidence >= 0.5]
+        if not faces:
+            return None
+        g = max(faces, key=lambda f: f.box[2] - f.box[0]).gaze
+        old = self.cfg.calibration or (0.0, 0.0)
+        cal = {"yaw": round(g.off_yaw + old[0], 1), "pitch": round(g.off_pitch + old[1], 1)}
+        d = dict(self.settings.get("vision") or {})
+        d["gaze_calibration"] = cal
+        self.settings.set("vision", d)
+        return cal
 
     def result_for(self, pts: float) -> VisionResult | None:
         """The newest result if it belongs near `pts` (frame time), else None (stale results are not drawn)."""
@@ -187,8 +236,8 @@ class VisionService:
         parts: dict = {}
         missing = []
         try:
-            for part, on in (("face", cfg.face or cfg.mesh), ("pose", cfg.pose), ("hands", cfg.hands),
-                             ("mesh", cfg.mesh)):
+            for part, on in (("face", cfg.face or cfg.needs_mesh), ("pose", cfg.pose), ("hands", cfg.hands),
+                             ("mesh", cfg.needs_mesh)):
                 if not on or (part == "hands" and self._gesture_hands_live()):
                     continue
                 a = self._make(part)
@@ -227,7 +276,7 @@ class VisionService:
                     log.exception("vision frame failed")
             if time.monotonic() - t_win >= 2.0:
                 self.stats.fps, n, t_win = n / (time.monotonic() - t_win), 0, time.monotonic()
-            target = max(0.5, cfg.fps * max(0.1, self.rate_scale))
+            target = max(0.5, cfg.rate * max(0.1, self.rate_scale))
             stop.wait(max(0.0, 1.0 / target - (time.monotonic() - t0)))
 
     def body_events(self, res: VisionResult, now: float) -> None:
@@ -275,6 +324,8 @@ class VisionService:
                 for fi in sorted(res.faces, key=lambda f: -(f.box[2] - f.box[0]))[:MESH_FACES]:   # largest faces
                     fi.mesh = parts["mesh"].run(bgr, fi.box, fi.points)
                 res.ms["mesh"] = round((time.perf_counter() - t) * 1000, 1)
+                if cfg.needs_gaze:
+                    self._gaze(res, cfg)
         if "pose" in parts:
             t = time.perf_counter()
             res.poses, _ = parts["pose"].estimate(bgr)
@@ -287,6 +338,22 @@ class VisionService:
             elif self._gesture_hands_live() and abs(self.gestures.last_hands_pts - frame.pts) <= STALE_S:
                 res.hands = list(self.gestures.last_hands)          # reused, not detected twice
         return res
+
+
+    def _gaze(self, res: VisionResult, cfg: VisionConfig) -> None:
+        from vcstudio.ai import gaze
+        cal = {"yaw": cfg.calibration[0], "pitch": cfg.calibration[1]} if cfg.calibration else None
+        items = []
+        for fi in res.faces:
+            if fi.mesh is None:
+                continue
+            g = gaze.estimate(fi.mesh.points, fi.pose, res.width, res.height, fi.mesh.score, cal)
+            if g is not None:
+                items.append((fi, g))
+        smoothed = self.gaze_tracker.update(res.pts, [(((f.box[0] + f.box[2]) / 2, (f.box[1] + f.box[3]) / 2), g)
+                                                      for f, g in items])
+        for (fi, _), g in zip(items, smoothed):
+            fi.gaze = g
 
 
 def hand_raised(poses, thr: float = 0.5) -> bool:
@@ -340,11 +407,13 @@ def draw(bgra: np.ndarray, r: VisionResult) -> None:
     import cv2
 
     from vcstudio.ai import head_pose, pose
-    from vcstudio.ai import face_mesh
+    from vcstudio.ai import face_mesh, gaze
     for f in r.faces:
         if f.mesh is not None:
             face_mesh.draw(bgra, f.mesh)
         head_pose.draw(bgra, f.points, f.pose)
+        if f.gaze is not None:
+            gaze.draw(bgra, f.gaze)
     pose.draw(bgra, r.poses)
     for h in r.hands:
         L = np.asarray(h.landmarks)

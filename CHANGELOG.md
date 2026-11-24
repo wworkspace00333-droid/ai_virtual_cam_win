@@ -8,6 +8,48 @@ release may change settings or profiles (they are migrated automatically); 1.0.0
 ## [Unreleased]
 
 ### Added
+- Virtual studio lights (Studio → Color Studio): key, fill and rim light painted onto the person, aimed at the
+  largest face, with direction, colour temperature, softness and presets (Studio, Soft, Dramatic, Warm, Cool). With
+  background segmentation on only the person is lit. 2-D relighting: it brightens and tints, it does not cast new
+  shadows; about 28 ms per 1080p frame on the 2-core development server.
+- Region animation (ROI Editor → Animation): drawn rectangles move, scale, rotate and fade along keyframes, repeating
+  or back and forth, smooth or linear; presets Pulse, Slide in, Zoom, Spin, Sway; "Add key" takes the region's
+  current geometry at the chosen time.
+- Detection → "Silhouette key frames every": how often SAM 2.1 makes object masks (in between they follow the
+  motion; 0 = on every detection).
+- Object silhouettes from SAM 2.1 now follow motion between key frames: SAM runs about once a second (and at once
+  for a new or reappearing object), and in between each mask is carried by optical flow, checked for consistency
+  (an object that is covered or moves too fast gets a fresh SAM mask). The detector keeps its own rate instead of
+  waiting for SAM on every frame. This is not SAM 2.1's own video tracking (its memory modules are not in the
+  ONNX export).
+- Automation conditions with AND / OR: "And if" accepts e.g. `people>=2 and not recording` or
+  `gaze or time 09:00-18:00` (people, scene, object, recording, gaze, camera, time of day; "not" before any term).
+- Multi-Camera: each extra camera can have its own colour preset and its own privacy setting (checked by the
+  privacy shield, always hidden whole, or not checked; strict mode always checks).
+- AI Vision → "Gaze direction": where each face looks (at the camera, left, right, up, down) from the irises of the
+  face mesh, compensated for head pose and for where the face is in the picture, with a confidence (low while
+  blinking or with the head turned) and a stability value; an arrow per eye in the overlay. "Calibrate: I am looking
+  at the camera" absorbs a camera above or below the screen.
+- AI Vision → "Eye contact correction" (strength 0-100 %): the irises are moved towards the camera inside the eye
+  opening, lids untouched. It stays off while blinking, with the head turned, when the person clearly looks elsewhere
+  (more than 25°) or when the face mesh is older than 0.15 s; while it is on, AI Vision analyses at least 15 times a
+  second. CPU only for now.
+- Privacy Shield → "Also check the extra cameras" (on by default): the extra Multi-Camera sources are checked in turn
+  by the same detector and their tiles drawn with their own hidden boxes. Strict mode hides a tile whole until its
+  camera has been checked; a failing shield shows the "no signal" tile, never the unfiltered picture.
+- Background → Separate by "Colour screen (chroma key)": green screen, blue screen or a picked colour, with
+  similarity, edge softness, spill suppression (removes the green rim on hair and skin) and feather. Works with every
+  background mode (blur, image, colour, gradient, video) and with the Quality edge refinement.
+- Multi-Camera → Transition: cut, cross-fade or slide (0.05-3 s) whenever the main picture or the layout changes,
+  automatically, by hotkey or by a scene switch.
+- Automation triggers "Looks at the camera" and "Looks away from the camera" (AI Vision gaze; a blink or a lost face
+  fires neither).
+- Audio Studio: a de-esser (Linkwitz-Riley split at 5.5 kHz, only sibilants are turned down, at most 12 dB) and
+  presets: Clean, Voice, Podcast, Noisy room.
+- AI Models → "Use in the app" for background models of more layouts: one-channel person maps (alpha matting,
+  selfie segmentation; logits or 0..1) and semantic class maps with a known person class (Pascal VOC 21 classes,
+  Cityscapes 19, ADE20K 150), channels first or last, fixed or dynamic size, uint8 or float input. Before, only the
+  PP-HumanSeg two-class layout could be used.
 - Privacy Shield: "Hide cards, documents and licence plates whole". A four-cornered outline with card / document or
   plate proportions and printed text inside is hidden entirely, including the photo on an ID card. Works with text
   detection set to "off" too. Best effort: an edge that does not stand out (a white card on a white desk) is missed,

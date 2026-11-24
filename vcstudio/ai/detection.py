@@ -72,6 +72,9 @@ class DetectionConfig:
     detector_needed: bool = True
     # classes the silhouette regions replace (empty = any class): masks are only computed for these
     mask_classes: list[str] = field(default_factory=list)
+    # SAM 2.1 silhouettes: seconds between key frames; in between masks follow the motion by optical flow
+    # (vcstudio/ai/mask_propagation.py); 0 = SAM on every frame
+    mask_keyframe_s: float = 1.0
 
     @property
     def open_vocab(self) -> bool:
@@ -100,6 +103,7 @@ class DetectionConfig:
             face_detection=ai.get("face_detection") in ("vision", True),
             frequency_mode=det.get("frequency_mode", "auto"),
             fixed_fps=float(det.get("fixed_fps", 15)),
+            mask_keyframe_s=float(min(10.0, max(0.0, float(det.get("mask_keyframe_s", 1.0) or 0.0)))),
             segmentation_model=ai.get("segmentation_model") or "auto",
             need_masks=any(r.get("enabled", True) and (r.get("replacement") or {}).get("enabled")
                            and (r.get("replacement") or {}).get("mode") == "object" and r.get("mode") != "manual"

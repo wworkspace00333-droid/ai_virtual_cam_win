@@ -17,7 +17,9 @@ TRIGGER_LABELS = {"person_detected": "Person appears", "person_lost": "Nobody in
                   "face_count_changed": "Number of faces changes", "gesture": "Gesture (open_palm, victory, hand_raised, …)",
                   "camera_disconnected": "Camera lost (main or cam1…)", "recording_started": "Recording starts",
                   "recording_stopped": "Recording stops", "timer": "Every N seconds", "hotkey":
-                  "Automation hotkey 1-4", "manual": "Only when run by hand"}
+                  "Automation hotkey 1-4", "manual": "Only when run by hand",
+                  "looking_at_camera": "Looks at the camera (AI Vision gaze)",
+                  "looking_away": "Looks away from the camera (AI Vision gaze)"}
 ACTION_LABELS = {"scene": "Switch to scene", "action": "App action (id)", "privacy": "Privacy level",
                  "record": "Recording (start / stop)", "replay": "Save instant replay", "camera": "Show camera",
                  "layout": "Camera layout", "color_preset": "Colour preset", "effects": "Effects (on / off)"}
@@ -85,6 +87,8 @@ class AutomationTab:
         for k in au.ACTIONS:
             self.action.addItem(tr(ACTION_LABELS[k]), k)
         self.action_arg = QLineEdit()
+        self.cond_text = QLineEdit()
+        self.cond_text.setPlaceholderText("people>=2 and not recording · gaze or time 09:00-18:00")
         self.priority = QSpinBox()
         self.priority.setRange(-100, 100)
         self.cooldown = QDoubleSpinBox()
@@ -95,7 +99,8 @@ class AutomationTab:
         self.debounce.setValue(1.5)
         rows = [("Name", self.name), ("When", self.trigger), ("Value", self.trigger_arg),
                 ("Only in scene", self.scene_cond), ("Do", self.action), ("Value", self.action_arg),
-                ("Priority", self.priority), ("Cooldown, s", self.cooldown), ("Debounce, s", self.debounce)]
+                ("Priority", self.priority), ("Cooldown, s", self.cooldown), ("Debounce, s", self.debounce),
+                ("And if", self.cond_text)]
         for i, (lbl, w) in enumerate(rows):
             g.addWidget(QLabel(tr(lbl)), i // 3, (i % 3) * 2)
             g.addWidget(w, i // 3, (i % 3) * 2 + 1)
@@ -108,7 +113,7 @@ class AutomationTab:
         lay.addWidget(b)
         rl = Card("Rules")
         self.table = QTableWidget(0, 7)
-        self.table.setHorizontalHeaderLabels([tr(h) for h in ("Name", "When", "Do", "Scene", "Priority", "Cooldown",
+        self.table.setHorizontalHeaderLabels([tr(h) for h in ("Name", "When", "Do", "Condition", "Priority", "Cooldown",
                                                                "Enabled")])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.verticalHeader().setVisible(False)
@@ -170,7 +175,9 @@ class AutomationTab:
                 vals = [r.get("name") or r.get("id"),
                         tr(TRIGGER_LABELS.get(trig.get("type"), "?")) + (" " + describe(trig) if describe(trig) else ""),
                         tr(ACTION_LABELS.get(act.get("type"), "?")) + (" " + describe(act) if describe(act) else ""),
-                        (r.get("condition") or {}).get("scene") or tr("any"), r.get("priority", 0),
+                        " · ".join(x for x in ((r.get("condition") or {}).get("scene") or "",
+                                               au.describe_condition(r.get("condition") or {})) if x) or tr("any"),
+                        r.get("priority", 0),
                         f"{r.get('cooldown_s', 5)} s", tr("yes") if r.get("enabled", True) else tr("no")]
                 for col, v in enumerate(vals):
                     self.table.setItem(row, col, QTableWidgetItem(str(v)))
@@ -190,10 +197,15 @@ class AutomationTab:
 
     def add_rule(self, rule: dict | None = None) -> str | None:
         if rule is None:
+            try:
+                group = au.parse_condition(self.cond_text.text())
+            except ValueError as e:
+                self.msg.setText(tr("Condition: {e}", e=e))
+                return None
             rule = {"name": self.name.text().strip(),
                     "trigger": parse_trigger(self.trigger.currentData(), self.trigger_arg.text()),
                     "action": parse_action(self.action.currentData(), self.action_arg.text()),
-                    "condition": {"scene": self.scene_cond.currentData() or ""},
+                    "condition": {"scene": self.scene_cond.currentData() or "", **group},
                     "priority": self.priority.value(), "cooldown_s": self.cooldown.value(),
                     "debounce_s": self.debounce.value(), "enabled": True}
         if rule["action"].get("type") == "scene" and rule["action"].get("name") not in self.ctx.profiles.names():

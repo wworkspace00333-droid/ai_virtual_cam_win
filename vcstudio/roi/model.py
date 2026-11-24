@@ -56,6 +56,8 @@ class ROI:
     include_coasting: bool = True                              # keep regions for briefly-lost objects
     # Replacement settings (Stage 6/7) live here so each ROI is self-contained
     replacement: dict[str, Any] = field(default_factory=dict)
+    # keyframe animation of a drawn rectangle (vcstudio/roi/animation.py)
+    animation: dict[str, Any] = field(default_factory=dict)
 
     # -------------------------------------------------------------- serialisation
     def to_dict(self) -> dict[str, Any]:

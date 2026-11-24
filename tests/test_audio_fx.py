@@ -193,3 +193,49 @@ def test_monitor_without_output_device_reports_and_does_not_break_recording(path
         ctx.recording.recorder = None
     finally:
         ctx.shutdown()
+
+
+def test_deesser_turns_down_sibilants_only():
+    c = fx.AudioChain(fx.AudioFxConfig(limiter=False, deess=True, deess_threshold_db=-30.0))
+    s = run(c, tone(7500, -18, 0.5))                                      # a loud "s": mostly above 5.5 kHz
+    assert rms_db(s[R // 10:]) < -18 - 5 and c.meter.deess_gain_db < -5
+    c2 = fx.AudioChain(fx.AudioFxConfig(limiter=False, deess=True, deess_threshold_db=-30.0))
+    v = run(c2, tone(300, -18, 0.5))                                      # a vowel: untouched
+    assert abs(rms_db(v[R // 10:]) + 18) < 0.3
+    c3 = fx.AudioChain(fx.AudioFxConfig(limiter=False, deess=True, deess_threshold_db=-30.0))
+    quiet = run(c3, tone(7500, -40, 0.5))                                 # under the threshold: untouched
+    assert abs(rms_db(quiet[R // 10:]) + 40) < 0.5
+    mix = tone(300, -14, 0.5) + tone(7500, -30, 0.5)                      # bright voice: the vowel dominates
+    c4 = fx.AudioChain(fx.AudioFxConfig(limiter=False, deess=True, deess_threshold_db=-35.0))
+    out = run(c4, mix)
+    assert abs(rms_db(out[R // 10:]) - rms_db(mix[R // 10:])) < 0.3
+
+
+def test_deesser_bands_add_up_and_block_size_does_not_matter():
+    x = tone(1000, -20, 0.3) + tone(7000, -26, 0.3)
+    a = run(fx.AudioChain(fx.AudioFxConfig(limiter=False, deess=True, deess_threshold_db=0.0)), x, 480)
+    for f in (300, 1000, 3000, 5500, 8000, 12000):                      # never triggered: flat magnitude
+        y = run(fx.AudioChain(fx.AudioFxConfig(limiter=False, deess=True, deess_threshold_db=0.0)), tone(f, -20, 0.3))
+        assert abs(rms_db(y[R // 20:]) + 20) < 0.1, f
+    assert abs(rms_db(a[R // 20:]) - rms_db(x[R // 20:])) < 0.1
+    cfg = fx.AudioFxConfig(limiter=False, deess=True, deess_threshold_db=-40.0)
+    b1 = run(fx.AudioChain(cfg), x, 480)
+    b2 = run(fx.AudioChain(cfg), x, 1440)
+    assert np.abs(b1 - b2).max() < 1e-2               # gains interpolate within a block, as for gate / compressor
+
+
+def test_presets_are_valid_settings_and_recognised():
+    for name, p in fx.PRESETS.items():
+        cfg = fx.AudioFxConfig.from_settings(_S({"audio": dict(p)}))
+        for k, v in p.items():
+            assert getattr(cfg, k) == v, (name, k)
+        assert fx.preset_name({**p, "gain_db": 3.0}) == name
+    assert fx.preset_name({"denoise": True}) == ""
+
+
+class _S:
+    def __init__(self, d):
+        self.d = d
+
+    def get(self, k):
+        return self.d[k]

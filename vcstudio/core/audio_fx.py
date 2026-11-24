@@ -3,8 +3,8 @@
 Settings section "audio". The chain runs on the audio capture thread (vcstudio/core/audio.py), block by block
 (about 10-40 ms of 48 kHz stereo), before the samples reach the recorder; its state (filters, envelopes, noise
 profile) carries over between blocks, so block size does not change the result. Order:
-  input gain / mute -> noise suppression -> noise gate -> equaliser -> compressor -> automatic gain -> limiter
-  -> level meters (input and output, peak and RMS in dBFS)
+  input gain / mute -> noise suppression -> noise gate -> compressor -> automatic gain -> equaliser -> de-esser
+  -> limiter -> level meters (input and output, peak and RMS in dBFS)
 
   noise suppression  spectral gating: 1024-point STFT (hop 512, Hann, overlap-add); the noise floor of each frequency
                      is tracked as a slow running minimum of the magnitude ("minimum statistics"), and bins near it
@@ -15,7 +15,13 @@ profile) carries over between blocks, so block size does not change the result. 
   equaliser          low shelf 120 Hz, peak 1 kHz (Q 0.9), high shelf 6 kHz (RBJ biquads, scipy sosfilt with state)
   compressor         feed-forward, RMS per 64-sample sub-block, `threshold_db`, `ratio`, attack / release, make-up
   automatic gain     slow (3 s) gain towards `target_db` RMS while speech is present, at most `max_gain_db`
+  de-esser           split band (0.7.0): a Linkwitz-Riley crossover at `deess_freq` (4th order: two Butterworth
+                     sections per band, with state; the bands add up to a flat magnitude); while the high band
+                     is over `deess_threshold_db` and carries most of the energy (a sibilant "s", "sh", not a bright
+                     voice), only the high band is turned down (ratio 4, at most DEESS_MAX_DB, 1 ms attack, 60 ms
+                     release)
   limiter            peak per sub-block with instant attack and 50 ms release to `ceiling_db`, then a hard clip
+Presets (PRESETS, Audio tab): ready combinations of the settings above, applied as values the user can then change.
 The virtual camera has no sound (Windows cameras are video only); this chain is for files the app records. A
 system-wide virtual microphone needs a signed audio driver: see reports/VIRTUAL_AUDIO_DEVICE.md.
 """
@@ -30,6 +36,8 @@ import numpy as np
 RATE = 48000
 SUB = 64                                      # samples per envelope step (1.3 ms)
 FLOOR_DB = -120.0
+DEESS_MAX_DB = 12.0
+DEESS_DOMINANCE_DB = -8.0                     # high band at least this close to the whole signal: a sibilant
 
 
 def db(x: float) -> float:
@@ -72,6 +80,9 @@ class AudioFxConfig:
     agc_max_gain_db: float = 18.0
     limiter: bool = True
     limiter_ceiling_db: float = -1.0
+    deess: bool = False
+    deess_threshold_db: float = -30.0
+    deess_freq: float = 5500.0
 
     @staticmethod
     def from_settings(settings) -> AudioFxConfig:
@@ -87,7 +98,32 @@ class AudioFxConfig:
             bool(d.get("comp", False)), _f(d, "comp_threshold_db", -60, 0, -20), _f(d, "comp_ratio", 1, 20, 3),
             _f(d, "comp_attack_ms", 0.5, 200, 10), _f(d, "comp_release_ms", 10, 2000, 120),
             _f(d, "comp_makeup_db", 0, 24, 0), bool(d.get("agc", False)), _f(d, "agc_target_db", -40, -6, -20),
-            _f(d, "agc_max_gain_db", 0, 30, 18), bool(d.get("limiter", True)), _f(d, "limiter_ceiling_db", -20, 0, -1))
+            _f(d, "agc_max_gain_db", 0, 30, 18), bool(d.get("limiter", True)), _f(d, "limiter_ceiling_db", -20, 0, -1),
+            bool(d.get("deess", False)), _f(d, "deess_threshold_db", -60, 0, -30), _f(d, "deess_freq", 3000, 10000, 5500))
+
+
+# ready-made chains (Audio tab "Preset"): only the keys they set are changed
+PRESETS: dict[str, dict] = {
+    "clean": {"denoise": False, "gate": False, "eq": False, "comp": False, "agc": False, "deess": False,
+              "limiter": True, "limiter_ceiling_db": -1.0},
+    "voice": {"denoise": True, "denoise_strength": 0.6, "gate": True, "gate_threshold_db": -50.0, "eq": True,
+              "eq_low_db": -2.0, "eq_mid_db": 1.0, "eq_high_db": 2.0, "comp": True, "comp_threshold_db": -22.0,
+              "comp_ratio": 3.0, "comp_makeup_db": 3.0, "agc": False, "deess": True, "deess_threshold_db": -30.0,
+              "limiter": True, "limiter_ceiling_db": -1.0},
+    "podcast": {"denoise": True, "denoise_strength": 0.7, "gate": True, "gate_threshold_db": -45.0, "eq": True,
+                "eq_low_db": 2.0, "eq_mid_db": 0.0, "eq_high_db": 1.0, "comp": True, "comp_threshold_db": -26.0,
+                "comp_ratio": 4.0, "comp_makeup_db": 6.0, "agc": True, "agc_target_db": -18.0, "deess": True,
+                "deess_threshold_db": -32.0, "limiter": True, "limiter_ceiling_db": -1.0},
+    "noisy_room": {"denoise": True, "denoise_strength": 1.0, "gate": True, "gate_threshold_db": -40.0, "eq": True,
+                   "eq_low_db": -6.0, "eq_mid_db": 2.0, "eq_high_db": 0.0, "comp": True, "comp_threshold_db": -24.0,
+                   "comp_ratio": 3.0, "comp_makeup_db": 3.0, "agc": False, "deess": False, "limiter": True,
+                   "limiter_ceiling_db": -1.0},
+}
+
+
+def preset_name(d: dict) -> str:
+    """The preset whose every value `d` has, or "" (custom) (pure: tested)."""
+    return next((k for k, p in PRESETS.items() if all(d.get(kk) == v for kk, v in p.items())), "")
 
 
 def _coef(ms: float, step: int = SUB) -> float:
@@ -172,6 +208,7 @@ class Meter:
     comp_gain_db: float = 0.0
     agc_gain_db: float = 0.0
     limiter_gain_db: float = 0.0
+    deess_gain_db: float = 0.0
     blocks: int = 0
 
 
@@ -199,7 +236,15 @@ class AudioChain:
                 self.sos = biquads(cfg)
                 zi = sosfilt_zi(self.sos)
                 self.zi = np.stack([zi * 0.0, zi * 0.0], axis=-1)      # (sections, 2, channels), start silent
+            if old is None or old.deess_freq != cfg.deess_freq:
+                from scipy.signal import butter
+                hp = butter(2, cfg.deess_freq, "highpass", fs=RATE, output="sos")
+                lp = butter(2, cfg.deess_freq, "lowpass", fs=RATE, output="sos")
+                self.hp, self.lp = np.vstack([hp, hp]), np.vstack([lp, lp])          # Linkwitz-Riley 4
+                self.hp_zi = np.zeros((self.hp.shape[0], 2, 2))
+                self.lp_zi = np.zeros((self.lp.shape[0], 2, 2))
             if old is None:
+                self.deess_g = 1.0
                 self.gate_g = 1.0
                 self.comp_g = 1.0
                 self.agc_g = 1.0
@@ -233,6 +278,8 @@ class AudioChain:
                 from scipy.signal import sosfilt
                 y, self.zi = sosfilt(self.sos, x, axis=0, zi=self.zi)
                 x = y.astype(np.float32)
+            if cfg.deess:
+                x = self._deess(x, cfg)
             if cfg.limiter:
                 x = self._limit(x, cfg)
             np.clip(x, -1.0, 32767 / 32768, out=x)
@@ -289,6 +336,27 @@ class AudioChain:
         self.meter.comp_gain_db = db(self.comp_g) if cfg.comp else 0.0
         self.meter.agc_gain_db = db(self.agc_g) if cfg.agc else 0.0
         return self._apply_steps(x, gains)
+
+    def _deess(self, x: np.ndarray, cfg: AudioFxConfig) -> np.ndarray:
+        from scipy.signal import sosfilt
+        hi, self.hp_zi = sosfilt(self.hp, x, axis=0, zi=self.hp_zi)
+        hi = hi.astype(np.float32)
+        lo, self.lp_zi = sosfilt(self.lp, x, axis=0, zi=self.lp_zi)
+        lo = lo.astype(np.float32)
+        rms_hi, k = self._envelope_steps(hi)
+        rms_all, _ = self._envelope_steps(x)
+        att, rel = _coef(1.0), _coef(60.0)
+        gains = np.ones(k, np.float32)
+        for i in range(k):
+            lh, la = db(float(rms_hi[i])), db(float(rms_all[i]))
+            target = 1.0
+            if lh > cfg.deess_threshold_db and lh - la > DEESS_DOMINANCE_DB:
+                target = undb(-min(DEESS_MAX_DB, (lh - cfg.deess_threshold_db) * 0.75))
+            c = att if target < self.deess_g else rel
+            self.deess_g = target + (self.deess_g - target) * c
+            gains[i] = self.deess_g
+        self.meter.deess_gain_db = db(float(gains.min()))
+        return lo + self._apply_steps(hi, gains)
 
     def _limit(self, x: np.ndarray, cfg: AudioFxConfig) -> np.ndarray:
         n = len(x)

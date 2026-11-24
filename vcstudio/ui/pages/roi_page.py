@@ -128,6 +128,34 @@ class ROIPage:
         ai.layout_.addWidget(self.warn)
         self.ai_card = ai
         right.addWidget(ai)
+        an = Card("Animation (drawn rectangles)")
+        fan = QFormLayout()
+        self.anim_on = QCheckBox(tr("Animate this region"))
+        self.anim_preset = QComboBox()
+        for k, lbl in (("", "Keyframes below"), ("pulse", "Pulse (opacity)"), ("slide_in", "Slide in from the left"),
+                       ("zoom", "Zoom"), ("spin", "Spin"), ("sway", "Sway")):
+            self.anim_preset.addItem(tr(lbl), k)
+        self.anim_dur = QDoubleSpinBox(); self.anim_dur.setRange(0.1, 600); self.anim_dur.setSuffix(tr(" s"))
+        self.anim_loop = QComboBox()
+        self.anim_loop.addItem(tr("Repeat"), "loop"); self.anim_loop.addItem(tr("Back and forth"), "pingpong")
+        self.anim_ease = QComboBox()
+        self.anim_ease.addItem(tr("Smooth"), "ease"); self.anim_ease.addItem(tr("Linear"), "linear")
+        self.anim_at = QSpinBox(); self.anim_at.setRange(0, 100); self.anim_at.setSuffix(tr(" %"))
+        self.anim_opacity = QDoubleSpinBox(); self.anim_opacity.setRange(0, 1); self.anim_opacity.setSingleStep(0.1)
+        self.anim_opacity.setValue(1.0)
+        self.anim_add = QPushButton(tr("Add key: current geometry at this time"))
+        self.anim_clear = QPushButton(tr("Clear keys"))
+        self.anim_info = QLabel(); self.anim_info.setObjectName("muted"); self.anim_info.setWordWrap(True)
+        fan.addRow(tr(""), self.anim_on); fan.addRow(tr("Preset"), self.anim_preset)
+        fan.addRow(tr("Duration"), self.anim_dur); fan.addRow(tr("Playback"), self.anim_loop)
+        fan.addRow(tr("Easing"), self.anim_ease); fan.addRow(tr("Key time"), self.anim_at)
+        fan.addRow(tr("Key opacity"), self.anim_opacity)
+        an.layout_.addLayout(fan)
+        ra = QHBoxLayout(); ra.addWidget(self.anim_add); ra.addWidget(self.anim_clear)
+        an.layout_.addLayout(ra)
+        an.layout_.addWidget(self.anim_info)
+        self.anim_card = an
+        right.addWidget(an)
         right.addStretch()
         rw = QWidget(); rw.setLayout(right); rw.setMaximumWidth(460); rw.setMinimumWidth(400)
         outer.addWidget(rw, 1)
@@ -159,6 +187,13 @@ class ROIPage:
         for w in (self.x, self.y, self.w, self.h, self.rot, self.minconf, self.overlap):
             w.valueChanged.connect(self._props_changed)
         self.pts_apply.clicked.connect(self._apply_points)
+        self.anim_on.toggled.connect(self._anim_changed)
+        for w in (self.anim_loop, self.anim_ease):
+            w.currentIndexChanged.connect(self._anim_changed)
+        self.anim_dur.valueChanged.connect(self._anim_changed)
+        self.anim_preset.currentIndexChanged.connect(self._anim_preset)
+        self.anim_add.clicked.connect(self.add_anim_key)
+        self.anim_clear.clicked.connect(self._anim_clear)
         ctx.profiles.add_listener(lambda e, n: self.load() if e == "switched" else None)
         self.timer = QTimer(self.widget); self.timer.timeout.connect(self._live); self.timer.start(66)
         self._set_tool("select")
@@ -319,9 +354,75 @@ class ROIPage:
         self.geo_rect.setVisible(geo and r.kind == "rect")
         self.geo_poly.setVisible(geo and r.kind == "polygon")
         self.ai_card.setEnabled(r is not None and r.mode != "manual")
+        self._show_anim(r)
         self.overlap.setEnabled(r is not None and r.inclusion == "overlap")
         self._loading = False
         self._update_warning()
+
+    # ---------------------------------------------------------------- animation
+    def _show_anim(self, r) -> None:
+        from vcstudio.roi.animation import normalise
+        ok = r is not None and r.mode == "manual" and r.kind == "rect"
+        self.anim_card.setEnabled(ok)
+        a = normalise(r.animation if r is not None else {})
+        ws = (self.anim_on, self.anim_dur, self.anim_loop, self.anim_ease, self.anim_preset)
+        for w in ws:
+            w.blockSignals(True)
+        self.anim_on.setChecked(bool((r.animation or {}).get("enabled")) if r is not None else False)
+        self.anim_dur.setValue(a["duration_s"])
+        self.anim_loop.setCurrentIndex(max(0, self.anim_loop.findData(a["loop"])))
+        self.anim_ease.setCurrentIndex(max(0, self.anim_ease.findData(a["easing"])))
+        self.anim_preset.setCurrentIndex(0)
+        for w in ws:
+            w.blockSignals(False)
+        n = len(a["keys"])
+        self.anim_info.setText(tr("{n} keys", n=n) + ("" if n >= 2 else " · " + tr("at least 2 keys are needed")))
+
+    def _set_anim(self, d: dict) -> None:
+        r = self._selected()
+        if r is None:
+            return
+        r.animation = d
+        self._commit()
+
+    def _anim_changed(self, *_) -> None:
+        r = self._selected()
+        if r is None or self._loading:
+            return
+        d = dict(r.animation or {})
+        d.update(enabled=self.anim_on.isChecked(), duration_s=round(self.anim_dur.value(), 2),
+                 loop=self.anim_loop.currentData(), easing=self.anim_ease.currentData())
+        d.setdefault("keys", [])
+        self._set_anim(d)
+
+    def _anim_preset(self, *_) -> None:
+        from vcstudio.roi.animation import preset
+        r = self._selected()
+        name = self.anim_preset.currentData()
+        if r is None or not name:
+            return
+        self._set_anim(preset(name, {"cx": r.cx, "cy": r.cy, "w": r.w, "h": r.h, "rotation": r.rotation},
+                              self.anim_dur.value()))
+
+    def add_anim_key(self) -> None:
+        """A key at the chosen time with the region's current (drawn) geometry and the chosen opacity."""
+        r = self._selected()
+        if r is None:
+            return
+        d = dict(r.animation or {"duration_s": self.anim_dur.value(), "loop": "loop", "easing": "ease"})
+        at = self.anim_at.value() / 100
+        keys = [k for k in d.get("keys") or [] if abs(float(k.get("at", -1)) - at) > 1e-6]
+        keys.append({"at": at, "cx": r.cx, "cy": r.cy, "w": r.w, "h": r.h, "rotation": r.rotation,
+                     "opacity": round(self.anim_opacity.value(), 2)})
+        before = len(d.get("keys") or [])
+        d["keys"] = sorted(keys, key=lambda k: k["at"])
+        # the key that completes an animation (the second one) switches it on; later keys keep the user's choice
+        d["enabled"] = len(d["keys"]) >= 2 and (before < 2 or bool(d.get("enabled")) or self.anim_on.isChecked())
+        self._set_anim(d)
+
+    def _anim_clear(self) -> None:
+        self._set_anim({**(self._selected().animation or {}), "keys": [], "enabled": False}
+                       if self._selected() is not None else {})
 
     def _split(self, text: str) -> list[str]:
         return [t.strip() for t in text.split(",") if t.strip()]

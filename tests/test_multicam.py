@@ -180,3 +180,66 @@ def test_pipeline_composes_a_second_live_source(paths):
 def _clip():
     from vcstudio.core.resources import sample
     return sample("clip_h264.mp4")
+
+
+def test_transition_frames():
+    old = np.zeros((4, 10, 4), np.uint8)
+    new = np.full((4, 10, 4), 200, np.uint8)
+    half = mc.transition_frame(old, new, "fade", 0.5)
+    assert abs(int(half[0, 0, 0]) - 100) <= 1
+    assert mc.transition_frame(old, new, "fade", 1.0) is new
+    s = mc.transition_frame(old, new, "slide", 0.3)
+    assert (s[:, :7] == 0).all() and (s[:, 7:] == 200).all()             # the new picture comes in from the right
+    assert mc.transition_frame(old, np.zeros((5, 10, 4), np.uint8), "fade", 0.5).shape == (5, 10, 4)
+
+
+def test_camera_switch_fades_and_cut_does_not():
+    tile = np.full((90, 160, 4), 200, np.uint8)
+
+    class Src:
+        def latest(self, sid, now, cfg):
+            return tile
+    main = np.full((180, 320, 4), 20, np.uint8)
+    for kind, mid in (("fade", True), ("cut", False)):
+        svc = mc.MulticamService(Src())
+        cfg = mc.MulticamConfig(enabled=True, layout="single", sources=({"id": "cam1", "enabled": True},),
+                                transition=kind, transition_s=1.0)
+        svc.process(main, cfg, people=1, now=0.0)                         # the main camera
+        svc.override = "cam1"
+        first = svc.process(main, cfg, people=1, now=0.1)                  # switched: transition starts
+        later = svc.process(main, cfg, people=1, now=0.6)
+        done = svc.process(main, cfg, people=1, now=1.2)
+        if mid:
+            assert int(first[90, 160, 0]) < 60 and 80 < int(later[90, 160, 0]) < 140
+            assert svc.stats.transitions == 1
+        else:
+            assert int(first[90, 160, 0]) == 200 and svc.stats.transitions == 0
+        assert int(done[90, 160, 0]) == 200
+    cfg = mc.MulticamConfig.from_profile({"multicam": {"transition": "wipe", "transition_s": 99}})
+    assert cfg.transition == "cut" and cfg.transition_s == 3.0
+
+
+def test_each_camera_gets_its_own_colour_preset_before_the_shield():
+    from vcstudio.replacement.color import ColorConfig
+    tile = np.full((90, 160, 4), 100, np.uint8)
+    seen = []
+
+    class Src:
+        def latest(self, sid, now, cfg):
+            return tile
+    svc = mc.MulticamService(Src())
+    warm = ColorConfig.from_profile({"color": {"enabled": True, "brightness": 0.3}})
+    svc.color_for = lambda name: warm if name == "Warm" else None
+
+    def filt(sid, a, mode):
+        seen.append((sid, mode, int(a[0, 0, 0])))
+        return a
+    svc.tile_filter = filt
+    cfg = mc.MulticamConfig.from_profile({"multicam": {"enabled": True, "layout": "grid", "sources": [
+        {"id": "cam1", "method": "test_pattern", "color_preset": "Warm", "privacy": "hide"},
+        {"id": "cam2", "method": "test_pattern", "privacy": "bogus"}]}})
+    svc.process(np.full((180, 320, 4), 20, np.uint8), cfg, people=1, now=1.0)
+    d = {sid: (mode, v) for sid, mode, v in seen}
+    assert d["cam1"][0] == "hide" and d["cam1"][1] > 100                  # graded, then the shield sees it
+    assert d["cam2"] == ("shield", 100)                                    # no preset; unknown mode -> shield
+    assert set(svc._graders) == {"cam1"}

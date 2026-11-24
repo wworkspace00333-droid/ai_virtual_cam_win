@@ -157,3 +157,24 @@ def test_profile_switch_reloads_editor(page):
     ctx.profiles.switch("Other")
     assert [r.name for r in page.canvas.rois] == ["Theirs"]
     assert [r.name for r in ctx.rois.rois()] == ["Theirs"]
+
+
+def test_animation_presets_and_keys(page, qtbot):
+    c = page.canvas
+    c.rois.append(new_rect("R", 0.1, 0.1, 0.3, 0.3)); c.selected = c.rois[0].id
+    page._commit()
+    page.anim_preset.setCurrentIndex(page.anim_preset.findData("pulse"))
+    qtbot.waitUntil(lambda: bool(saved(page)) and (saved(page)[0].get("animation") or {}).get("enabled"),
+                    timeout=2000)
+    assert saved(page)[0]["animation"]["keys"][1]["opacity"] == 0.35 and "2" in page.anim_info.text()
+    page._anim_clear()
+    assert not c.rois[0].animation["enabled"] and c.rois[0].animation["keys"] == []
+    page.anim_at.setValue(0); page.add_anim_key()
+    page.x.setValue(400)                                              # move the region, then key it at 100 %
+    page.anim_at.setValue(100); page.anim_opacity.setValue(0.5); page.add_anim_key()
+    a = c.rois[0].animation
+    assert a["enabled"] and len(a["keys"]) == 2 and a["keys"][0]["cx"] < a["keys"][1]["cx"]
+    page.anim_loop.setCurrentIndex(page.anim_loop.findData("pingpong"))
+    assert c.rois[0].animation["loop"] == "pingpong"
+    page.mode.setCurrentIndex(page.mode.findData("auto"))
+    assert not page.anim_card.isEnabled()

@@ -256,3 +256,92 @@ def test_models_tab_use_and_unuse(win, qtbot):
     tab.table.setCurrentCell(0, 0)
     tab.use(False)
     assert win.ctx.settings.get("models")["background"] == ""
+
+
+def test_vision_tab_gaze_eye_contact_and_calibration(win):
+    tab = studio(win).part("AI Vision")
+    d = dict(win.ctx.settings.get("vision"))
+    d["gaze_calibration"] = {"yaw": 1.0, "pitch": -3.0}
+    win.ctx.settings.set("vision", d)
+    tab.eye_contact.setChecked(True)
+    tab.eye_strength.setValue(40)
+    v = win.ctx.settings.get("vision")
+    assert v["eye_contact"] is True and v["eye_contact_strength"] == 0.4
+    assert v["gaze_calibration"] == {"yaw": 1.0, "pitch": -3.0}          # saving the tab keeps the calibration
+    cfg = win.ctx.vision.cfg
+    assert cfg.eye_contact and cfg.needs_mesh and cfg.calibration == (1.0, -3.0)
+    assert tab.calibrate() is None                                      # nothing analysed yet: nothing saved
+    tab.reset_calibration()
+    assert win.ctx.settings.get("vision")["gaze_calibration"] == {}
+    tab.tick()
+    tab.eye_contact.setChecked(False)
+
+
+def test_audio_tab_presets_and_deesser(win):
+    tab = studio(win).part("Audio Studio")
+    tab.preset.setCurrentIndex(tab.preset.findData("podcast"))
+    a = win.ctx.settings.get("audio")
+    assert a["deess"] is True and a["agc"] is True and a["comp_ratio"] == 4.0
+    assert tab.switches["deess"].isChecked() and tab.preset.currentData() == "podcast"
+    tab.nums["comp_ratio"].setValue(6.0)                               # an own change: the preset says "Custom"
+    assert tab.preset.currentData() == "" and win.ctx.settings.get("audio")["comp_ratio"] == 6.0
+    assert win.ctx.recording.fx.cfg.deess
+
+
+def test_replacement_page_chroma_key_controls(win):
+    page = win.pages[win.page_keys().index("replacement")]
+    page.bg_mode.setCurrentIndex(page.bg_mode.findData("color"))
+    page.bg_source.setCurrentIndex(page.bg_source.findData("chroma"))
+    assert page.key_sim.isEnabled()
+    page.key_color.setCurrentIndex(page.key_color.findData("#0047bb"))
+    page.key_spill.setValue(0.3)
+    page.set_key_color("#10c050")
+    b = win.ctx.profiles.active()["body"]["background"]
+    assert b["source"] == "chroma" and b["key_color"] == "#10c050" and b["key_spill"] == 0.3
+    cfg = win.ctx.background.cfg
+    assert cfg.source == "chroma" and cfg.key_color == "#10c050"
+    page.bg_source.setCurrentIndex(page.bg_source.findData("person"))
+    assert not page.key_sim.isEnabled()
+
+
+def test_automation_tab_condition_groups(win):
+    tab = studio(win).part("Automation")
+    tab.trigger.setCurrentIndex(tab.trigger.findData("timer"))
+    tab.trigger_arg.setText("60")
+    tab.action.setCurrentIndex(tab.action.findData("replay"))
+    tab.cond_text.setText("people>=2 and gaze or recording")
+    assert tab.add_rule() is None and "or" in tab.msg.text()
+    tab.cond_text.setText("not recording and time 09:00-18:00")
+    rid = tab.add_rule()
+    r = next(r for r in win.ctx.settings.get("automation")["rules"] if r["id"] == rid)
+    assert r["condition"]["match"] == "all" and len(r["condition"]["terms"]) == 2
+    assert "time 09:00-18:00" in tab.table.item(tab.table.rowCount() - 1, 3).text()
+
+
+def test_multicam_tab_per_camera_colour_and_privacy(win):
+    win.ctx.settings.set("color_presets", {"Warm": {"brightness": 0.2}})
+    tab = studio(win).part("Multi-Camera")
+    tab.load()
+    tab.add_source({"method": "test_pattern", "name": "pattern"})
+    tab.table.setCurrentCell(0, 0)
+    tab.src_color.setCurrentIndex(tab.src_color.findData("Warm"))
+    tab.src_privacy.setCurrentIndex(tab.src_privacy.findData("hide"))
+    s = win.ctx.profiles.active()["body"]["multicam"]["sources"][0]
+    assert s["color_preset"] == "Warm" and s["privacy"] == "hide"
+    assert win.ctx.pipeline.scene.multicam.sources[0]["privacy"] == "hide"
+    assert win.ctx._color_preset("Warm").active and win.ctx._color_preset("nope") is None
+
+
+def test_colour_tab_virtual_lights(win):
+    tab = studio(win).part("Color Studio")
+    lc = tab.lights
+    lc.preset.setCurrentIndex(lc.preset.findData("dramatic"))
+    b = win.ctx.profiles.active()["body"]["lighting"]
+    assert b["vl_enabled"] is True and b["vl_key_angle"] == -75.0 and b["vl_fill"] == 0.0
+    assert win.ctx.pipeline.scene.lighting.vl_enabled and lc.preset.currentData() == "dramatic"
+    lc.nums["vl_rim"].setValue(0.1)
+    assert lc.preset.currentData() == "" and win.ctx.profiles.active()["body"]["lighting"]["vl_rim"] == 0.1
+    tab.tick()
+    assert "face" in lc.status.text()
+    lc.enabled.setChecked(False)
+    assert not win.ctx.pipeline.scene.lighting.vl_enabled

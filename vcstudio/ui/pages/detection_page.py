@@ -47,6 +47,11 @@ class DetectionPage:
         f.addRow(tr("Confidence threshold"), r1)
         f.addRow(tr("NMS IoU threshold"), r2)
         f.addRow(tr("Detection frequency"), r3)
+        self.keyframe = QDoubleSpinBox(); self.keyframe.setRange(0, 10); self.keyframe.setSingleStep(0.5)
+        self.keyframe.setSuffix(tr(" s")); self.keyframe.setDecimals(1)
+        self.keyframe.setToolTip(tr("SAM 2.1 silhouettes are made this often; in between they follow the motion "
+                                    "(optical flow). 0 = SAM on every detection (slow without a GPU)."))
+        f.addRow(tr("Silhouette key frames every"), self.keyframe)
         f.addRow(tr(""), self.mode_lbl)
         f.addRow(tr(""), self.show)
         params.layout_.addLayout(f)
@@ -153,6 +158,7 @@ class DetectionPage:
         for s in (self.conf, self.iou):
             s.valueChanged.connect(self._changed)
         self.fixed.valueChanged.connect(self._changed)
+        self.keyframe.valueChanged.connect(self._changed)
         for b in (self.freq_auto, self.freq_fixed, self.cls_all, self.cls_only, self.trk_on, self.trk_class):
             b.toggled.connect(self._changed)
         for w in (self.trk_low, self.trk_buf, self.trk_coast, self.trk_hits):
@@ -282,13 +288,14 @@ class DetectionPage:
         body = self.ctx.profiles.active()["body"]
         self._load_open_vocab(body)
         det, trk = body["detection"], body["tracking"]
-        widgets = (self.conf, self.iou, self.fixed, self.freq_auto, self.freq_fixed, self.cls_all, self.cls_only, self.tree,
+        widgets = (self.conf, self.iou, self.fixed, self.keyframe, self.freq_auto, self.freq_fixed, self.cls_all, self.cls_only, self.tree,
                    self.trk_on, self.trk_low, self.trk_buf, self.trk_coast, self.trk_smooth, self.trk_class, self.trk_hits)
         for w in widgets:
             w.blockSignals(True)
         self.conf.setValue(int(round(det["confidence"] * 100)))
         self.iou.setValue(int(round(det["iou"] * 100)))
         self.fixed.setValue(det.get("fixed_fps", 15))
+        self.keyframe.setValue(float(det.get("mask_keyframe_s", 1.0)))
         (self.freq_fixed if det.get("frequency_mode") == "fixed" else self.freq_auto).setChecked(True)
         include = det.get("include_classes", [])
         (self.cls_only if include else self.cls_all).setChecked(True)
@@ -353,6 +360,7 @@ class DetectionPage:
             d["iou"] = self.iou.value() / 100
             d["frequency_mode"] = "fixed" if self.freq_fixed.isChecked() else "auto"
             d["fixed_fps"] = self.fixed.value()
+            d["mask_keyframe_s"] = round(self.keyframe.value(), 1)
             d["include_classes"] = checked if self.cls_only.isChecked() else []
             d["exclude_classes"] = [] if self.cls_only.isChecked() else checked
             t = b["tracking"]

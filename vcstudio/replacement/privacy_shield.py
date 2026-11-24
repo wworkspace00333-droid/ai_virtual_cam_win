@@ -21,6 +21,11 @@ Settings section "privacy_shield" (global: a scene switch must not switch privac
                detector, also when `text` is "off"
   faces        hide faces by their outline: the face-mesh oval from AI Vision (vcstudio/ai/vision.py, mesh on), or
                the face box when a face has no mesh; grown by `padding`. Needs AI Vision with face analysis on
+  extra_cameras  (default on) the extra Multi-Camera sources are checked too: the same detector visits them in
+               turn after each pass over the main camera (each extra source is checked fps / n times a second), and
+               their tiles are drawn with their own hidden boxes. With `strict`, a tile whose source was not checked
+               within EXTRA_FRESH_S (or n / fps × 3, whichever is longer) is hidden whole until it is — a new or
+               restarted source never shows unchecked text. Custom regions and faces are main-camera only.
 
 Runs on the INPUT frame on its own thread (newest frame only, `fps` default 2); the output thread only draws the
 current boxes (a pixelation of a few boxes: about a millisecond). Limits, said plainly in the UI: text smaller than
@@ -48,6 +53,7 @@ PATTERNS = ("email", "phone", "card", "account", "address", "keywords")
 DOC_KINDS = ("document", "plate")
 DOC_PAD = 0.04               # padding of a whole document, share of its height (text padding would be far too much)
 MAX_READ = 12                # text boxes read per pass (30-160 ms each on the CPU); the rest stay hidden, unread
+EXTRA_FRESH_S = 3.0          # strict: an extra source's check older than this hides its whole tile
 
 _EMAIL = re.compile(r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}", re.I)
 _PHONE = re.compile(r"\+?\(?\d[\d\s().-]{5,}\d")       # a whole run of digits and separators
@@ -128,6 +134,7 @@ class ShieldConfig:
     exclude: tuple[tuple[float, float, float, float], ...] = ()
     faces: bool = False
     documents: bool = False
+    extras: bool = True
 
     @staticmethod
     def from_settings(settings) -> ShieldConfig:
@@ -150,7 +157,7 @@ class ShieldConfig:
                             num("padding", 0, 2, 0.25), num("sensitivity", 0, 1, 0.5), num("fps", 0.5, 10, 2.0),
                             num("hold_s", 0, 30, 1.5), bool(d.get("strict", False)), num("strict_hold_s", 1, 120, 10),
                             num("strict_grow", 0, 3, 0.5), regs, excl, bool(d.get("faces", False)),
-                            bool(d.get("documents", False)))
+                            bool(d.get("documents", False)), bool(d.get("extra_cameras", True)))
 
 
 @dataclass
@@ -158,6 +165,16 @@ class Hidden:
     box: tuple[float, float, float, float]       # x0, y0, x1, y1 in frame pixels (before padding)
     last_seen: float                             # monotonic
     kind: str = "text"
+
+
+@dataclass
+class SourceState:
+    """Hidden boxes of one extra camera (Multi-Camera source)."""
+    hidden: list = field(default_factory=list)
+    size: tuple = (0, 0)
+    last_run: float = 0.0                        # monotonic time of its last check (0: never)
+    last_seq: object = None
+    runs: int = 0
 
 
 @dataclass
@@ -172,6 +189,7 @@ class ShieldStats:
     error: str = ""
     last_run: float = 0.0
     kinds: dict = field(default_factory=dict)
+    extra: dict = field(default_factory=dict)    # source id -> {"hidden", "age_s", "whole"} (extra cameras)
 
 
 class PrivacyShield:
@@ -190,6 +208,9 @@ class PrivacyShield:
         # faces by outline: callable(W, H) -> list of (n, 2) int32 polygons in output pixels (set by the app)
         self.face_outlines = None
         self.custom_model = None              # callable() -> Path of a chosen custom text detector, or None
+        self.sources = None                   # callable() -> {source id: Frame | None}: extra cameras (set by the app)
+        self._extra: dict[str, SourceState] = {}
+        self._rr = 0
 
     @property
     def running(self) -> bool:
@@ -218,6 +239,7 @@ class PrivacyShield:
         if not self.cfg.strict:
             with self._lock:
                 self._hidden = []
+                self._extra = {}
         self.stats.state = "stopped"
 
     # ------------------------------------------------------------------ detection thread
@@ -258,10 +280,39 @@ class PrivacyShield:
                 except Exception as e:
                     self.stats.error = f"{type(e).__name__}: {e}"
                     log.exception("privacy shield frame failed")
+            try:
+                self.process_next_extra(det, rec)
+            except Exception as e:
+                self.stats.error = f"extra camera: {type(e).__name__}: {e}"
+                log.exception("privacy shield: extra camera failed")
             stop.wait(max(0.0, 1.0 / self.cfg.fps - (time.monotonic() - t0)))
 
-    def process(self, frame, det, rec=None, now: float | None = None) -> None:
-        """One detection pass: refresh the hidden boxes (also called directly by tests)."""
+    def process_next_extra(self, det, rec=None, now: float | None = None) -> str | None:
+        """Check the next extra camera in turn (one per pass); returns its id, or None (none / nothing new)."""
+        if not self.cfg.extras or self.sources is None:
+            return None
+        frames = self.sources() or {}
+        with self._lock:
+            for sid in [s for s in self._extra if s not in frames]:
+                del self._extra[sid]                 # a removed source takes its boxes with it
+        ids = sorted(s for s, f in frames.items() if f is not None)
+        if not ids:
+            return None
+        sid = ids[self._rr % len(ids)]
+        self._rr += 1
+        fr = frames[sid]
+        st = self._extra.get(sid)
+        seq = getattr(fr, "seq", None)
+        if st is not None and seq is not None and st.last_seq == seq:
+            st.last_run = time.monotonic() if now is None else now      # same picture: still checked
+            return None
+        self.process(fr, det, rec, now, source=sid)
+        self._extra[sid].last_seq = seq
+        return sid
+
+    def process(self, frame, det, rec=None, now: float | None = None, source: str = "main") -> None:
+        """One detection pass over the main camera or an extra `source`: refresh its hidden boxes (also called
+        directly by tests)."""
         cfg = self.cfg
         now = time.monotonic() if now is None else now
         with frame.bgra() as a:
@@ -299,9 +350,17 @@ class PrivacyShield:
                 kind = found[0]
             kinds[kind] = kinds.get(kind, 0) + 1
             keep.append(Hidden((float(x0), float(y0), float(x1), float(y1)), now, kind))
+        hold = cfg.strict_hold_s if cfg.strict else cfg.hold_s
+        if source != "main":
+            with self._lock:
+                es = self._extra.setdefault(source, SourceState())
+                es.hidden = keep + [h for h in es.hidden if now - h.last_seen <= hold and
+                                    not any(_overlap(h.box, k.box) > 0.3 for k in keep)]
+                es.size, es.last_run = (W, H), now
+                es.runs += 1
+            return
         with self._lock:
             self._frame_size = (W, H)
-            hold = cfg.strict_hold_s if cfg.strict else cfg.hold_s
             old = [h for h in self._hidden if now - h.last_seen <= hold and
                    not any(_overlap(h.box, k.box) > 0.3 for k in keep)]
             self._hidden = keep + old
@@ -326,8 +385,16 @@ class PrivacyShield:
         holding = cfg.strict and (stale or self.stats.state in ("error", "stopped"))
         if cfg.strict:
             self.stats.state = "holding" if holding and self.stats.state != "no_models" else self.stats.state
+        out += self._rects(hidden, (fw, fh), W, H, now, holding)
+        self.stats.hidden = len(out)
+        return out
+
+    def _rects(self, hidden: list, size: tuple, W: int, H: int, now: float, holding: bool) -> list:
+        cfg = self.cfg
         hold = cfg.strict_hold_s if cfg.strict else cfg.hold_s
+        fw, fh = size
         sx, sy = (W / fw, H / fh) if fw and fh else (1.0, 1.0)
+        out = []
         for h in hidden:
             if now - h.last_seen > hold:
                 continue
@@ -335,8 +402,37 @@ class PrivacyShield:
             pad = (y1 - y0) * ((DOC_PAD if h.kind in DOC_KINDS else cfg.padding) + (cfg.strict_grow if holding else 0.0))
             out.append((max(0, int(x0 - pad)), max(0, int(y0 - pad)), min(W, int(x1 + pad + 0.999)),
                         min(H, int(y1 + pad + 0.999))))
-        self.stats.hidden = len(out)
         return out
+
+    def extra_fresh_s(self) -> float:
+        n = max(1, len(self._extra) or (len(self.sources() or {}) if self.sources is not None else 1))
+        return max(EXTRA_FRESH_S, 3.0 * n / max(0.5, self.cfg.fps))
+
+    def apply_source(self, sid: str, bgra: np.ndarray, mode: str = "shield", now: float | None = None) -> np.ndarray:
+        """Hide what was found on extra camera `sid` in a copy of its picture (the tile drawn by Multi-Camera).
+        Strict: a source not checked recently is hidden whole (fail closed). `mode` is the camera's own privacy
+        setting: "hide" always hides the whole tile (shield on or off), "off" skips the check (not in strict mode)."""
+        cfg = self.cfg
+        if mode == "hide":
+            h, w = bgra.shape[:2]
+            self.stats.extra[sid] = {"hidden": 1, "age_s": None, "whole": True}
+            return self._draw(bgra.copy(), [(0, 0, w, h)])
+        if not cfg.enabled or not cfg.extras or (mode == "off" and not cfg.strict):
+            return bgra
+        now = time.monotonic() if now is None else now
+        h, w = bgra.shape[:2]
+        with self._lock:
+            st = self._extra.get(sid)
+            hidden = list(st.hidden) if st is not None else []
+            size, last = (st.size, st.last_run) if st is not None else ((0, 0), 0.0)
+        detecting = cfg.text != "off" or cfg.documents
+        age = now - last if last else float("inf")
+        whole = detecting and cfg.strict and age > self.extra_fresh_s()
+        rects = [(0, 0, w, h)] if whole else self._rects(hidden, size, w, h, now, False)
+        self.stats.extra[sid] = {"hidden": len(rects), "age_s": round(age, 1) if last else None, "whole": whole}
+        if not rects:
+            return bgra
+        return self._draw(bgra.copy(), rects)
 
     def apply(self, bgra: np.ndarray, now: float | None = None) -> np.ndarray:
         """Hide the current boxes in a copy of `bgra` (returns `bgra` itself when nothing is hidden)."""
@@ -350,6 +446,10 @@ class PrivacyShield:
         out = bgra.copy()
         if polys:
             self._hide_polygons(out, polys)
+        return self._draw(out, rects)
+
+    def _draw(self, out: np.ndarray, rects: list) -> np.ndarray:
+        """The effect on each rectangle of `out`, in place; returns `out`."""
         for x0, y0, x1, y1 in rects:
             if x1 - x0 < 2 or y1 - y0 < 2:
                 continue

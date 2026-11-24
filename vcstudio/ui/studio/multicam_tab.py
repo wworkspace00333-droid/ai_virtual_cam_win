@@ -48,9 +48,15 @@ class MulticamTab:
         self.auto.addItem(tr("Switch when nobody is on the main camera"), "people")
         self.auto.addItem(tr("Show who is speaking (mouth movement; needs the face models)"), "speaker")
         self.fallback = QComboBox()
+        self.transition = QComboBox()
+        for k, lbl in (("cut", "Cut"), ("fade", "Cross-fade"), ("slide", "Slide")):
+            self.transition.addItem(tr(lbl), k)
+        self.transition_s = QDoubleSpinBox()
+        self.transition_s.setRange(0.05, 3.0)
+        self.transition_s.setSingleStep(0.1)
         rows = [("Layout", self.layout_box), ("Main picture", self.primary), ("Window corner", self.corner),
                 ("Window size", self.size), ("Lost source", self.missing), ("Automatic switching", self.auto),
-                ("Switch to", self.fallback)]
+                ("Switch to", self.fallback), ("Transition", self.transition), ("Transition time, s", self.transition_s)]
         for i, (label, w) in enumerate(rows):
             g.addWidget(QLabel(tr(label)), 1 + i // 2, (i % 2) * 2)
             g.addWidget(w, 1 + i // 2, (i % 2) * 2 + 1)
@@ -79,6 +85,18 @@ class MulticamTab:
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setMinimumHeight(110)
         src.layout_.addWidget(self.table)
+        r1 = QHBoxLayout()
+        r1.addWidget(QLabel(tr("Selected camera: colour preset")))
+        self.src_color = QComboBox()
+        r1.addWidget(self.src_color)
+        r1.addWidget(QLabel(tr("Privacy")))
+        self.src_privacy = QComboBox()
+        for k, lbl in (("shield", "Privacy shield checks it"), ("hide", "Always hidden whole"),
+                       ("off", "Not checked")):
+            self.src_privacy.addItem(tr(lbl), k)
+        r1.addWidget(self.src_privacy)
+        r1.addStretch(1)
+        src.layout_.addLayout(r1)
         r2 = QHBoxLayout()
         self.remove_btn = QPushButton(tr("Remove source"))
         self.next_cam = QPushButton(tr("Next camera"))
@@ -97,10 +115,15 @@ class MulticamTab:
         self.load()
         for w in (self.enabled,):
             w.toggled.connect(self.save)
-        for w in (self.layout_box, self.primary, self.corner, self.missing, self.auto, self.fallback):
+        for w in (self.layout_box, self.primary, self.corner, self.missing, self.auto, self.fallback,
+                  self.transition):
             w.currentIndexChanged.connect(self.save)
         self.size.valueChanged.connect(self.save)
+        self.transition_s.valueChanged.connect(self.save)
         self.kind.currentIndexChanged.connect(self._fill_devices)
+        self.table.currentCellChanged.connect(lambda *_: self._show_source())
+        self.src_color.currentIndexChanged.connect(self._save_source)
+        self.src_privacy.currentIndexChanged.connect(self._save_source)
         self.browse.clicked.connect(self._browse)
         self.add_btn.clicked.connect(lambda: self.add_source())
         self.remove_btn.clicked.connect(self.remove_source)
@@ -133,8 +156,17 @@ class MulticamTab:
             self.size.setValue(c.pip_size)
             self.missing.setCurrentIndex(max(0, self.missing.findData(c.missing)))
             self.auto.setCurrentIndex(max(0, self.auto.findData(c.auto)))
+            self.transition.setCurrentIndex(max(0, self.transition.findData(c.transition)))
+            self.transition_s.setValue(c.transition_s)
             self._sources = [dict(s) for s in c.sources]
             self._refresh_table()
+            self.src_color.blockSignals(True)
+            self.src_color.clear()
+            self.src_color.addItem(tr("None"), "")
+            for n in sorted((self.ctx.settings.get("color_presets") or {}).keys()):
+                self.src_color.addItem(n, n)
+            self.src_color.blockSignals(False)
+            self._show_source()
         finally:
             self._loading = False
 
@@ -146,6 +178,7 @@ class MulticamTab:
                  primary=self.primary.currentData() or "main", pip_corner=self.corner.currentData(),
                  pip_size=round(self.size.value(), 3), missing=self.missing.currentData(),
                  auto=self.auto.currentData(), fallback=self.fallback.currentData() or "",
+                 transition=self.transition.currentData(), transition_s=round(self.transition_s.value(), 2),
                  sources=self._sources)
         self.ctx.update_active_profile(lambda b: b.__setitem__("multicam", d))
 
@@ -206,6 +239,27 @@ class MulticamTab:
         self.save()
         self.load()
         return sid
+
+    def _show_source(self) -> None:
+        row = self.table.currentRow()
+        ok = 0 <= row < len(self._sources)
+        for w in (self.src_color, self.src_privacy):
+            w.setEnabled(ok)
+            w.blockSignals(True)
+        if ok:
+            s = self._sources[row]
+            self.src_color.setCurrentIndex(max(0, self.src_color.findData(s.get("color_preset") or "")))
+            self.src_privacy.setCurrentIndex(max(0, self.src_privacy.findData(s.get("privacy") or "shield")))
+        for w in (self.src_color, self.src_privacy):
+            w.blockSignals(False)
+
+    def _save_source(self, *_) -> None:
+        row = self.table.currentRow()
+        if self._loading or not 0 <= row < len(self._sources):
+            return
+        self._sources[row]["color_preset"] = self.src_color.currentData() or ""
+        self._sources[row]["privacy"] = self.src_privacy.currentData()
+        self.save()
 
     def remove_source(self):
         row = self.table.currentRow()

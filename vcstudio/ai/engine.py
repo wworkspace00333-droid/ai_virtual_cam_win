@@ -434,6 +434,7 @@ class AIEngine:
         if isinstance(cur, kind) and cur.det.name == want.name and same_units:
             if isinstance(cur, BoxMaskDetector):
                 cur.mask_classes = list(cfg.mask_classes)
+                cur.set_keyframe(cfg.mask_keyframe_s)
             return
         if isinstance(cur, (BoxMaskDetector, PersonMaskDetector)):
             self._detector = cur.det             # _switch_to compares plain detector names
@@ -442,7 +443,8 @@ class AIEngine:
         if how == "person":
             self._detector = PersonMaskDetector(self._detector, cfg.compute_units)
         else:
-            self._detector = BoxMaskDetector(self._detector, cfg.compute_units, cfg.mask_classes)
+            self._detector = BoxMaskDetector(self._detector, cfg.compute_units, cfg.mask_classes,
+                                             keyframe_s=cfg.mask_keyframe_s)
         with self._lock:
             self._stats.model = self._detector.name
             self._stats.model_load_s = round(self._stats.model_load_s + time.perf_counter() - t0, 2)

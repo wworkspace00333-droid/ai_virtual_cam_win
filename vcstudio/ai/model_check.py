@@ -13,6 +13,8 @@ Categories and what "fits" means (checked on the declared shapes, then on the sh
   instance_segmentation   + a (1, M, H, W) prototype output
   semantic_segmentation   a (1, C, H, W) or (1, H, W) output, H and W >= 16
   background_segmentation same as semantic segmentation
+  (both are used for the background when the map is a person layout of person_segmentation.seg_layout: 2-class,
+  1-channel person map, or Pascal VOC / Cityscapes / ADE20K classes)
   face_detection          one image input; at least one output with >= 4 values per row
   face_landmarks          an output with >= 5 points (x, y[, z])
   body_pose               an output with >= 17 points
@@ -166,12 +168,13 @@ def validate(category: str, inputs: list[dict], shapes: list[list[int]],
         else:
             used_by = "detection pipeline (YOLO layout, import through AI Engine → Import model)"
     elif category in ("semantic_segmentation", "background_segmentation"):
+        from vcstudio.ai.person_segmentation import seg_layout
         maps = [s for s in shapes if len(s) in (3, 4) and s[-1] >= 16 and s[-2] >= 16]
-        if not maps:
+        lays = [lay for s in shapes if (lay := seg_layout(s)) is not None]
+        if not maps and not lays:
             p.append("no mask output (1, C, H, W) or (1, H, W) with H, W >= 16")
-        elif category == "background_segmentation":
-            used_by = "background (PP-HumanSeg layout: 2-class map)" if any(
-                len(s) == 4 and s[1] == 2 for s in maps) else ""
+        elif lays and images:
+            used_by = f"background (person segmentation: {lays[0].describe()})"
     elif category == "face_detection":
         if not any(s and s[-1] >= 4 for s in shapes):
             p.append("no output with at least 4 values per row (a box)")

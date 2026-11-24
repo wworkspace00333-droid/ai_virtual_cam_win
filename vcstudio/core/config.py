@@ -136,7 +136,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "privacy_shield": {"enabled": False, "text": "all", "effect": "pixelate", "padding": 0.25, "sensitivity": 0.5,
                        "fps": 2, "hold_s": 1.5, "strict": False, "patterns": ["email", "phone", "card", "account",
                                                                                 "address", "keywords"],
-                       "keywords": [], "regions": [], "exclude": [], "documents": False},
+                       "keywords": [], "regions": [], "exclude": [], "documents": False,
+                       "extra_cameras": True},
     # scene automation (vcstudio/core/automation.py): rules "when <trigger> do <action>"
     "automation": {"enabled": False, "rules": []},
     # remote control (vcstudio/app/remote.py): off; localhost only unless "lan" is switched on (with a warning)
@@ -146,12 +147,14 @@ DEFAULT_SETTINGS: dict[str, Any] = {
               "gate_threshold_db": -50.0, "eq": False, "eq_low_db": 0.0, "eq_mid_db": 0.0, "eq_high_db": 0.0,
               "comp": False, "comp_threshold_db": -20.0, "comp_ratio": 3.0, "comp_makeup_db": 0.0, "agc": False,
               "agc_target_db": -20.0, "agc_max_gain_db": 18.0, "limiter": True, "limiter_ceiling_db": -1.0,
+              "deess": False, "deess_threshold_db": -30.0, "deess_freq": 5500.0,
               "monitor": False},                 # hear the processed microphone (headphones!)
     # custom models in use (vcstudio/ai/model_check.py registry): role -> registered name ("" = built-in model)
     "models": {"background": "", "text": "", "pose": "", "hands": "", "face": "", "mesh": ""},
     "color_presets": {},         # Colour Studio presets: name -> colour settings (vcstudio/ui/studio/color_tab.py)
     "vision": {"enabled": False, "fps": 6, "face": True, "pose": True, "hands": False, "overlay": True,
-               "mesh": False},
+               "mesh": False, "gaze": False, "eye_contact": False, "eye_contact_strength": 0.7,
+               "gaze_calibration": {}},
     "hotkeys": dict(DEFAULT_HOTKEYS),
     "logging": {"level": "INFO", "max_bytes": 5_000_000, "backup_count": 5},
 }

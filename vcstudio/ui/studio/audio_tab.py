@@ -15,9 +15,12 @@ NUMS = [("gain_db", "Input gain, dB", -30, 30, 1), ("denoise_strength", "Noise s
         ("eq_mid_db", "Mids (1 kHz), dB", -15, 15, 1), ("eq_high_db", "Treble (6 kHz), dB", -15, 15, 1),
         ("comp_threshold_db", "Compressor threshold, dBFS", -60, 0, 1), ("comp_ratio", "Compressor ratio", 1, 20, 0.5),
         ("comp_makeup_db", "Make-up gain, dB", 0, 24, 1), ("agc_target_db", "Automatic gain target, dBFS", -40, -6, 1),
-        ("limiter_ceiling_db", "Limiter ceiling, dBFS", -20, 0, 0.5)]
+        ("limiter_ceiling_db", "Limiter ceiling, dBFS", -20, 0, 0.5),
+        ("deess_threshold_db", "De-esser threshold, dBFS", -60, 0, 1), ("deess_freq", "De-esser from, Hz", 3000, 10000, 250)]
 SWITCHES = [("mute", "Mute"), ("denoise", "Noise suppression"), ("gate", "Noise gate"), ("eq", "Equaliser"),
-            ("comp", "Compressor"), ("agc", "Automatic gain"), ("limiter", "Limiter")]
+            ("comp", "Compressor"), ("agc", "Automatic gain"), ("deess", "De-esser"), ("limiter", "Limiter")]
+PRESET_LABELS = {"": "Custom", "clean": "Clean (limiter only)", "voice": "Voice", "podcast": "Podcast",
+                 "noisy_room": "Noisy room"}
 
 
 class AudioTab:
@@ -54,6 +57,14 @@ class AudioTab:
         mic.layout_.addWidget(self.meter_text)
         lay.addWidget(mic)
         ch = Card("Processing")
+        pr = QHBoxLayout()
+        pr.addWidget(QLabel(tr("Preset")))
+        self.preset = QComboBox()
+        for k, lbl in PRESET_LABELS.items():
+            self.preset.addItem(tr(lbl), k)
+        pr.addWidget(self.preset)
+        pr.addStretch(1)
+        ch.layout_.addLayout(pr)
         sw = QGridLayout()
         self.switches = {}
         for i, (k, lbl) in enumerate(SWITCHES):
@@ -84,6 +95,17 @@ class AudioTab:
         self.monitor.toggled.connect(self.save)
         for sp in self.nums.values():
             sp.valueChanged.connect(self.save)
+        self.preset.currentIndexChanged.connect(self.apply_preset)
+
+    def apply_preset(self, *_) -> None:
+        """Set the chain to the chosen preset's values ("Custom": nothing changes)."""
+        from vcstudio.core.audio_fx import PRESETS
+        if self._loading or not self.preset.currentData():
+            return
+        d = dict(self.ctx.settings.get("audio") or {})
+        d.update(PRESETS[self.preset.currentData()])
+        self.ctx.settings.set("audio", d)
+        self.load()
 
     def refresh_devices(self) -> None:
         cur = self.ctx.settings.get("recording.audio_device") or ""
@@ -113,6 +135,8 @@ class AudioTab:
             for k, sp in self.nums.items():
                 sp.setValue(float(getattr(c, k)))
             self.monitor.setChecked(bool((self.ctx.settings.get("audio") or {}).get("monitor", False)))
+            from vcstudio.core.audio_fx import preset_name
+            self.preset.setCurrentIndex(max(0, self.preset.findData(preset_name(self.ctx.settings.get("audio") or {}))))
         finally:
             self._loading = False
 
@@ -124,6 +148,10 @@ class AudioTab:
         d.update({k: round(sp.value(), 2) for k, sp in self.nums.items()})
         d["monitor"] = self.monitor.isChecked()
         self.ctx.settings.set("audio", d)
+        from vcstudio.core.audio_fx import preset_name
+        self._loading = True
+        self.preset.setCurrentIndex(max(0, self.preset.findData(preset_name(d))))
+        self._loading = False
 
     def tick(self) -> None:
         m = self.ctx.recording.fx.meter

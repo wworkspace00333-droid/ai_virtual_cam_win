@@ -166,3 +166,66 @@ def test_engine_thread_and_the_app(paths):
         assert not ctx.automation.running
     finally:
         ctx.shutdown()
+
+
+def test_gaze_triggers_fire_on_changes_and_ignore_blinks():
+    e, w = engine([{"id": "away", "trigger": {"type": "looking_away"}, "debounce_s": 1.0, "cooldown_s": 0,
+                    "action": {"type": "effects", "on": False}},
+                   {"id": "back", "trigger": {"type": "looking_at_camera"}, "debounce_s": 0.5, "cooldown_s": 0,
+                    "action": {"type": "effects", "on": True}}])
+
+    def gaze(v):
+        w.snap = au.Snapshot(**{**w.snap.__dict__, "gaze": v})
+    gaze(True)
+    e.step(0.0)                                   # first look: remembered
+    gaze(None)                                    # a blink / no confident gaze: neither trigger
+    e.step(0.5)
+    e.step(3.0)
+    assert w.done == []
+    gaze(False)
+    e.step(3.5)
+    e.step(4.6)
+    assert w.done == [{"type": "effects", "on": False}]
+    gaze(True)
+    e.step(5.0)
+    e.step(5.6)
+    assert w.done[-1] == {"type": "effects", "on": True} and len(w.done) == 2
+
+
+def test_condition_text_round_trip_and_errors():
+    import pytest
+    c = au.parse_condition("people>=2 and not recording and time 22:00-06:30")
+    assert c == {"match": "all", "terms": [{"type": "people", "op": ">=", "n": 2},
+                                          {"type": "recording", "not": True},
+                                          {"type": "time", "from": "22:00", "to": "06:30"}]}
+    assert au.parse_condition(au.describe_condition(c)) == c
+    o = au.parse_condition("gaze OR object:laptop or camera:cam1 or scene:Talk show")
+    assert o["match"] == "any" and o["terms"][3] == {"type": "scene", "name": "Talk show"}
+    assert au.parse_condition("  ") == {}
+    for bad in ("people>=2 and gaze or recording", "people > two", "time 25:00-26:00", "weather:sunny"):
+        with pytest.raises(ValueError):
+            au.parse_condition(bad)
+
+
+def test_condition_groups_and_or_not_and_time():
+    s = au.Snapshot(people=2, labels=frozenset({"laptop"}), recording=False, scene="A", sources={"cam1": True},
+                    gaze=False, minute=23 * 60)
+    assert au.group_ok(au.parse_condition("people>=2 and not recording and time 22:00-06:30"), s)
+    assert not au.group_ok(au.parse_condition("people>=2 and gaze"), s)
+    assert au.group_ok(au.parse_condition("gaze or object:laptop"), s)
+    assert not au.group_ok(au.parse_condition("gaze or camera:cam2"), s)
+    assert au.term_ok({"type": "time", "from": "09:00", "to": "18:00", "not": True}, s)
+    assert not au.term_ok({"type": "time", "from": "09:00", "to": "18:00"}, au.Snapshot())   # unknown time
+    assert not au.term_ok({"type": "bogus"}, s) and au.group_ok({}, s)
+
+
+def test_rule_with_a_condition_group_fires_only_when_it_holds():
+    e, w = engine([{"id": "r", "trigger": {"type": "timer", "every_s": 1}, "cooldown_s": 0,
+                    "condition": au.parse_condition("people>=2 or recording"),
+                    "action": {"type": "replay"}}])
+    e.step(0.0)
+    e.step(1.1)
+    assert w.done == [] and e.history[-1].result == "condition not met"
+    people(w, 3)
+    e.step(2.2)
+    assert w.done == [{"type": "replay"}]

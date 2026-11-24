@@ -6,7 +6,8 @@ the compositor's player pool, decoded on its own thread). Quality: fast (light t
 balanced (default), quality (stronger smoothing, and the mask is refined against the picture's own edges with a
 guided filter once per mask: hair and fingers follow the picture instead of the 192 px model grid). Source: person
 (PP-HumanSeg, default) or depth (Depth Anything V2 Small, vcstudio/ai/depth.py: what is nearer than the focus — the
-edge setting — stays, the rest is blurred or replaced; at most 4 maps / s). The person mask
+edge setting — stays, the rest is blurred or replaced; at most 4 maps / s) or chroma (0.7.0, a green / blue / any
+colour screen keyed out, vcstudio/replacement/chroma_key.py, with spill suppression on every frame). The person mask
 comes from vcstudio.ai.person_segmentation.BackgroundSegmenter (own thread, newest mask only); the output thread
 blends the newest mask into each frame before the region replacements are drawn. Without a mask yet (model loading,
 first frames) or after a segmentation error, frames pass unchanged: the camera never waits and never goes black.
@@ -27,6 +28,14 @@ MODES = ("off", "blur", "image", "color", "gradient", "video")
 IMAGE_LIKE = ("image", "color", "gradient")        # drawn from one (generated or decoded) picture
 QUALITY = {"fast": 0.3, "balanced": 0.5, "quality": 0.7}   # temporal smoothing: weight of the previous mask
 DIRECTIONS = ("vertical", "horizontal", "diagonal")
+SOURCES = ("person", "depth", "chroma")
+
+
+def _num(d: dict, key: str, lo: float, hi: float, default: float) -> float:
+    try:
+        return float(min(hi, max(lo, float(d.get(key, default)))))
+    except (TypeError, ValueError):
+        return default
 
 
 def _bgr(hexstr, default=(40, 40, 40)) -> tuple[int, int, int]:
@@ -63,7 +72,17 @@ class BackgroundConfig:
     color2: str = "#2878c8"
     direction: str = "vertical"
     quality: str = "balanced"
-    source: str = "person"        # person | depth
+    source: str = "person"        # person | depth | chroma
+    key_color: str = "#00b140"    # chroma key: screen colour, similarity, smoothness, spill, feather
+    key_similarity: float = 0.45
+    key_smoothness: float = 0.15
+    key_spill: float = 0.6
+    key_feather: int = 1
+
+    def key_settings(self):
+        from vcstudio.replacement.chroma_key import KeySettings
+        return KeySettings(self.key_color, self.key_similarity, self.key_smoothness, self.key_spill,
+                           self.key_feather)
 
     @classmethod
     def from_profile(cls, body: dict) -> "BackgroundConfig":
@@ -75,7 +94,12 @@ class BackgroundConfig:
                    color2=str(b.get("color2") or "#2878c8"),
                    direction=b.get("direction") if b.get("direction") in DIRECTIONS else "vertical",
                    quality=b.get("quality") if b.get("quality") in QUALITY else "balanced",
-                   source="depth" if b.get("source") == "depth" else "person")
+                   source=b.get("source") if b.get("source") in SOURCES else "person",
+                   key_color=str(b.get("key_color") or "#00b140"),
+                   key_similarity=_num(b, "key_similarity", 0.05, 1.5, 0.45),
+                   key_smoothness=_num(b, "key_smoothness", 0.01, 1.0, 0.15),
+                   key_spill=_num(b, "key_spill", 0.0, 1.0, 0.6),
+                   key_feather=int(_num(b, "key_feather", 0, 10, 1)))
 
 
 class BackgroundService:
@@ -112,9 +136,17 @@ class BackgroundService:
                 log.warning(self.error)
         with self._lock:
             self.cfg, self._image = cfg, image
-        self.seg.use(self.depth_factory if cfg.source == "depth" else self.person_factory)
-        self.seg.fps = min(cfg.fps, 4.0) if cfg.source == "depth" else cfg.fps
-        self.seg.smoothing = QUALITY[cfg.quality]
+        if cfg.source == "chroma":
+            ks = cfg.key_settings()
+            if getattr(self, "_chroma_factory", None) is None or self._chroma_key != ks:
+                from vcstudio.replacement.chroma_key import ChromaKeyer
+                self._chroma_key = ks
+                self._chroma_factory = lambda ks=ks: ChromaKeyer(ks)
+            self.seg.use(self._chroma_factory)
+        else:
+            self.seg.use(self.depth_factory if cfg.source == "depth" else self.person_factory)
+        self.seg.fps = min(cfg.fps, 4.0) if cfg.source == "depth" else (30.0 if cfg.source == "chroma" else cfg.fps)
+        self.seg.smoothing = 0.0 if cfg.source == "chroma" else QUALITY[cfg.quality]   # a key needs no history
         if not self.active:
             self.seg.masks.clear()
 
@@ -169,6 +201,20 @@ class BackgroundService:
         if cfg.mode in IMAGE_LIKE:
             return "image", image
         return cfg.mode, None
+
+    def despill(self, frame: Frame, snap=None) -> Frame:
+        """Chroma key: the frame with the screen colour's spill reduced (both the CPU and the GPU path draw the
+        person from this frame); any other source: the frame itself."""
+        cfg, image = self._resolve(snap)
+        if cfg.source != "chroma" or cfg.key_spill <= 0 or not self._snap_active(cfg, image):
+            return frame
+        if self.seg.masks.peek()[0] is None:
+            return frame
+        from vcstudio.replacement.chroma_key import despill
+        with frame.bgra() as img:
+            out = despill(img, cfg.key_settings())
+        return Frame(frame.seq, frame.pts, frame.arrival, frame.width, frame.height, array=out,
+                     source=f"{frame.source}+despill")
 
     def apply(self, frame: Frame, snap=None) -> Frame:
         """CPU path: the frame with its background blurred / replaced (OpenCV blend), or the frame itself.

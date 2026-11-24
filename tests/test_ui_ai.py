@@ -206,3 +206,12 @@ def test_hardware_tier_shown_and_open_vocab_warns_without_a_gpu(win, monkeypatch
     monkeypatch.setattr(hardware, "_cached", hardware.HardwareProfile(gpu_ai="DirectML", ram_total_gb=32, tier="gpu"))
     page._open_vocab_info()
     assert "several seconds per frame" not in page.ov_info.text()
+
+
+def test_detection_page_silhouette_keyframes(win, qtbot):
+    page = win.pages[win.page_keys().index("detection")]
+    page.keyframe.setValue(2.5)
+    qtbot.waitUntil(lambda: win.ctx.profiles.active()["body"]["detection"].get("mask_keyframe_s") == 2.5,
+                    timeout=2000)                                    # saved after the page's short delay
+    from vcstudio.ai.detection import DetectionConfig
+    assert DetectionConfig.from_profile(win.ctx.profiles.active()["body"]).mask_keyframe_s == 2.5

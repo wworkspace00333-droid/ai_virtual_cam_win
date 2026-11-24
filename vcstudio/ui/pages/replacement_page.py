@@ -174,9 +174,30 @@ class ReplacementPage:
         bf.addRow(tr("Direction"), self.bg_dir)
         bf.addRow(tr("Mask quality"), self.bg_quality)
         self.bg_source = QComboBox()
-        for k, v in (("person", "People (segmentation)"), ("depth", "Distance (depth: nearer than the edge setting)")):
+        for k, v in (("person", "People (segmentation)"), ("depth", "Distance (depth: nearer than the edge setting)"),
+                     ("chroma", "Colour screen (chroma key: green / blue screen)")):
             self.bg_source.addItem(tr(v), k)
         bf.addRow(tr("Separate by"), self.bg_source)
+        self.key_color = QComboBox()
+        for k, v in (("#00b140", "Green screen"), ("#0047bb", "Blue screen")):
+            self.key_color.addItem(tr(v), k)
+        self.key_color.addItem(tr("Pick a colour…"), "pick")
+        self.key_sim = QDoubleSpinBox()
+        self.key_sim.setRange(0.05, 1.5)
+        self.key_sim.setSingleStep(0.05)
+        self.key_smooth = QDoubleSpinBox()
+        self.key_smooth.setRange(0.01, 1.0)
+        self.key_smooth.setSingleStep(0.02)
+        self.key_spill = QDoubleSpinBox()
+        self.key_spill.setRange(0.0, 1.0)
+        self.key_spill.setSingleStep(0.1)
+        self.key_feather = QSpinBox()
+        self.key_feather.setRange(0, 10)
+        bf.addRow(tr("Screen colour"), self.key_color)
+        bf.addRow(tr("Similarity"), self.key_sim)
+        bf.addRow(tr("Edge softness"), self.key_smooth)
+        bf.addRow(tr("Spill suppression"), self.key_spill)
+        bf.addRow(tr("Feather, px"), self.key_feather)
         self.bg_depth_dl = QPushButton(tr("Download the depth model (27 MB)"))
         bf.addRow("", self.bg_depth_dl)
         self._bg_colors = ["#202830", "#2878c8"]
@@ -191,6 +212,9 @@ class ReplacementPage:
         self.bg_dir.currentIndexChanged.connect(self._save_background)
         self.bg_quality.currentIndexChanged.connect(self._save_background)
         self.bg_source.currentIndexChanged.connect(self._save_background)
+        self.key_color.currentIndexChanged.connect(self._key_color_changed)
+        for w in (self.key_sim, self.key_smooth, self.key_spill, self.key_feather):
+            w.valueChanged.connect(self._save_background)
         self.bg_depth_dl.clicked.connect(self._download_depth)
         self.bg_color.clicked.connect(lambda: self._pick_bg_color(0))
         self.bg_color2.clicked.connect(lambda: self._pick_bg_color(1))
@@ -272,6 +296,13 @@ class ReplacementPage:
             self.bg_dir.setCurrentIndex(max(0, self.bg_dir.findData(cfg.direction)))
             self.bg_quality.setCurrentIndex(max(0, self.bg_quality.findData(cfg.quality)))
             self.bg_source.setCurrentIndex(max(0, self.bg_source.findData(cfg.source)))
+            if self.key_color.findData(cfg.key_color) < 0:
+                self.key_color.insertItem(self.key_color.count() - 1, cfg.key_color, cfg.key_color)
+            self.key_color.setCurrentIndex(self.key_color.findData(cfg.key_color))
+            self.key_sim.setValue(cfg.key_similarity)
+            self.key_smooth.setValue(cfg.key_smoothness)
+            self.key_spill.setValue(cfg.key_spill)
+            self.key_feather.setValue(cfg.key_feather)
             self._bg_colors = [cfg.color, cfg.color2]
             for btn, c in ((self.bg_color, cfg.color), (self.bg_color2, cfg.color2)):
                 btn.setText(c)
@@ -291,12 +322,15 @@ class ReplacementPage:
         self.bg_dir.setEnabled(mode == "gradient")
         self.bg_quality.setEnabled(mode != "off")
         self.bg_source.setEnabled(mode != "off")
+        chroma = mode != "off" and self.bg_source.currentData() == "chroma"
+        for w in (self.key_color, self.key_sim, self.key_smooth, self.key_spill, self.key_feather):
+            w.setEnabled(chroma)
         from vcstudio.ai import depth as _depth
         from vcstudio.ai.model_download import network_allowed
         self.bg_depth_dl.setVisible(self.bg_source.currentData() == "depth" and not _depth.available()
                                     and network_allowed(self.ctx.settings))
         from vcstudio.ai.person_segmentation import model_path
-        if mode != "off" and not model_path().exists():
+        if mode != "off" and self.bg_source.currentData() == "person" and not model_path().exists():
             self.bg_info.setText(tr("The person segmentation model is not installed (scripts/fetch_models.py)."))
         elif mode == "image" and not self.bg_image.currentData():
             self.bg_info.setText(tr("Choose an image: add one to the asset library above first."))
@@ -308,13 +342,41 @@ class ReplacementPage:
                 tr("running ({ms} ms, {backend})", ms=f"{seg.ms:.0f}", backend=seg.backend) if seg.running
                 else tr("starts with capture"))) if mode != "off" else "")
 
+    def _key_color_changed(self, *_):
+        if self._bg_loading:
+            return
+        if self.key_color.currentData() == "pick":
+            from PySide6.QtGui import QColor
+            from PySide6.QtWidgets import QColorDialog
+            c = QColorDialog.getColor(QColor("#00b140"), self.widget if hasattr(self, "widget") else None)
+            if not c.isValid():
+                self._bg_loading = True
+                self.key_color.setCurrentIndex(0)
+                self._bg_loading = False
+            else:
+                self.set_key_color(c.name())
+                return
+        self._save_background()
+
+    def set_key_color(self, hexstr: str) -> None:
+        """Use a custom screen colour (from the colour dialog, or tests)."""
+        self._bg_loading = True
+        if self.key_color.findData(hexstr) < 0:
+            self.key_color.insertItem(self.key_color.count() - 1, hexstr, hexstr)
+        self.key_color.setCurrentIndex(self.key_color.findData(hexstr))
+        self._bg_loading = False
+        self._save_background()
+
     def _save_background(self, *_):
         if self._bg_loading:
             return
         b = {"mode": self.bg_mode.currentData(), "strength": self.bg_strength.value(),
              "asset_id": self.bg_image.currentData(), "color": self._bg_colors[0], "color2": self._bg_colors[1],
              "direction": self.bg_dir.currentData(), "quality": self.bg_quality.currentData(),
-             "source": self.bg_source.currentData()}
+             "source": self.bg_source.currentData(),
+             "key_color": self.key_color.currentData() if self.key_color.currentData() != "pick" else "#00b140",
+             "key_similarity": round(self.key_sim.value(), 3), "key_smoothness": round(self.key_smooth.value(), 3),
+             "key_spill": round(self.key_spill.value(), 2), "key_feather": self.key_feather.value()}
         prev = BackgroundMode.of(self._body())
         if (prev == "video") != (b["mode"] == "video"):
             b["asset_id"] = None                          # an image id is not a video id (and back)
